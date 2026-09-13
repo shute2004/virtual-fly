@@ -34,6 +34,14 @@ MaleCNS公式mediaにはR1-R6からdescending neuronまでのvisual-motor pathwa
 
 ## 2. ショウジョウバエ初期視覚系
 
+### Complete visual-system connectome
+
+Nern et al. (2025), *Connectome-driven neural inventory of a complete visual system*, Nature.
+
+- https://www.nature.com/articles/s41586-025-08746-0
+
+この資料では、laminaが撮像体積に完全には含まれないため、再構築されたLaiおよびR1-R6数が生物学的な総数の過小評価になることが明記されている。したがってvirtual-flyでは、欠損したR1-R6を幾何学的に捏造したり、各columnが必ず6細胞になるよう補完したりしない。released MaleCNS内に存在するR1-R6だけを `observed` として使用する。
+
 ### Neural superposition
 
 Langen et al. (2015), *The Developmental Rules of Neural Superposition in Drosophila*.
