@@ -38,7 +38,15 @@ Flyppy physical world
 
 ゲート通過時は `PAM08` 候補群、衝突時は `PPL1` 候補群を刺激します。ゲームのゲート座標をCNSへ直接入力したり、外部プログラムから個々のシナプス重みを指定したりはしません。
 
-現在の主な近似は、FlyGymの複眼各ommatidiumとMaleCNS各視覚ニューロンの個別対応がまだ確定していないため、縦方向の視覚運動をT4c/T4d・T5c/T5d集団へ与える人口レベルの暫定入力層を置いている点です。
+現在の主な近似は、FlyGymの複眼各ommatidiumとMaleCNS各視覚ニューロンの個別対応がまだ確定していないため、縦方向の視覚運動をT4c/T4d・T5c/T5d集団へ与えるpopulation-levelの暫定入力層を置いている点です。
+
+### FlyBody飛翔物理
+
+FlyGym 2.1.0の実験的FlyBody統合では、元FlyBodyに含まれる左右wingのMuJoCo fluid geometryが変換時に省略されています。Flyppyではこれを復元し、元FlyBody飛翔タスクに合わせてwing gain、stiffness / damping、50 µs physics timestep、空気密度・粘性の単位系も補正しています。
+
+Flyppyの各episodeはFlyBody公式飛翔条件を参考に47.5度のbody pitchから開始し、+X方向へ既定 `300 mm/s` の初速度を一度だけ与えます。その後の前進速度を外部から維持・補正する処理はありません。CNSから得たDNg02活動によるwing制御とMuJoCo物理だけで運動を継続します。
+
+`bash scripts/dev/embodiment.sh` では、復元したflight geometry・parameterがcompile後のMuJoCoモデルへ実際に入っていることに加え、同一初速度でwing fluidあり/なしを比較するflight envelopeも検証します。
 
 ## 初回セットアップ
 
@@ -53,11 +61,17 @@ MaleCNSの元データがすでに存在する場合は再ダウンロードし�
 
 ## Flyppy閉ループ学習
 
-閉ループ実装ブランチへ切り替え、学習を実行します。
+閉ループ実装ブランチへ切り替え、まず身体・神経接続の検証を実行します。
 
 ```bash
 git switch feat/flybody-flyppy-loop
 git pull
+bash scripts/dev/embodiment.sh
+```
+
+これが通った後に学習を実行します。
+
+```bash
 bash scripts/dev/train_flyppy.sh
 ```
 
@@ -87,6 +101,14 @@ checkpointはシナプス重みだけでなく、膜電位・spike・refractory�
 ```bash
 bash scripts/dev/train_flyppy.sh --episodes 100
 ```
+
+飛翔開始速度を変更する場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh --initial-forward-speed-mm-s 250
+```
+
+これはepisode開始時の初期条件だけを変更し、継続的な前進制御は追加しません。
 
 保存済みCNSからさらに続ける場合:
 
@@ -144,7 +166,7 @@ localhost上のブラウザビューアが開き、`trajectory.jsonl` と `synap
 
 - **神経系コア**: Rust。大規模疎グラフ、神経状態、可塑性、チェックポイントを担当する。
 - **科学実験・統合層**: Python。データ前処理、MuJoCo / FlyGym / FlyBody との接続、実験設定、解析を担当する。
-- **身体・物理**: FlyBody / FlyGym / MuJoCo。
+- **身体・物理**: FlyBody / FlyGym / MuJoCo。FlyGym 2.1.0で省略されたflight-only physicsは互換層で補う。
 - **可視化**: 通常はheadless。必要時だけ身体3D、動画、神経活動・シナプス変化の表示を有効化する。
 - **将来のWeb実行**: Rust コアを WASM / WebGPU へ展開し、明示的に参加した閲覧者のPCで仮想ハエを動かして実験データを収集する。
 
