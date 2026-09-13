@@ -69,7 +69,8 @@ class FlyBodyWingAdapter:
         self.min_scale = float(min_scale)
         self.max_scale = float(max_scale)
         self.vision_enabled = bool(enable_vision)
-        self.observer_camera_name = "training_view" if enable_observer_camera else None
+        self.observer_camera_name: str | None = None
+        observer_camera_key = "training_view"
 
         self.fly = FlyBody(name="virtual_fly")
         skeleton = FlyBodySkeleton(
@@ -87,7 +88,7 @@ class FlyBodyWingAdapter:
             self.fly.add_vision(draw_sensor_markers=False)
         if enable_observer_camera:
             self.fly.add_tracking_camera(
-                name=self.observer_camera_name,
+                name=observer_camera_key,
                 mode="track",
                 pos_offset=(-3.5, -14.0, 7.0),
                 rotation=Rotation3D("xyaxes", (1, 0, 0, 0, 0.45, 0.89)),
@@ -113,6 +114,14 @@ class FlyBodyWingAdapter:
             add_obstacle_contacts = getattr(active_world, "add_obstacle_contacts", None)
             if add_obstacle_contacts is not None:
                 add_obstacle_contacts(self.fly)
+
+        if enable_observer_camera:
+            # MjSpec.attach() prefixes element names with the fly namespace.
+            # Resolve the actual compiled name after attachment instead of assuming
+            # the pre-attach key survives unchanged.
+            self.observer_camera_name = self.fly.cameraname_to_mjcfcamera[
+                observer_camera_key
+            ].name
 
         self.world = active_world
         self.sim = Simulation(active_world)
