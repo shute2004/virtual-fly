@@ -8,7 +8,7 @@ import math
 import mujoco as mj
 import numpy as np
 
-from flybody_adapter import FlyBodyWingAdapter
+from flybody_adapter import FlyBodyWingAdapter, WingDrive
 from flybody_flight_physics import (
     FLIGHT_AIR_DENSITY,
     FLIGHT_AIR_VISCOSITY,
@@ -22,10 +22,7 @@ from flybody_flight_physics import (
 
 
 def names(model: mj.MjModel, objtype: mj.mjtObj, count: int) -> list[str]:
-    return [
-        mj.mj_id2name(model, objtype, i) or ""
-        for i in range(count)
-    ]
+    return [mj.mj_id2name(model, objtype, i) or "" for i in range(count)]
 
 
 def find_suffix(all_names: list[str], suffix: str) -> int:
@@ -35,15 +32,20 @@ def find_suffix(all_names: list[str], suffix: str) -> int:
     return matches[0]
 
 
-def main() -> int:
-    body = FlyBodyWingAdapter(tethered=True, enable_wing_aerodynamics=True)
+def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
     model = body.sim.mj_model
 
-    if not math.isclose(model.opt.timestep, FLIGHT_PHYSICS_TIMESTEP_S, rel_tol=0, abs_tol=1e-12):
+    if not math.isclose(
+        model.opt.timestep, FLIGHT_PHYSICS_TIMESTEP_S, rel_tol=0, abs_tol=1e-12
+    ):
         raise RuntimeError(f"flight timestep mismatch: {model.opt.timestep}")
-    if not math.isclose(model.opt.density, FLIGHT_AIR_DENSITY, rel_tol=1e-12, abs_tol=0):
+    if not math.isclose(
+        model.opt.density, FLIGHT_AIR_DENSITY, rel_tol=1e-12, abs_tol=0
+    ):
         raise RuntimeError(f"air density mismatch: {model.opt.density}")
-    if not math.isclose(model.opt.viscosity, FLIGHT_AIR_VISCOSITY, rel_tol=1e-12, abs_tol=0):
+    if not math.isclose(
+        model.opt.viscosity, FLIGHT_AIR_VISCOSITY, rel_tol=1e-12, abs_tol=0
+    ):
         raise RuntimeError(f"air viscosity mismatch: {model.opt.viscosity}")
 
     geom_names = names(model, mj.mjtObj.mjOBJ_GEOM, model.ngeom)
@@ -53,7 +55,8 @@ def main() -> int:
         geom_id = find_suffix(geom_names, spec.geom_name)
         if not np.allclose(geom_fluid[geom_id], expected_fluid, rtol=0, atol=1e-12):
             raise RuntimeError(
-                f"{spec.geom_name} fluid coefficients mismatch: {geom_fluid[geom_id].tolist()}"
+                f"{spec.geom_name} fluid coefficients mismatch: "
+                f"{geom_fluid[geom_id].tolist()}"
             )
         if not np.allclose(model.geom_size[geom_id], spec.size_mm, rtol=0, atol=1e-12):
             raise RuntimeError(
@@ -108,11 +111,46 @@ def main() -> int:
                 f"wing actuator gain mismatch for {actuator_names[actuator_id]}: {kp}"
             )
 
+
+def assert_reset_initial_condition() -> None:
+    initial_velocity = np.asarray((123.0, -4.0, 5.0), dtype=np.float64)
+    body = FlyBodyWingAdapter(
+        tethered=False,
+        spawn_position_mm=(0.0, 0.0, 5.0),
+        initial_linear_velocity_mm_s=tuple(initial_velocity),
+        enable_wing_aerodynamics=True,
+    )
+    if not np.allclose(
+        body.root_linear_velocity_mm_s(), initial_velocity, rtol=0, atol=1e-12
+    ):
+        raise RuntimeError("free FlyBody did not receive requested initial velocity")
+
+    body.step(WingDrive(left=0.0, right=0.0), physics_steps=10)
+    if np.allclose(body.root_linear_velocity_mm_s(), initial_velocity, rtol=0, atol=1e-12):
+        raise RuntimeError(
+            "root velocity was unchanged after physics steps; reset test cannot distinguish "
+            "a real reset from a stale state"
+        )
+
+    body.reset()
+    if not np.allclose(
+        body.root_linear_velocity_mm_s(), initial_velocity, rtol=0, atol=1e-12
+    ):
+        raise RuntimeError("FlyBody reset did not restore requested initial velocity")
+
+
+def main() -> int:
+    tethered = FlyBodyWingAdapter(tethered=True, enable_wing_aerodynamics=True)
+    assert_compiled_flight_physics(tethered)
+    assert_reset_initial_condition()
+
+    model = tethered.sim.mj_model
     print(f"flight_timestep_s={model.opt.timestep:.8f}")
     print(f"air_density={model.opt.density:.9g}")
     print(f"air_viscosity={model.opt.viscosity:.9g}")
     print(f"wing_fluid_geoms={len(WING_FLUID_GEOMS)}")
     print(f"wing_position_kp={FLIGHT_WING_POSITION_KP:.6f}")
+    print("flight_reset_initial_velocity=PASS")
     print("flybody_flight_physics=PASS")
     return 0
 
