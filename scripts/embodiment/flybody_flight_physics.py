@@ -110,14 +110,10 @@ WING_FLIGHT_GEOMS = (
 WING_FLUID_GEOMS = WING_FLIGHT_GEOMS
 
 
-def partition_wing_dofs(jointdofs: Iterable) -> tuple[list, list]:
-    """Return ``(non_wing, wing)`` DOFs while preserving input order."""
+def wing_dofs(jointdofs: Iterable) -> list:
+    """Return only wing DOFs while preserving the source skeleton order."""
 
-    non_wing = []
-    wing = []
-    for dof in jointdofs:
-        (wing if dof.child.is_wing() else non_wing).append(dof)
-    return non_wing, wing
+    return [dof for dof in jointdofs if dof.child.is_wing()]
 
 
 def restore_flight_wing_inertia(fly: FlyBody) -> None:
@@ -193,9 +189,8 @@ def add_flight_wing_aerodynamics(fly: FlyBody) -> None:
                 f"FlyBody segment {spec.body_segment!r} required for flight is missing"
             ) from exc
 
-        # MjSpec exposes MJCF's fluidshape="ellipsoid" as fluid_ellipsoid and
-        # fluidcoef as fluid_coefs. Passing them through add_geom avoids relying on
-        # mutability details of the generated fixed-size array bindings.
+        # MjSpec's generated binding is intentionally used with its native types:
+        # fluid_ellipsoid is an integer flag and fluid_coefs is a length-5 sequence.
         wing_body.add_geom(
             type=GEOM_TYPES["ellipsoid"],
             name=spec.fluid_name,
@@ -207,8 +202,8 @@ def add_flight_wing_aerodynamics(fly: FlyBody) -> None:
             conaffinity=0,
             group=3,
             rgba=(0.0, 0.0, 0.0, 0.0),
-            fluid_ellipsoid=1.0,
-            fluid_coefs=list(FLIGHT_FLUID_COEFS),
+            fluid_ellipsoid=1,
+            fluid_coefs=FLIGHT_FLUID_COEFS,
         )
 
 
@@ -220,13 +215,18 @@ def apply_flight_air_parameters(world: BaseWorld) -> None:
 
 
 def add_flight_position_actuators(fly: FlyBody, jointdofs: Iterable) -> None:
-    """Add position actuators, using the source flight gain only for wing DOFs."""
+    """Add only the six wing position actuators required by this flight adapter.
 
-    non_wing, wing = partition_wing_dofs(jointdofs)
-    if non_wing:
-        fly.add_actuators(non_wing, ActuatorType.POSITION)
+    FlyGym's ``ALL`` actuated-DOF preset also includes legs, abdomen, head,
+    proboscis, antennae and halteres. Adding POSITION actuators for all of them is
+    not part of the source FlyBody flight task and also causes missing-config
+    fallbacks for e.g. halteres. They therefore remain passive unless a future
+    biologically grounded motor adapter explicitly controls them.
+    """
+
+    wing = wing_dofs(jointdofs)
     if len(wing) != 6:
-        raise RuntimeError(f"expected 6 actuated FlyBody wing DOFs, found {len(wing)}")
+        raise RuntimeError(f"expected 6 FlyBody wing DOFs, found {len(wing)}")
     fly.add_actuators(
         wing,
         ActuatorType.POSITION,
