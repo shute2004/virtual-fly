@@ -134,10 +134,12 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     trajectory_path = args.output_dir / "trajectory.jsonl"
     summary_path = args.output_dir / "summary.json"
+    learned_weights_path = args.output_dir / "learned_weights.f32le"
 
     episode_results: list[dict[str, object]] = []
     total_passed = 0
     total_collisions = 0
+    checkpoint_info: dict[str, object] = {}
     started = time.perf_counter()
 
     observer_camera = body.observer_camera_name or "training_view"
@@ -286,6 +288,14 @@ def main() -> int:
                     )
                     trajectory_file.flush()
 
+                print("saving learned synaptic weights ...")
+                checkpoint_info = brain.save_weights(learned_weights_path)
+                print(
+                    "learned_weights={} count={}".format(
+                        checkpoint_info.get("path"), checkpoint_info.get("weights")
+                    )
+                )
+
     elapsed = time.perf_counter() - started
     passed_by_episode = [int(item["passed_gates"]) for item in episode_results]
     first_half = passed_by_episode[: max(1, len(passed_by_episode) // 2)]
@@ -304,6 +314,12 @@ def main() -> int:
         "mean_passed_first_half": float(np.mean(first_half)) if first_half else 0.0,
         "mean_passed_second_half": float(np.mean(second_half)) if second_half else 0.0,
         "elapsed_seconds": elapsed,
+        "learned_weights_file": str(learned_weights_path),
+        "checkpoint_weight_count": checkpoint_info.get("weights"),
+        "checkpoint_scope": (
+            "Synaptic weights only in v0. Membrane, activity trace, modulation, "
+            "eligibility, and body state are not yet serialized."
+        ),
         "visualization": {
             "live": bool(args.render),
             "record_dir": str(args.record_video) if args.record_video else None,
