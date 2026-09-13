@@ -167,8 +167,10 @@ def apply_flight_wing_joint_parameters(fly: FlyBody) -> None:
     for dof, joint in fly.jointdof_to_mjcfjoint.items():
         if not dof.child.is_wing():
             continue
-        joint.stiffness = FLIGHT_WING_STIFFNESS
-        joint.damping = FLIGHT_WING_DAMPING
+        # MuJoCo 3.7+ represents joint stiffness/damping as polynomial
+        # coefficient arrays. Index 0 is the ordinary linear coefficient.
+        joint.stiffness[0] = FLIGHT_WING_STIFFNESS
+        joint.damping[0] = FLIGHT_WING_DAMPING
         wing_count += 1
     if wing_count != 6:
         raise RuntimeError(f"expected 6 FlyBody wing DOFs, found {wing_count}")
