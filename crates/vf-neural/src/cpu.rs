@@ -273,7 +273,12 @@ mod tests {
 
     #[test]
     fn stimulation_propagates() {
-        let mut runtime = CpuRuntime::new(tiny_snapshot(), NeuralParams::default());
+        // This test is about the propagation mechanism, not calibration of the
+        // whole-CNS bootstrap scale. Make the synthetic 20-synapse edge strong
+        // enough to cross the 1.0 threshold in one step.
+        let mut params = NeuralParams::default();
+        params.synapse_scale = 0.06;
+        let mut runtime = CpuRuntime::new(tiny_snapshot(), params);
         runtime.step(&[Stimulus { neuron: 0, current: 2.0 }], false).unwrap();
         assert_eq!(runtime.spikes()[0], 1);
         runtime.step(&[], false).unwrap();
