@@ -34,7 +34,9 @@ run "Rust compile check" cargo check --workspace
 run "Rust tests" cargo test --workspace
 run "GPU plasticity kernel smoke" cargo run -p vf-runner --bin vf-runner --release -- kernel-smoke --backend gpu --cycles 100
 run "Real MaleCNS associative conditioning" cargo run -p vf-runner --bin malecns_conditioning --release -- --snapshot "$SNAPSHOT" --config "$SNAPSHOT/conditioning-v0.json" --output "$EXPERIMENT_DIR" --backend gpu --cycles "$TRAIN_CYCLES"
+run "Conditioning analysis" uv run python scripts/analysis/analyze_conditioning.py --snapshot "$SNAPSHOT" --config "$SNAPSHOT/conditioning-v0.json" --experiment "$EXPERIMENT_DIR"
 
 printf '\nbootstrap=PASS\n'
 printf 'learned state: %s/learned_weights.f32le\n' "$EXPERIMENT_DIR"
 printf 'result:        %s/result.json\n' "$EXPERIMENT_DIR"
+printf 'analysis:      %s/analysis.json\n' "$EXPERIMENT_DIR"
