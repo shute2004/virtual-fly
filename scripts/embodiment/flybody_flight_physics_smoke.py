@@ -152,14 +152,20 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
             )
 
     actuator_names = names(model, mj.mjtObj.mjOBJ_ACTUATOR, model.nu)
+    position_actuator_ids = [
+        i for i, name in enumerate(actuator_names) if name.endswith("-position")
+    ]
     wing_actuator_ids = [
         i
-        for i, name in enumerate(actuator_names)
-        if ("-l_wing-" in name or "-r_wing-" in name) and name.endswith("-position")
+        for i in position_actuator_ids
+        if ("-l_wing-" in actuator_names[i] or "-r_wing-" in actuator_names[i])
     ]
-    if len(wing_actuator_ids) != 6:
+    if len(position_actuator_ids) != 6 or len(wing_actuator_ids) != 6:
+        unexpected = [actuator_names[i] for i in position_actuator_ids if i not in wing_actuator_ids]
         raise RuntimeError(
-            f"expected 6 compiled wing position actuators, got {len(wing_actuator_ids)}"
+            "flight adapter must expose exactly six wing POSITION actuators; "
+            f"position={len(position_actuator_ids)} wing={len(wing_actuator_ids)} "
+            f"unexpected={unexpected}"
         )
     for actuator_id in wing_actuator_ids:
         kp = float(model.actuator_gainprm[actuator_id, 0])
@@ -236,6 +242,7 @@ def main() -> int:
     print(f"wing_fluid_geoms={len(WING_FLIGHT_GEOMS)}")
     print(f"wing_inertial_geoms={len(WING_FLIGHT_GEOMS)}")
     print(f"wing_position_kp={FLIGHT_WING_POSITION_KP:.6f}")
+    print("wing_position_actuators=6")
     print("flight_reset_initial_conditions=PASS")
     print("flybody_flight_physics=PASS")
     return 0
