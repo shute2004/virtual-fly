@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Measure whether the current FlyBody wing adapter can physically advance +x.
+"""Measure the FlyBody operating envelope required by the Flyppy course.
 
-Flyppy gates are arranged along +x. A controller cannot learn to pass them if the
-body/wing interface has no operating point that produces forward progress. This
-script measures that prerequisite directly instead of assuming that a changed
-trajectory implies useful flight.
+The source FlyBody vision-flight task starts the animal with forward velocity. We do
+the same here, but do not continuously force translation. The diagnostic then asks
+whether wing/body physics can keep the fly airborne while it traverses the first
+Flyppy gate distance.
 
-This is a body calibration diagnostic, not a neural-learning test. Each sample is
-run from a fresh identical free-body initial state.
+For each bilateral DNg02 operating point, a matched no-wing-fluid control is also
+run from the same initial state. This separates "the initial velocity moved the
+body" from aerodynamic effects introduced by the restored wing fluid geometry.
+
+This is a body calibration diagnostic, not a neural-learning test.
 """
 
 from __future__ import annotations
@@ -20,12 +23,31 @@ from pathlib import Path
 import numpy as np
 
 from flybody_adapter import FlyBodyWingAdapter, WingDrive
+from flybody_flight_physics import FLIGHT_AIR_DENSITY, FLIGHT_AIR_VISCOSITY
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seconds", type=float, default=0.12)
     parser.add_argument("--physics-steps", type=int, default=10)
+    parser.add_argument(
+        "--initial-forward-speed-mm-s",
+        type=float,
+        default=300.0,
+        help="one-shot +x initial speed; 300 mm/s is the midpoint of FlyBody's 20-40 cm/s vision-flight range",
+    )
+    parser.add_argument(
+        "--required-forward-mm",
+        type=float,
+        default=8.0,
+        help="minimum +x displacement; default matches the first Flyppy gate",
+    )
+    parser.add_argument(
+        "--minimum-z-mm",
+        type=float,
+        default=0.65,
+        help="minimum thorax height allowed during the diagnostic",
+    )
     parser.add_argument(
         "--levels",
         type=float,
@@ -44,13 +66,28 @@ def run_sample(
     seconds: float,
     physics_steps: int,
     drive: WingDrive,
+    *,
+    initial_forward_speed_mm_s: float,
+    aerodynamics: bool,
 ) -> dict[str, object]:
     body = FlyBodyWingAdapter(
         tethered=False,
         spawn_position_mm=(0.0, 0.0, 5.0),
+        initial_linear_velocity_mm_s=(initial_forward_speed_mm_s, 0.0, 0.0),
         enable_vision=False,
+        enable_wing_aerodynamics=aerodynamics,
     )
+
+    # With the wing-fluid geometry intentionally disabled, FlyGym's parent-world
+    # globals would otherwise retain the unconverted source cm-unit air values.
+    # Correct them in the compiled control model so the only experimental difference
+    # is the presence/absence of the two explicit wing fluid geoms.
+    if not aerodynamics:
+        body.sim.mj_model.opt.density = FLIGHT_AIR_DENSITY
+        body.sim.mj_model.opt.viscosity = FLIGHT_AIR_VISCOSITY
+
     start = body.thorax_position_mm()
+    start_velocity = body.root_linear_velocity_mm_s()
     control_dt = body.timestep * physics_steps
     controls = max(1, math.ceil(seconds / control_dt))
     min_z = float(start[2])
@@ -61,15 +98,21 @@ def run_sample(
         min_z = min(min_z, float(position[2]))
         max_z = max(max_z, float(position[2]))
     end = body.thorax_position_mm()
+    end_velocity = body.root_linear_velocity_mm_s()
     delta = end - start
+    velocity_delta = end_velocity - start_velocity
     elapsed = controls * control_dt
     return {
         "drive": {"left": drive.left, "right": drive.right},
+        "aerodynamics": aerodynamics,
         "elapsed_seconds": elapsed,
         "start_mm": start.tolist(),
         "end_mm": end.tolist(),
         "displacement_mm": delta.tolist(),
         "mean_velocity_mm_s": (delta / elapsed).tolist(),
+        "start_root_velocity_mm_s": start_velocity.tolist(),
+        "end_root_velocity_mm_s": end_velocity.tolist(),
+        "delta_root_velocity_mm_s": velocity_delta.tolist(),
         "min_z_mm": min_z,
         "max_z_mm": max_z,
     }
@@ -79,67 +122,122 @@ def main() -> int:
     args = parse_args()
     if args.seconds <= 0 or args.physics_steps < 1:
         raise SystemExit("seconds must be positive and physics-steps must be >= 1")
+    if not math.isfinite(args.initial_forward_speed_mm_s) or args.initial_forward_speed_mm_s <= 0:
+        raise SystemExit("initial-forward-speed-mm-s must be finite and > 0")
+    if args.required_forward_mm <= 0 or args.minimum_z_mm < 0:
+        raise SystemExit("required-forward-mm must be > 0 and minimum-z-mm must be >= 0")
     if not args.levels or any(not math.isfinite(v) or v < 0 or v > 1 for v in args.levels):
         raise SystemExit("levels must contain finite values in [0, 1]")
 
-    samples: list[dict[str, object]] = []
+    paired_samples: list[dict[str, object]] = []
+    all_samples: list[dict[str, object]] = []
     for level in args.levels:
-        samples.append(
+        drive = WingDrive(left=float(level), right=float(level))
+        with_aero = run_sample(
+            args.seconds,
+            args.physics_steps,
+            drive,
+            initial_forward_speed_mm_s=args.initial_forward_speed_mm_s,
+            aerodynamics=True,
+        )
+        no_wing_fluid = run_sample(
+            args.seconds,
+            args.physics_steps,
+            drive,
+            initial_forward_speed_mm_s=args.initial_forward_speed_mm_s,
+            aerodynamics=False,
+        )
+        all_samples.extend((with_aero, no_wing_fluid))
+        paired_samples.append(
+            {
+                "drive": with_aero["drive"],
+                "with_aerodynamics": with_aero,
+                "without_wing_fluid": no_wing_fluid,
+                "aero_delta_displacement_mm": (
+                    np.asarray(with_aero["displacement_mm"], dtype=np.float64)
+                    - np.asarray(no_wing_fluid["displacement_mm"], dtype=np.float64)
+                ).tolist(),
+                "aero_delta_final_velocity_mm_s": (
+                    np.asarray(with_aero["end_root_velocity_mm_s"], dtype=np.float64)
+                    - np.asarray(no_wing_fluid["end_root_velocity_mm_s"], dtype=np.float64)
+                ).tolist(),
+            }
+        )
+
+    # Asymmetric samples are useful for exposing whether steering destroys altitude
+    # or forward motion, but they are not candidates for the bilateral flight gate.
+    for drive in (WingDrive(1.0, 0.0), WingDrive(0.0, 1.0)):
+        all_samples.append(
             run_sample(
                 args.seconds,
                 args.physics_steps,
-                WingDrive(left=float(level), right=float(level)),
+                drive,
+                initial_forward_speed_mm_s=args.initial_forward_speed_mm_s,
+                aerodynamics=True,
             )
         )
 
-    # Add asymmetric samples to expose whether steering control destroys or
-    # preserves forward motion. These are diagnostic only.
-    samples.append(run_sample(args.seconds, args.physics_steps, WingDrive(1.0, 0.0)))
-    samples.append(run_sample(args.seconds, args.physics_steps, WingDrive(0.0, 1.0)))
-
-    for sample in samples:
+    for sample in all_samples:
         displacement = np.asarray(sample["displacement_mm"], dtype=np.float64)
-        velocity = np.asarray(sample["mean_velocity_mm_s"], dtype=np.float64)
+        velocity = np.asarray(sample["end_root_velocity_mm_s"], dtype=np.float64)
         if not np.all(np.isfinite(displacement)) or not np.all(np.isfinite(velocity)):
             raise RuntimeError("flight envelope contains non-finite body motion")
 
-    bilateral = [
+    bilateral_aero = [pair["with_aerodynamics"] for pair in paired_samples]
+    viable = [
         sample
-        for sample in samples
-        if float(sample["drive"]["left"]) == float(sample["drive"]["right"])
+        for sample in bilateral_aero
+        if float(sample["displacement_mm"][0]) >= args.required_forward_mm
+        and float(sample["min_z_mm"]) >= args.minimum_z_mm
+        and float(sample["end_root_velocity_mm_s"][0]) > 0.0
     ]
-    best = max(bilateral, key=lambda sample: float(sample["displacement_mm"][0]))
-    best_dx = float(best["displacement_mm"][0])
-    best_vx = float(best["mean_velocity_mm_s"][0])
-    forward_capable = best_dx > 0.0
+    best = max(
+        bilateral_aero,
+        key=lambda sample: (
+            float(sample["min_z_mm"]),
+            float(sample["displacement_mm"][0]),
+        ),
+    )
+    flight_viable = bool(viable)
 
     result = {
         "seconds_requested": args.seconds,
         "physics_steps_per_control": args.physics_steps,
-        "samples": samples,
+        "initial_forward_speed_mm_s": args.initial_forward_speed_mm_s,
+        "required_forward_mm": args.required_forward_mm,
+        "minimum_z_mm": args.minimum_z_mm,
+        "paired_bilateral_samples": paired_samples,
+        "asymmetric_aero_samples": all_samples[-2:],
         "best_bilateral_drive": best["drive"],
-        "best_forward_displacement_mm": best_dx,
-        "best_forward_velocity_mm_s": best_vx,
-        "forward_capable": forward_capable,
+        "best_forward_displacement_mm": float(best["displacement_mm"][0]),
+        "best_min_z_mm": float(best["min_z_mm"]),
+        "best_final_forward_velocity_mm_s": float(best["end_root_velocity_mm_s"][0]),
+        "flight_viable": flight_viable,
+        "viable_bilateral_drives": [sample["drive"] for sample in viable],
         "interpretation": (
-            "Body-interface calibration only. forward_capable means at least one "
-            "tested bilateral DNg02 operating point moved the free FlyBody in the "
-            "+x direction used by Flyppy. It does not establish stable long-duration "
-            "flight or learning."
+            "Body-interface calibration only. A viable operating point must traverse "
+            "the first Flyppy gate distance, remain above the configured minimum "
+            "height for the full diagnostic, and still have positive forward velocity. "
+            "The matched no-wing-fluid controls quantify how much of the trajectory "
+            "comes from restored wing aerodynamics rather than the one-shot initial speed."
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
-    print(f"best_forward_displacement_mm={best_dx:.9f}")
-    print(f"best_forward_velocity_mm_s={best_vx:.6f}")
+    print(f"best_forward_displacement_mm={result['best_forward_displacement_mm']:.6f}")
+    print(f"best_min_z_mm={result['best_min_z_mm']:.6f}")
+    print(
+        "best_final_forward_velocity_mm_s="
+        f"{result['best_final_forward_velocity_mm_s']:.6f}"
+    )
     print(f"best_bilateral_drive={best['drive']}")
     print(f"result={args.output}")
-    if not forward_capable:
+    if not flight_viable:
         raise RuntimeError(
-            "current wing adapter has no tested +x forward-flight operating point; "
-            "Flyppy gates cannot be reached without recalibrating body initial conditions "
-            "or wing/body flight dynamics"
+            "no tested bilateral DNg02 operating point can reach the first Flyppy gate "
+            "while remaining airborne; calibrate flight pose, wing kinematics, or body "
+            "physics before starting neural learning"
         )
     print("flybody_flight_envelope=PASS")
     return 0
