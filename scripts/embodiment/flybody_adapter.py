@@ -147,6 +147,10 @@ class FlyBodyWingAdapter:
     def _dof_key(dof) -> tuple[str, str, str]:
         return dof.parent.name, dof.child.name, dof.axis.value
 
+    def reset(self) -> None:
+        self.sim.reset()
+        self._time = 0.0
+
     def _scale_from_activity(self, spike_fraction: float) -> float:
         if not math.isfinite(spike_fraction):
             raise ValueError("DNg02 spike fraction must be finite")
