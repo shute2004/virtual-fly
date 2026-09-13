@@ -6,6 +6,7 @@ cd "$ROOT"
 
 SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
+RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 LEARNED_CHECKPOINT="${VF_FLYPPY_CHECKPOINT:-$ROOT/artifacts/experiments/flyppy-v0/checkpoint}"
 
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -23,9 +24,16 @@ if [ ! -f "$GROUPS" ]; then
     --snapshot "$SNAPSHOT" \
     --output "$GROUPS"
 fi
+if [ ! -f "$RETINOTOPIC_MAP" ]; then
+  uv run python scripts/data/prepare_retinotopic_vision.py \
+    --snapshot "$SNAPSHOT" \
+    --output "$RETINOTOPIC_MAP" \
+    --download
+fi
 
 exec uv run python scripts/embodiment/evaluate_flyppy.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
+  --retinotopic-map "$RETINOTOPIC_MAP" \
   --learned-checkpoint "$LEARNED_CHECKPOINT" \
   "$@"
