@@ -45,14 +45,13 @@ impl Default for NeuralParams {
             trace_decay: 0.95,
             eligibility_decay: 0.995,
             learning_rate: 0.0005,
-            // Keep this comfortably above released-count-derived initial weights.
-            // The bound is a numerical safety rail, not a biological measurement.
+            // Numerical safety rail, not a biological measurement.
             weight_max: 1_000.0,
             modulator_decay: 0.98,
-            // Full-CNS connections are much denser than the synthetic smoke circuit.
-            // Start conservatively; this parameter is deliberately calibratable.
-            synapse_scale: 0.001,
-            modulator_scale: 0.001,
+            // Bootstrap scaling. These values are intentionally explicit and
+            // will be calibrated against whole-CNS activity after the first run.
+            synapse_scale: 0.02,
+            modulator_scale: 0.005,
         }
     }
 }
