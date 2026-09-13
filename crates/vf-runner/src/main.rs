@@ -14,8 +14,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Validate local three-factor plasticity on a deliberately tiny circuit.
-    /// This is a kernel smoke test, not a claim about fly behaviour.
+    /// Validate local dopamine-gated plasticity on a deliberately tiny circuit.
+    /// This is a kernel smoke test, not a claim about fly behaviour or valence.
     KernelSmoke {
         #[arg(long, value_enum, default_value_t = BackendArg::Auto)]
         backend: BackendArg,
@@ -31,7 +31,7 @@ enum Command {
         snapshot: PathBuf,
     },
     /// Run the released MaleCNS graph for timing/scale validation.
-    /// No learning occurs unless modulator roles are explicitly configured in a later experiment.
+    /// Plasticity is disabled in this benchmark.
     SnapshotBenchmark {
         #[arg(long)]
         snapshot: PathBuf,
@@ -78,9 +78,10 @@ fn kernel_smoke(backend: BackendArg, cycles: usize, flies: usize) -> Result<()> 
 }
 
 fn smoke_snapshot() -> Result<ConnectomeSnapshot> {
-    // Two independent pathways. Positive/negative dopamine sources contact the
-    // association neuron in their respective pathway. These identities are
-    // synthetic and exist only to validate the local runtime mechanics.
+    // Two independent synthetic pathways. Each has its own dopamine source
+    // contacting the corresponding association neuron. There is deliberately
+    // no externally assigned positive/negative role: this test only verifies
+    // that local dopaminergic activity can gate local synaptic change.
     ConnectomeSnapshot::from_edges(
         8,
         &[
@@ -124,13 +125,11 @@ fn pathway_edge(snapshot: &ConnectomeSnapshot, pre: u32, post: u32) -> Result<us
 
 fn run_cpu_individual(cycles: usize) -> Result<(f32, f32, f32, f32)> {
     let snapshot = smoke_snapshot()?;
-    let positive_edge = pathway_edge(&snapshot, 0, 2)?;
-    let negative_edge = pathway_edge(&snapshot, 1, 3)?;
+    let pathway_a_edge = pathway_edge(&snapshot, 0, 2)?;
+    let pathway_b_edge = pathway_edge(&snapshot, 1, 3)?;
     let mut runtime = CpuRuntime::new(snapshot, smoke_params());
-    runtime.set_modulator_role(6, 1)?;
-    runtime.set_modulator_role(7, -1)?;
-    let positive_before = runtime.weights()[positive_edge];
-    let negative_before = runtime.weights()[negative_edge];
+    let pathway_a_before = runtime.weights()[pathway_a_edge];
+    let pathway_b_before = runtime.weights()[pathway_b_edge];
 
     for _ in 0..cycles {
         runtime.step(
@@ -152,10 +151,10 @@ fn run_cpu_individual(cycles: usize) -> Result<(f32, f32, f32, f32)> {
     }
 
     Ok((
-        positive_before,
-        runtime.weights()[positive_edge],
-        negative_before,
-        runtime.weights()[negative_edge],
+        pathway_a_before,
+        runtime.weights()[pathway_a_edge],
+        pathway_b_before,
+        runtime.weights()[pathway_b_edge],
     ))
 }
 
@@ -170,25 +169,29 @@ fn cpu_kernel_smoke(cycles: usize, flies: usize) -> Result<()> {
         .collect();
     let results: Vec<_> = results.into_iter().collect::<Result<_>>()?;
     let first = results[0];
-    let pos_delta = results.iter().map(|x| x.1 - x.0).sum::<f32>() / flies as f32;
-    let neg_delta = results.iter().map(|x| x.3 - x.2).sum::<f32>() / flies as f32;
+    let pathway_a_delta = results.iter().map(|x| x.1 - x.0).sum::<f32>() / flies as f32;
+    let pathway_b_delta = results.iter().map(|x| x.3 - x.2).sum::<f32>() / flies as f32;
 
     println!("backend=cpu-rayon flies={flies} cycles={cycles}");
-    println!("positive_path: {:.6} -> {:.6} (mean delta {pos_delta:+.6})", first.0, first.1);
-    println!("negative_path: {:.6} -> {:.6} (mean delta {neg_delta:+.6})", first.2, first.3);
+    println!(
+        "pathway_a: {:.6} -> {:.6} (mean delta {pathway_a_delta:+.6})",
+        first.0, first.1
+    );
+    println!(
+        "pathway_b: {:.6} -> {:.6} (mean delta {pathway_b_delta:+.6})",
+        first.2, first.3
+    );
     println!("elapsed={:.3}s", started.elapsed().as_secs_f64());
-    verify_smoke_direction(pos_delta, neg_delta)
+    verify_smoke_change(pathway_a_delta, pathway_b_delta)
 }
 
 fn gpu_kernel_smoke(cycles: usize) -> Result<()> {
     use vf_neural::gpu::GpuRuntime;
 
     let snapshot = smoke_snapshot()?;
-    let positive_edge = pathway_edge(&snapshot, 0, 2)?;
-    let negative_edge = pathway_edge(&snapshot, 1, 3)?;
+    let pathway_a_edge = pathway_edge(&snapshot, 0, 2)?;
+    let pathway_b_edge = pathway_edge(&snapshot, 1, 3)?;
     let mut runtime = GpuRuntime::new(&snapshot, smoke_params())?;
-    runtime.set_modulator_role(6, 1)?;
-    runtime.set_modulator_role(7, -1)?;
     let before = runtime.readback()?;
     let started = Instant::now();
 
@@ -211,28 +214,29 @@ fn gpu_kernel_smoke(cycles: usize) -> Result<()> {
         runtime.step(&[], true)?;
     }
     let after = runtime.readback()?;
-    let pos_delta = after.weights[positive_edge] - before.weights[positive_edge];
-    let neg_delta = after.weights[negative_edge] - before.weights[negative_edge];
+    let pathway_a_delta = after.weights[pathway_a_edge] - before.weights[pathway_a_edge];
+    let pathway_b_delta = after.weights[pathway_b_edge] - before.weights[pathway_b_edge];
 
     println!("backend=gpu adapter={} cycles={cycles}", runtime.adapter_name());
     println!(
-        "positive_path: {:.6} -> {:.6} (delta {pos_delta:+.6})",
-        before.weights[positive_edge], after.weights[positive_edge]
+        "pathway_a: {:.6} -> {:.6} (delta {pathway_a_delta:+.6})",
+        before.weights[pathway_a_edge], after.weights[pathway_a_edge]
     );
     println!(
-        "negative_path: {:.6} -> {:.6} (delta {neg_delta:+.6})",
-        before.weights[negative_edge], after.weights[negative_edge]
+        "pathway_b: {:.6} -> {:.6} (delta {pathway_b_delta:+.6})",
+        before.weights[pathway_b_edge], after.weights[pathway_b_edge]
     );
     println!("elapsed={:.3}s", started.elapsed().as_secs_f64());
-    verify_smoke_direction(pos_delta, neg_delta)
+    verify_smoke_change(pathway_a_delta, pathway_b_delta)
 }
 
-fn verify_smoke_direction(positive_delta: f32, negative_delta: f32) -> Result<()> {
-    if positive_delta <= 0.0 {
-        bail!("positive neuromodulatory pathway did not potentiate");
+fn verify_smoke_change(pathway_a_delta: f32, pathway_b_delta: f32) -> Result<()> {
+    const EPSILON: f32 = 1e-7;
+    if pathway_a_delta.abs() <= EPSILON {
+        bail!("dopamine-gated pathway A produced no local synaptic change");
     }
-    if negative_delta >= 0.0 {
-        bail!("negative neuromodulatory pathway did not depress");
+    if pathway_b_delta.abs() <= EPSILON {
+        bail!("dopamine-gated pathway B produced no local synaptic change");
     }
     println!("plasticity_smoke=PASS");
     Ok(())
@@ -282,7 +286,10 @@ fn benchmark_cpu(snapshot: ConnectomeSnapshot, steps: usize) -> Result<()> {
         runtime.step(&[], false)?;
     }
     let elapsed = started.elapsed().as_secs_f64();
-    println!("backend=cpu-rayon steps={steps} elapsed={elapsed:.3}s steps_per_second={:.3}", steps as f64 / elapsed);
+    println!(
+        "backend=cpu-rayon steps={steps} elapsed={elapsed:.3}s steps_per_second={:.3}",
+        steps as f64 / elapsed
+    );
     Ok(())
 }
 
