@@ -33,6 +33,15 @@ def find_suffix(all_names: list[str], suffix: str) -> int:
     return matches[0]
 
 
+def require_spec_geom(body: FlyBodyWingAdapter, name: str):
+    """Return a source MjSpec geom whose compile-time-only fields can be inspected."""
+
+    geom = body.fly.mjcf_root.geom(name)
+    if geom is None:
+        raise RuntimeError(f"FlyBody source MjSpec geom not found: {name}")
+    return geom
+
+
 def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
     model = body.sim.mj_model
 
@@ -71,10 +80,6 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
             raise RuntimeError(
                 f"{spec.fluid_name} size mismatch: {model.geom_size[fluid_id].tolist()}"
             )
-        if not math.isclose(float(model.geom_mass[fluid_id]), 0.0, rel_tol=0, abs_tol=1e-15):
-            raise RuntimeError(
-                f"{spec.fluid_name} must be massless, got {model.geom_mass[fluid_id]}"
-            )
 
         inertial_id = find_suffix(geom_names, spec.inertial_name)
         if not np.allclose(
@@ -84,23 +89,35 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
                 f"{spec.inertial_name} size mismatch: "
                 f"{model.geom_size[inertial_id].tolist()}"
             )
+
+        # Geom mass is a compile-time MjSpec property. MuJoCo folds geom mass and
+        # inertia into body inertial properties and deliberately does not retain a
+        # geom_mass array in mjModel, so inspect the source MjSpec rather than a
+        # non-existent runtime field.
+        fluid_spec = require_spec_geom(body, spec.fluid_name)
+        if not math.isclose(float(fluid_spec.mass), 0.0, rel_tol=0, abs_tol=1e-15):
+            raise RuntimeError(
+                f"{spec.fluid_name} must be massless, got {fluid_spec.mass}"
+            )
+
+        inertial_spec = require_spec_geom(body, spec.inertial_name)
         if not math.isclose(
-            float(model.geom_mass[inertial_id]),
+            float(inertial_spec.mass),
             FLIGHT_WING_INERTIAL_MASS,
             rel_tol=1e-12,
             abs_tol=0,
         ):
             raise RuntimeError(
-                f"{spec.inertial_name} mass mismatch: {model.geom_mass[inertial_id]}"
+                f"{spec.inertial_name} mass mismatch: {inertial_spec.mass}"
             )
 
-        membrane_id = find_suffix(geom_names, spec.membrane_name)
+        membrane_spec = require_spec_geom(body, spec.membrane_name)
         if not math.isclose(
-            float(model.geom_mass[membrane_id]), 0.0, rel_tol=0, abs_tol=1e-15
+            float(membrane_spec.mass), 0.0, rel_tol=0, abs_tol=1e-15
         ):
             raise RuntimeError(
                 f"{spec.membrane_name} still carries transferred inertial mass: "
-                f"{model.geom_mass[membrane_id]}"
+                f"{membrane_spec.mass}"
             )
 
     joint_names = names(model, mj.mjtObj.mjOBJ_JOINT, model.njnt)
