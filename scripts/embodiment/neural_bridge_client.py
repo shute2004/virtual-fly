@@ -107,7 +107,19 @@ class NeuralBridgeClient:
     def save_weights(self, path: Path) -> dict:
         response = self._request({"type": "save_weights", "path": str(path)})
         if response.get("event") != "weights_saved":
-            raise NeuralBridgeError(f"unexpected checkpoint response: {response}")
+            raise NeuralBridgeError(f"unexpected weight checkpoint response: {response}")
+        return response
+
+    def save_checkpoint(self, path: Path) -> dict:
+        response = self._request({"type": "save_checkpoint", "path": str(path)})
+        if response.get("event") != "checkpoint_saved":
+            raise NeuralBridgeError(f"unexpected state checkpoint response: {response}")
+        return response
+
+    def load_checkpoint(self, path: Path) -> dict:
+        response = self._request({"type": "load_checkpoint", "path": str(path)})
+        if response.get("event") != "checkpoint_loaded":
+            raise NeuralBridgeError(f"unexpected checkpoint load response: {response}")
         return response
 
     def close(self, *, force: bool = False) -> None:
