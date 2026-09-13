@@ -124,7 +124,10 @@ def add_flight_wing_aerodynamics(fly: FlyBody) -> None:
                 f"FlyBody segment {spec.body_segment!r} required for flight is missing"
             ) from exc
 
-        geom = wing_body.add_geom(
+        # MjSpec exposes MJCF's fluidshape="ellipsoid" as fluid_ellipsoid and
+        # fluidcoef as fluid_coefs. Passing them through add_geom avoids relying on
+        # mutability details of the generated fixed-size array bindings.
+        wing_body.add_geom(
             type=GEOM_TYPES["ellipsoid"],
             name=spec.geom_name,
             size=spec.size_mm,
@@ -135,11 +138,9 @@ def add_flight_wing_aerodynamics(fly: FlyBody) -> None:
             conaffinity=0,
             group=3,
             rgba=(0.0, 0.0, 0.0, 0.0),
+            fluid_ellipsoid=1.0,
+            fluid_coefs=list(FLIGHT_FLUID_COEFS),
         )
-        # MjSpec exposes MJCF's fluidshape="ellipsoid" as fluid_ellipsoid and
-        # fluidcoef as fluid_coefs.
-        geom.fluid_ellipsoid = 1.0
-        geom.fluid_coefs = list(FLIGHT_FLUID_COEFS)
 
 
 def apply_flight_air_parameters(world: BaseWorld) -> None:
