@@ -52,6 +52,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--max-control-steps", type=int, default=1800)
     parser.add_argument("--physics-steps", type=int, default=10)
+    parser.add_argument(
+        "--settle-steps",
+        type=int,
+        default=20,
+        help="plasticity-off, stimulus-free CNS steps before each evaluation episode",
+    )
     parser.add_argument("--initial-forward-speed-mm-s", type=float, default=300.0)
     parser.add_argument("--gate-count", type=int, default=6)
     parser.add_argument("--seed", type=int, default=0)
@@ -79,6 +85,7 @@ def evaluate_episode(
     gate_count: int,
     max_control_steps: int,
     physics_steps: int,
+    settle_steps: int,
     initial_forward_speed_mm_s: float,
 ) -> dict[str, object]:
     course = FlyppyCourse(seed=seed, gate_count=gate_count)
@@ -110,6 +117,13 @@ def evaluate_episode(
         brain.ping()
         if checkpoint is not None:
             brain.load_checkpoint(checkpoint)
+        if settle_steps:
+            brain.step(
+                stimulate={},
+                read=(),
+                plasticity=False,
+                steps=settle_steps,
+            )
 
         for control_step in range(max_control_steps):
             sensory = positive_stimuli(
@@ -177,6 +191,7 @@ def evaluate_state(
             gate_count=args.gate_count,
             max_control_steps=args.max_control_steps,
             physics_steps=args.physics_steps,
+            settle_steps=args.settle_steps,
             initial_forward_speed_mm_s=args.initial_forward_speed_mm_s,
         )
         result["episode"] = episode
@@ -215,6 +230,8 @@ def main() -> int:
         raise SystemExit("episodes must be >= 1")
     if args.max_control_steps < 1 or args.physics_steps < 1:
         raise SystemExit("control/physics steps must be >= 1")
+    if args.settle_steps < 0:
+        raise SystemExit("settle-steps must be >= 0")
     if args.gate_count < 1:
         raise SystemExit("gate-count must be >= 1")
     if (
@@ -250,6 +267,7 @@ def main() -> int:
         "experiment": "flyppy_frozen_state_evaluation_v0",
         "plasticity_during_evaluation": False,
         "reinforcement_during_evaluation": False,
+        "settle_steps": args.settle_steps,
         "course_seed": args.seed,
         "gate_count": args.gate_count,
         "episodes_per_state": args.episodes,
