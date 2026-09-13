@@ -78,10 +78,9 @@ def run_sample(
         enable_wing_aerodynamics=aerodynamics,
     )
 
-    # With the wing-fluid geometry intentionally disabled, FlyGym's parent-world
-    # globals would otherwise retain the unconverted source cm-unit air values.
-    # Correct them in the compiled control model so the only experimental difference
-    # is the presence/absence of the two explicit wing fluid geoms.
+    # Keep the matched control in the same unit system. The adapter already applies
+    # these values, but assigning the compiled options here makes the experimental
+    # invariant explicit and protects the diagnostic from future adapter changes.
     if not aerodynamics:
         body.sim.mj_model.opt.density = FLIGHT_AIR_DENSITY
         body.sim.mj_model.opt.viscosity = FLIGHT_AIR_VISCOSITY
@@ -118,6 +117,19 @@ def run_sample(
     }
 
 
+def sample_is_viable(
+    sample: dict[str, object],
+    *,
+    required_forward_mm: float,
+    minimum_z_mm: float,
+) -> bool:
+    return (
+        float(sample["displacement_mm"][0]) >= required_forward_mm
+        and float(sample["min_z_mm"]) >= minimum_z_mm
+        and float(sample["end_root_velocity_mm_s"][0]) > 0.0
+    )
+
+
 def main() -> int:
     args = parse_args()
     if args.seconds <= 0 or args.physics_steps < 1:
@@ -147,12 +159,27 @@ def main() -> int:
             initial_forward_speed_mm_s=args.initial_forward_speed_mm_s,
             aerodynamics=False,
         )
+        with_aero_viable = sample_is_viable(
+            with_aero,
+            required_forward_mm=args.required_forward_mm,
+            minimum_z_mm=args.minimum_z_mm,
+        )
+        control_viable = sample_is_viable(
+            no_wing_fluid,
+            required_forward_mm=args.required_forward_mm,
+            minimum_z_mm=args.minimum_z_mm,
+        )
         all_samples.extend((with_aero, no_wing_fluid))
         paired_samples.append(
             {
                 "drive": with_aero["drive"],
                 "with_aerodynamics": with_aero,
                 "without_wing_fluid": no_wing_fluid,
+                "with_aerodynamics_viable": with_aero_viable,
+                "without_wing_fluid_viable": control_viable,
+                "aerodynamics_required_for_viability": (
+                    with_aero_viable and not control_viable
+                ),
                 "aero_delta_displacement_mm": (
                     np.asarray(with_aero["displacement_mm"], dtype=np.float64)
                     - np.asarray(no_wing_fluid["displacement_mm"], dtype=np.float64)
@@ -184,13 +211,12 @@ def main() -> int:
             raise RuntimeError("flight envelope contains non-finite body motion")
 
     bilateral_aero = [pair["with_aerodynamics"] for pair in paired_samples]
-    viable = [
-        sample
-        for sample in bilateral_aero
-        if float(sample["displacement_mm"][0]) >= args.required_forward_mm
-        and float(sample["min_z_mm"]) >= args.minimum_z_mm
-        and float(sample["end_root_velocity_mm_s"][0]) > 0.0
+    viable_pairs = [
+        pair
+        for pair in paired_samples
+        if bool(pair["aerodynamics_required_for_viability"])
     ]
+    viable = [pair["with_aerodynamics"] for pair in viable_pairs]
     best = max(
         bilateral_aero,
         key=lambda sample: (
@@ -215,11 +241,12 @@ def main() -> int:
         "flight_viable": flight_viable,
         "viable_bilateral_drives": [sample["drive"] for sample in viable],
         "interpretation": (
-            "Body-interface calibration only. A viable operating point must traverse "
+            "Body-interface calibration only. A passing operating point must traverse "
             "the first Flyppy gate distance, remain above the configured minimum "
-            "height for the full diagnostic, and still have positive forward velocity. "
-            "The matched no-wing-fluid controls quantify how much of the trajectory "
-            "comes from restored wing aerodynamics rather than the one-shot initial speed."
+            "height for the full diagnostic, still have positive forward velocity, "
+            "and fail the same viability test when the two wing-fluid geoms are removed. "
+            "This prevents the one-shot initial speed by itself from satisfying the "
+            "flight gate."
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -235,9 +262,9 @@ def main() -> int:
     print(f"result={args.output}")
     if not flight_viable:
         raise RuntimeError(
-            "no tested bilateral DNg02 operating point can reach the first Flyppy gate "
-            "while remaining airborne; calibrate flight pose, wing kinematics, or body "
-            "physics before starting neural learning"
+            "no tested bilateral DNg02 operating point requires restored wing aerodynamics "
+            "to reach the first Flyppy gate while remaining airborne; calibrate flight pose, "
+            "wing kinematics, or body physics before starting neural learning"
         )
     print("flybody_flight_envelope=PASS")
     return 0
