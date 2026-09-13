@@ -38,7 +38,6 @@ from flygym.compose import (
 from flygym.compose.fly import FlyBody
 from flygym.compose.world.base_world import BaseWorld
 from flygym.flybody.anatomy_flybody import (
-    FlyBodyActuatedDOFPreset,
     FlyBodyAxisOrder,
     FlyBodyContactBodiesPreset,
     FlyBodyJointPreset,
@@ -124,10 +123,10 @@ class FlyBodyWingAdapter:
         self.fly.add_joints(skeleton, KinematicPosePreset.FLYBODY_NEUTRAL)
         apply_flight_wing_joint_parameters(self.fly)
 
-        actuated_dofs = skeleton.get_actuated_dofs_from_preset(
-            FlyBodyActuatedDOFPreset.ALL
-        )
-        add_flight_position_actuators(self.fly, actuated_dofs)
+        # Enumerate the biological skeleton, then let the flight compatibility
+        # layer select exactly the six wing DOFs. Do not use FlyGym's ALL
+        # actuated-DOF preset here: it includes non-flight joints such as halteres.
+        add_flight_position_actuators(self.fly, list(skeleton.iter_jointdofs()))
         self.fly.add_tendons()
         self.fly.add_tendon_actuators()
         if self.wing_aerodynamics_enabled:
@@ -210,9 +209,10 @@ class FlyBodyWingAdapter:
             for side in ("left", "right")
             for axis in ("yaw", "roll", "pitch")
         }
-        if set(self._wing_indices) != expected:
+        if set(self._wing_indices) != expected or len(self._actuated_dofs) != 6:
             raise RuntimeError(
-                f"unexpected FlyBody wing actuator set: {sorted(self._wing_indices)}"
+                "flight adapter requires exactly six wing POSITION actuators; "
+                f"actuated={len(self._actuated_dofs)} wings={sorted(self._wing_indices)}"
             )
 
         body_order = self.fly.get_bodysegs_order()
