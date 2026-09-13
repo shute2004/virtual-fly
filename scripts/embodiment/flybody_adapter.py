@@ -330,6 +330,7 @@ class FlyBodyWingAdapter:
 
     @staticmethod
     def _wing_pattern(phase: float, amplitude_scale: float) -> dict[str, float]:
+        phase = phase % (2.0 * math.pi)
         return {
             "yaw": 0.3 + amplitude_scale * 1.1 * math.sin(phase - math.pi / 2.0),
             "roll": -0.1 + amplitude_scale * 0.25 * math.sin(1.5 * phase),
@@ -339,6 +340,7 @@ class FlyBodyWingAdapter:
     def _wing_pattern_velocity(
         self, phase: float, amplitude_scale: float
     ) -> dict[str, float]:
+        phase = phase % (2.0 * math.pi)
         omega = 2.0 * math.pi * self.wingbeat_hz
         return {
             "yaw": amplitude_scale
