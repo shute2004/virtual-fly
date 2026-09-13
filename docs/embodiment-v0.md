@@ -14,9 +14,10 @@
 - JSONL stdin/stdoutで常駐するRust MaleCNS bridge。
 - body IDを指定した個々のMaleCNSニューロンへの直接外部電流刺激。
 - MaleCNS注釈からのbilateral DNg02 / PAM08 / PPL1抽出。
-- MaleCNS L1の `assignedOlHex1` / `assignedOlHex2` に基づくretinotopic lamina-cartridge map。
-- 各R1-R6について、座標付きL1へのreleased synapse countが最大のtargetをそのoptical columnとして解決。
-- FlyBody眼カメラの局所受光量を、対応するR1-R6だけへ電流として与える感覚境界。
+- MaleCNS `assignedOlHex1` / `assignedOlHex2` に基づくretinotopic optic-column座標。
+- 各annotated R1-R6について、座標付きL1/L2/L3への全released contactをcolumn単位で合算し、最大contact columnをそのretinotopic位置として推定するprojection。
+- R1-R6自身の `rootSide` による左右眼判定。
+- FlyBody眼カメラの局所受光量を、対応するreleased R1-R6だけへ電流として与える感覚境界。
 - DNg02左右集団活動から左右wing-beat amplitudeへのmotor adapter。
 - 上下ゲート、床、天井、明示的MuJoCo contact pairを持つFlyppy world。
 - ゲート通過時のPAM08候補刺激、衝突時のPPL1候補刺激。
@@ -32,8 +33,8 @@
 ```text
 Flyppy物理環境
   -> FlyBody raw eye cameras
-  -> MaleCNS L1 lamina cartridgeごとの局所受光
-  -> 各R1-R6のdominant L1 cartridgeに対応する局所電流
+  -> MaleCNS retinotopic columnごとの局所受光
+  -> そのcolumnへ投射すると推定されたreleased R1-R6への局所電流
   -> whole MaleCNS + local plasticity
   -> bilateral DNg02
   -> wing-beat amplitude adapter
@@ -49,15 +50,24 @@ Flyppy物理環境
 
 ## 3. 視覚入力
 
-### 3.1 実測情報とneural superposition
+### 3.1 実測情報とretinotopic projection
 
 MaleCNS公式annotationにはoptic-lobeのhex column座標 `assignedOlHex1` / `assignedOlHex2` が含まれる。
 
-`scripts/data/prepare_retinotopic_vision.py` は、column座標を持つ実際のL1ニューロンをlamina cartridgeの空間単位とする。R1-R6は一つのL1だけに接触するとは限らないため、「接続が存在する」という二値条件だけではcolumn所属を決めない。各annotated R1-R6について、座標付きL1 targetへのreleased synapse countを比較し、最大のL1だけをそのphotoreceptorのdominant cartridgeとして採用する。
+R1-R6の個々の光学位置は直接与えられていないため、`scripts/data/prepare_retinotopic_vision.py` はreleased wiringから位置を推定する。official `type == "R1-R6"` の各photoreceptorについて、座標付きL1/L2/L3への全synaptic contactをcolumnごとに合算し、合計contact数が最大のcolumnをそのR1-R6のretinotopic位置として採用する。左右眼はtarget neuronのsideではなく、そのR1-R6自身の `rootSide` を使用する。
 
-これはショウジョウバエのneural superposition――同じvisual axisを見る近傍ommatidia由来のR1-R6が同じlamina cartridgeへ収束する――を利用しつつ、弱い副次的R1-R6 -> L1接続を別のoptical axisと誤認しないためのdata-drivenな解決規則である。R1-R6のbody ID順やommatidiumの配列順からcolumn所属を推測しない。
+```text
+one released R1-R6
+  -> all observed contacts to coordinate-bearing L1/L2/L3
+  -> sum contacts by assignedOlHex column
+  -> unique maximum-contact column
+```
 
-最大synapse countが複数L1で完全同率になったR1-R6は曖昧として扱い、適当に一方へ割り当てず実行を失敗させる。
+これはR1-R6のbody ID順やommatidium配列順を空間位置として扱うものではない。複数columnへの弱い副次接続を捨てて神経グラフを変更するものでもなく、あくまで外界からどの局所光をそのR1-R6へ与えるかを決めるsensory-coordinate inferenceである。MaleCNS neural graphにはreleased edgeをそのまま保持する。
+
+最大contact数が完全同率のcolumnが複数あるR1-R6は、任意にtie-breakせずretinal mapから未割当のまま残す。projection confidenceとして `dominant column contacts / all coordinate-bearing L1/L2/L3 contacts` を記録するが、これは「正しい位置である確率」の実測値ではない。
+
+また、visual-system connectomeの一次資料ではlaminaが撮像体積に完全には含まれず、reconstructed R1-R6数が本来の総数を過小評価すると明記されている。そのため各columnを人工的に6細胞へ補完したり、存在しないR1-R6を生成したりしない。released MaleCNSに存在する細胞だけを使う。
 
 解決結果は:
 
@@ -65,28 +75,28 @@ MaleCNS公式annotationにはoptic-lobeのhex column座標 `assignedOlHex1` / `a
 artifacts/malecns-v1.0/retinotopic-vision-v1.json
 ```
 
-へ保存する。十分なcolumn数を解決できない、同率首位のR1-R6が存在する、同じL1 column座標が重複する、といった場合は、適当な順序対応や全体平均へfallbackせず実行を失敗させる。
+へ保存する。十分なcolumn数を解決できない場合は、適当な順序対応や全体平均へfallbackせず実行を失敗させる。
 
 ### 3.2 感覚変換境界
 
 `scripts/embodiment/malecns_retina.py` は各眼についてMaleCNS hex latticeをFlyBodyのraw eye cameraへ展開し、それぞれのcolumn位置の局所受光値だけを読む。
 
-その局所値を、当該L1 cartridgeをdominant targetとするR1-R6への外部電流へ変換する。
+その局所値を、当該columnへ割り当てられたreleased R1-R6への外部電流へ変換する。
 
 ```text
-one observed L1 cartridge / optic column
+one inferred retinotopic column
   -> one local eye-camera sample
   -> local photoreceptor transduction scale
-  -> R1-R6 currents assigned by dominant observed L1 synapse count
+  -> corresponding released R1-R6 currents
 ```
 
 column間の平均、pooling、Reichardt-like motion detector、edge detector、object detectorは使用しない。T4/T5を含む下流視覚ニューロンの応答はMaleCNS自身に計算させる。
 
 ### 3.3 provenance
 
-- `observed`: MaleCNS body ID、released R1-R6 -> L1 synapse counts、L1の `assignedOlHex1` / `assignedOlHex2`。
-- `inferred`: 各R1-R6のdominant optical cartridgeを、座標付きL1への最大released synapse countで選ぶ規則。
-- `literature`: neural superpositionにより、同じoptical axisのR1-R6が同じlamina cartridgeへ収束するという配線原理。
+- `observed`: MaleCNS body ID、official `type == R1-R6`、R1-R6自身の `rootSide`、released synapse counts、L1/L2/L3の `assignedOlHex1` / `assignedOlHex2`。
+- `inferred`: 各R1-R6のretinotopic columnを、座標付きL1/L2/L3への総released contactが最大のcolumnとして選ぶ規則。
+- `literature`: neural superpositionと、MaleCNS/visual-system connectomeでlamina・R1-R6が不完全に含まれるというデータ制約。
 - `calibrated`: MaleCNS hex latticeからFlyBody eye-camera平面への幾何投影。
 - `calibrated`: 局所受光値からR1-R6へ注入するcurrentのscale。
 
