@@ -354,6 +354,14 @@ impl GpuRuntime {
             bytemuck::cast_slice(&self.external_cpu),
         );
 
+        let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
+        let neuron_dispatch = dispatch_grid(self.neuron_count as u32, max_groups)?;
+        let edge_dispatch = if plasticity_enabled && self.edge_count > 0 {
+            Some(dispatch_grid(self.edge_count as u32, max_groups)?)
+        } else {
+            None
+        };
+
         let bind_group = if self.current_is_b {
             &self.bind_group_ba
         } else {
@@ -371,15 +379,15 @@ impl GpuRuntime {
             });
             pass.set_bind_group(0, bind_group, &[]);
             pass.set_pipeline(&self.neuron_pipeline);
-            pass.dispatch_workgroups(div_ceil(self.neuron_count as u32, WORKGROUP_SIZE), 1, 1);
+            pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
 
-            if plasticity_enabled && self.edge_count > 0 {
+            if let Some((x, y)) = edge_dispatch {
                 pass.set_pipeline(&self.plasticity_pipeline);
-                pass.dispatch_workgroups(div_ceil(self.edge_count as u32, WORKGROUP_SIZE), 1, 1);
+                pass.dispatch_workgroups(x, y, 1);
             }
 
             pass.set_pipeline(&self.trace_pipeline);
-            pass.dispatch_workgroups(div_ceil(self.neuron_count as u32, WORKGROUP_SIZE), 1, 1);
+            pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
         }
         self.queue.submit([encoder.finish()]);
         self.current_is_b = !self.current_is_b;
@@ -530,8 +538,23 @@ impl GpuRuntime {
     }
 }
 
-fn div_ceil(value: u32, divisor: u32) -> u32 {
-    value.div_ceil(divisor)
+fn dispatch_grid(item_count: u32, max_groups_per_dimension: u32) -> Result<(u32, u32)> {
+    if item_count == 0 {
+        return Ok((0, 0));
+    }
+    if max_groups_per_dimension == 0 {
+        bail!("GPU reports zero max compute workgroups per dimension");
+    }
+
+    let total_groups = item_count.div_ceil(WORKGROUP_SIZE);
+    let x = total_groups.min(max_groups_per_dimension);
+    let y = total_groups.div_ceil(x);
+    if y > max_groups_per_dimension {
+        bail!(
+            "GPU dispatch requires {total_groups} workgroups, exceeding a {max_groups_per_dimension}x{max_groups_per_dimension} grid"
+        );
+    }
+    Ok((x, y))
 }
 
 fn storage_layout(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
@@ -616,4 +639,25 @@ fn create_bind_group(
             },
         ],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dispatch_grid;
+
+    #[test]
+    fn dispatch_grid_stays_one_dimensional_when_it_fits() {
+        assert_eq!(dispatch_grid(166_700, 65_535).unwrap(), (652, 1));
+    }
+
+    #[test]
+    fn dispatch_grid_tiles_malecns_edges_over_y() {
+        assert_eq!(dispatch_grid(25_582_938, 65_535).unwrap(), (65_535, 2));
+    }
+
+    #[test]
+    fn dispatch_grid_rejects_impossible_grid() {
+        let max_items = 4 * 4 * 256;
+        assert!(dispatch_grid(max_items + 1, 4).is_err());
+    }
 }
