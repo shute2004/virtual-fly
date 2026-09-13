@@ -30,7 +30,6 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 run "Python dependencies" uv sync
 run "MaleCNS v1.0 download and preprocessing" uv run python scripts/data/prepare_malecns.py --download --output "$SNAPSHOT"
 run "Conditioning group discovery" uv run python scripts/data/make_conditioning_config.py --snapshot "$SNAPSHOT" --output "$SNAPSHOT/conditioning-v0.json"
-run "Rust format" cargo fmt --all
 run "Rust compile check" cargo check --workspace
 run "Rust tests" cargo test --workspace
 run "GPU plasticity kernel smoke" cargo run -p vf-runner --bin vf-runner --release -- kernel-smoke --backend gpu --cycles 100
