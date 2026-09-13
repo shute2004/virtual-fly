@@ -520,7 +520,9 @@ impl GpuRuntime {
             bail!("GPU readback timed out");
         }
 
-        let view = slice.get_mapped_range();
+        let view = slice
+            .get_mapped_range()
+            .context("failed to access mapped GPU readback range")?;
         let values = bytemuck::cast_slice::<u8, T>(&view).to_vec();
         drop(view);
         staging.unmap();
