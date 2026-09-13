@@ -6,10 +6,9 @@ only experiment-side handles for applying current to explicit neurons or for
 legacy diagnostics. They do not assign positive/negative numerical valence to
 neurons and they are not an action decoder.
 
-The target motor boundary is moving from the legacy DNg02 population diagnostic
-to individual released wing motor neurons. T4/T5 groups are also retained only
-for historical/smoke-test compatibility; the current Flyppy sensory path enters
-at released R1-R6 photoreceptors instead.
+The target motor boundary uses individual released wing motor-neuron body IDs.
+DNg02 and T4/T5 groups remain only for historical/smoke-test compatibility; the
+Flyppy learning path neither averages DNg02 activity nor injects T4/T5 features.
 """
 
 from __future__ import annotations
@@ -23,6 +22,14 @@ import pandas as pd
 
 DOPAMINE_CODE = 4
 VERTICAL_MOTION_TYPES = ("T4c", "T4d", "T5c", "T5d")
+
+# Reinforcement stimulation is targeted at named MB-compartment DAN types rather
+# than at an abstract signed reward variable. PAM01 corresponds to PAM-gamma5,
+# a reward-associated compartment; PPL101 corresponds to PPL1-gamma1pedc, a
+# well-established aversive reinforcement neuron type. The runtime receives only
+# injected current at these released body IDs and derives dopamine from anatomy.
+REWARD_DAN_TYPE = "PAM01"
+AVERSIVE_DAN_TYPE = "PPL101"
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,6 +82,15 @@ def add_group(
     resolved[name] = records
 
 
+def exact_dopamine_type_mask(
+    annotations: pd.DataFrame,
+    nt: np.ndarray,
+    type_name: str,
+) -> np.ndarray:
+    annotated_type = text_column(annotations, "type")
+    return (nt == DOPAMINE_CODE) & annotated_type.eq(type_name).to_numpy(copy=True)
+
+
 def main() -> int:
     args = parse_args()
     annotations = pd.read_feather(args.snapshot / "annotations.feather")
@@ -100,6 +116,8 @@ def main() -> int:
     groups: dict[str, dict[str, object]] = {}
     resolved: dict[str, list[dict[str, object]]] = {}
 
+    # Legacy diagnostic only. The target Flyppy motor path never reads these
+    # spike fractions; it requests each selected wing-MN body ID independently.
     dng02 = searchable.str.contains(
         r"\bDNg02(?:_|\b)", case=False, regex=True
     ).to_numpy(copy=True)
@@ -116,24 +134,19 @@ def main() -> int:
         row_records(annotations, dng02 & right),
     )
 
-    dopamine = nt == DOPAMINE_CODE
-    pam08_mask = dopamine & searchable.str.contains(
-        r"\bPAM08(?:_|\b)", case=False, regex=True
-    ).to_numpy(copy=True)
-    ppl1_mask = dopamine & searchable.str.contains(
-        r"\bPPL1", case=False, regex=True
-    ).to_numpy(copy=True)
+    reward_mask = exact_dopamine_type_mask(annotations, nt, REWARD_DAN_TYPE)
+    aversive_mask = exact_dopamine_type_mask(annotations, nt, AVERSIVE_DAN_TYPE)
     add_group(
         groups,
         resolved,
         "reward_dan",
-        row_records(annotations, pam08_mask),
+        row_records(annotations, reward_mask),
     )
     add_group(
         groups,
         resolved,
         "aversive_dan",
-        row_records(annotations, ppl1_mask),
+        row_records(annotations, aversive_mask),
     )
 
     # Legacy diagnostic groups only. The target sensory boundary stimulates
@@ -151,21 +164,29 @@ def main() -> int:
             )
 
     bridge = {
-        "schema_version": 1,
+        "schema_version": 2,
         "groups": groups,
         "provenance": {
             "flight_thrust": (
-                "DNg02 population; legacy diagnostic only. Target motor output uses "
-                "individual released wing motor-neuron body IDs instead of a population average."
+                "DNg02 population; legacy diagnostic only. Target motor output reads "
+                "individual released wing motor-neuron body IDs and never feeds this "
+                "population average into behavior."
             ),
             "reward_dan": (
-                "PAM08 dopaminergic annotation candidates. This group is only a set of "
-                "explicit neurons to stimulate; no +1 valence is assigned in the runtime."
+                f"{REWARD_DAN_TYPE} dopaminergic type (PAM-gamma5 reward-associated MB "
+                "compartment). The group identifies neurons to receive experimental current; "
+                "no +1 reward or signed valence enters the neural runtime."
             ),
             "aversive_dan": (
-                "PPL1 dopaminergic annotation candidates. This group is only a set of "
-                "explicit neurons to stimulate; no -1 valence is assigned in the runtime."
+                f"{AVERSIVE_DAN_TYPE} dopaminergic type (PPL1-gamma1pedc aversive "
+                "reinforcement). The group identifies neurons to receive experimental current; "
+                "no -1 punishment or signed valence enters the neural runtime."
             ),
+            "reinforcement_references": [
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC10945696/",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC7443709/",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC7618526/",
+            ],
             "vertical_motion": (
                 "legacy T4/T5 diagnostic groups; not used by current R1-R6 Flyppy sensory input"
             ),
@@ -178,6 +199,8 @@ def main() -> int:
     )
     for name in sorted(groups):
         print(f"{name}={len(resolved[name])}")
+    print(f"reward_dan_type={REWARD_DAN_TYPE}")
+    print(f"aversive_dan_type={AVERSIVE_DAN_TYPE}")
     print(f"wrote {args.output}")
     return 0
 
