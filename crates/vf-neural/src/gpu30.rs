@@ -7,6 +7,7 @@ use wgpu::util::DeviceExt;
 use crate::{
     model::{NeuralParams, Stimulus},
     snapshot::ConnectomeSnapshot,
+    state::NeuralState,
 };
 
 const WORKGROUP_SIZE: u32 = 256;
@@ -163,25 +164,25 @@ impl GpuRuntime {
             &device,
             "vf neuron state",
             bytemuck::cast_slice(&neuron_state),
-            false,
+            true,
         );
         let synapse_state_buffer = create_storage_init(
             &device,
             "vf synapse state",
             bytemuck::cast_slice(&synapse_state),
-            false,
+            true,
         );
         let spikes_a = create_storage_init(
             &device,
             "vf spikes a",
             bytemuck::cast_slice(&zero_spikes),
-            false,
+            true,
         );
         let spikes_b = create_storage_init(
             &device,
             "vf spikes b",
             bytemuck::cast_slice(&zero_spikes),
-            false,
+            true,
         );
         let external_buffer = create_storage_init(
             &device,
@@ -385,17 +386,75 @@ impl GpuRuntime {
         Ok(())
     }
 
-    pub fn readback(&self) -> Result<GpuReadback> {
-        let current_spikes = self.current_spike_buffer();
-        let spikes = self.read_buffer::<u32>(current_spikes, self.neuron_count)?;
+    pub fn state(&self) -> Result<NeuralState> {
+        let spikes = self.read_buffer::<u32>(self.current_spike_buffer(), self.neuron_count)?;
         let neurons = self.read_buffer::<NeuronStateGpu>(&self.neuron_state_buffer, self.neuron_count)?;
         let synapses = self.read_buffer::<SynapseStateGpu>(&self.synapse_state_buffer, self.edge_count)?;
-
-        Ok(GpuReadback {
-            spikes,
+        Ok(NeuralState {
             membrane: neurons.iter().map(|state| state.membrane).collect(),
+            spikes,
+            refractory: neurons.iter().map(|state| state.refractory).collect(),
+            activity_trace: neurons.iter().map(|state| state.trace).collect(),
             modulation: neurons.iter().map(|state| state.modulation).collect(),
             weights: synapses.iter().map(|state| state.weight).collect(),
+            eligibility: synapses.iter().map(|state| state.eligibility).collect(),
+        })
+    }
+
+    pub fn load_state(&mut self, state: &NeuralState) -> Result<()> {
+        state.validate(self.neuron_count, self.edge_count)?;
+        let neurons = (0..self.neuron_count)
+            .map(|index| NeuronStateGpu {
+                membrane: state.membrane[index],
+                trace: state.activity_trace[index],
+                modulation: state.modulation[index],
+                refractory: state.refractory[index],
+            })
+            .collect::<Vec<_>>();
+        let synapses = (0..self.edge_count)
+            .map(|index| SynapseStateGpu {
+                weight: state.weights[index],
+                eligibility: state.eligibility[index],
+            })
+            .collect::<Vec<_>>();
+
+        self.queue.write_buffer(
+            &self.neuron_state_buffer,
+            0,
+            bytemuck::cast_slice(&neurons),
+        );
+        self.queue.write_buffer(
+            &self.synapse_state_buffer,
+            0,
+            bytemuck::cast_slice(&synapses),
+        );
+        self.queue.write_buffer(
+            &self.spikes_a,
+            0,
+            bytemuck::cast_slice(&state.spikes),
+        );
+        self.queue.write_buffer(
+            &self.spikes_b,
+            0,
+            bytemuck::cast_slice(&state.spikes),
+        );
+        self.external_cpu.fill(0.0);
+        self.queue.write_buffer(
+            &self.external_buffer,
+            0,
+            bytemuck::cast_slice(&self.external_cpu),
+        );
+        self.current_is_b = false;
+        Ok(())
+    }
+
+    pub fn readback(&self) -> Result<GpuReadback> {
+        let state = self.state()?;
+        Ok(GpuReadback {
+            spikes: state.spikes,
+            membrane: state.membrane,
+            modulation: state.modulation,
+            weights: state.weights,
         })
     }
 
