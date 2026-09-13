@@ -59,6 +59,44 @@ changed nervous system
 
 未知の値を仮定すること自体は許容する。仮定を実測値のように扱うことは禁止する。
 
+### 4.1 現象を「同じ答えを返すアルゴリズム」で置換しない
+
+既知の生物学的・物理的な局所過程がある場合、その過程の結果と似た出力を返す便利な特徴抽出・集約・分類アルゴリズムで代替してはいけない。
+
+目標は、結果だけを再現することではなく、その結果を生じさせる局所過程を時間発展させることである。
+
+感覚系では特に次を守る。
+
+良い例:
+
+```text
+local physical stimulus
+      ↓
+local sensory transduction
+      ↓
+current into corresponding sensory neuron
+      ↓
+measured CNS connectivity
+      ↓
+downstream neural processing
+```
+
+悪い例:
+
+```text
+camera image
+      ↓
+external edge / motion / object detector
+      ↓
+spatial averaging or feature pooling
+      ↓
+precomputed answer injected into downstream neurons
+```
+
+平均・pooling・特徴量化そのものを一律禁止するわけではない。実際の生体回路で対応する統合過程がある場合は、その回路・局所モデルとして実装する。CNSへ入る前に外部コードで意味情報を圧縮してはならない。
+
+対応関係が不明な場合は、推測で全体平均などへ逃げず、公式データ・文献・実接続から解決する。解決できない部分は `assumed` / `calibrated` として局所的な境界に隔離し、空間情報など既知の情報を破壊しない。
+
 ## 5. 外部モデル
 
 FlyBody / FlyGym / NeuroMechFly / MuJoCo等を使用してよい。
