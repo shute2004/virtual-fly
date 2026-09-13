@@ -60,4 +60,47 @@ impl NeuralState {
         }
         Ok(())
     }
+
+    /// Clear transient neural/plasticity memory while preserving learned synaptic weights.
+    ///
+    /// This is intended for frozen-behavior evaluation where the learned weights should
+    /// be compared from the same quiescent initial condition as an untrained nervous
+    /// system. Full checkpoint resume must not call this method.
+    pub fn reset_dynamics_preserving_weights(&mut self) {
+        self.membrane.fill(0.0);
+        self.spikes.fill(0);
+        self.refractory.fill(0);
+        self.activity_trace.fill(0.0);
+        self.modulation.fill(0.0);
+        self.eligibility.fill(0.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NeuralState;
+
+    #[test]
+    fn dynamics_reset_preserves_only_weights() {
+        let mut state = NeuralState {
+            membrane: vec![1.0, -2.0],
+            spikes: vec![1, 0],
+            refractory: vec![2, 3],
+            activity_trace: vec![0.4, 0.5],
+            modulation: vec![-0.6, 0.7],
+            weights: vec![3.0, 4.0, 5.0],
+            eligibility: vec![0.8, -0.9, 1.0],
+        };
+        let learned_weights = state.weights.clone();
+
+        state.reset_dynamics_preserving_weights();
+
+        assert_eq!(state.weights, learned_weights);
+        assert_eq!(state.membrane, vec![0.0; 2]);
+        assert_eq!(state.spikes, vec![0; 2]);
+        assert_eq!(state.refractory, vec![0; 2]);
+        assert_eq!(state.activity_trace, vec![0.0; 2]);
+        assert_eq!(state.modulation, vec![0.0; 2]);
+        assert_eq!(state.eligibility, vec![0.0; 3]);
+    }
 }
