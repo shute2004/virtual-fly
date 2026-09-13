@@ -54,6 +54,7 @@ class FlyBodyWingAdapter:
         min_scale: float = 0.65,
         max_scale: float = 1.45,
         enable_vision: bool = False,
+        enable_observer_camera: bool = False,
         world: BaseWorld | None = None,
     ) -> None:
         if wingbeat_hz <= 0:
@@ -68,6 +69,7 @@ class FlyBodyWingAdapter:
         self.min_scale = float(min_scale)
         self.max_scale = float(max_scale)
         self.vision_enabled = bool(enable_vision)
+        self.observer_camera_name = "training_view" if enable_observer_camera else None
 
         self.fly = FlyBody(name="virtual_fly")
         skeleton = FlyBodySkeleton(
@@ -83,6 +85,14 @@ class FlyBodyWingAdapter:
         self.fly.add_tendon_actuators()
         if self.vision_enabled:
             self.fly.add_vision(draw_sensor_markers=False)
+        if enable_observer_camera:
+            self.fly.add_tracking_camera(
+                name=self.observer_camera_name,
+                mode="track",
+                pos_offset=(-3.5, -14.0, 7.0),
+                rotation=Rotation3D("xyaxes", (1, 0, 0, 0, 0.45, 0.89)),
+                fovy=45.0,
+            )
 
         if tethered:
             active_world = TetheredWorld()
