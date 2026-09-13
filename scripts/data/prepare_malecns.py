@@ -95,20 +95,38 @@ def require_file(path: Path, download_missing: bool) -> None:
     download(f"{BASE_URL}/{path.name}", path)
 
 
-def select_traced_neurons(annotations_path: Path) -> tuple[np.ndarray, pd.DataFrame]:
+def select_annotated_neurons(annotations_path: Path) -> tuple[np.ndarray, pd.DataFrame]:
+    """Retain annotated neuronal entries rather than an arbitrary status subset.
+
+    MaleCNS reports 166,691 proofread and annotated neurons, while selecting only
+    ``status == Traced`` yields a smaller subset.  For virtual-fly the source
+    snapshot should be as close as practical to the released whole-CNS neuron
+    inventory, so the import criterion is a non-empty neuronal ``superclass``
+    annotation with explicit glia excluded.  The exact resulting count is
+    recorded in the manifest rather than asserted against a paper headline.
+    """
+
     annotations = pd.read_feather(annotations_path)
-    required = {"bodyId", "status"}
+    required = {"bodyId", "status", "superclass"}
     missing = required - set(annotations.columns)
     if missing:
         raise RuntimeError(f"annotation file missing columns: {sorted(missing)}")
 
-    traced = annotations[annotations["status"].eq("Traced")].copy()
-    if "statusLabel" in traced.columns:
-        traced = traced[~traced["statusLabel"].fillna("").eq("Glia")]
-    traced = traced.drop_duplicates(subset=["bodyId"])
-    bodies = np.sort(traced["bodyId"].astype(np.uint64).to_numpy())
-    print(f"traced neurons: {len(bodies):,}")
-    return bodies, traced
+    superclass = annotations["superclass"].fillna("").astype(str).str.strip()
+    status = annotations["status"].fillna("").astype(str).str.strip().str.lower()
+    keep = superclass.ne("") & status.ne("glia")
+    if "statusLabel" in annotations.columns:
+        status_label = (
+            annotations["statusLabel"].fillna("").astype(str).str.strip().str.lower()
+        )
+        keep &= status_label.ne("glia")
+
+    neurons = annotations[keep].copy().drop_duplicates(subset=["bodyId"])
+    bodies = np.sort(neurons["bodyId"].astype(np.uint64).to_numpy())
+    if len(bodies) == 0:
+        raise RuntimeError("neuron selection produced an empty MaleCNS snapshot")
+    print(f"annotated neuronal entries: {len(bodies):,}")
+    return bodies, neurons
 
 
 def membership_indices(values: np.ndarray, sorted_bodies: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -176,7 +194,7 @@ def build_connectivity(weights_path: Path, bodies: np.ndarray, min_synapses: int
     return row_offsets, pre_index, counts
 
 
-def write_metadata_subset(traced: pd.DataFrame, bodies: np.ndarray, output: Path) -> None:
+def write_metadata_subset(neurons: pd.DataFrame, bodies: np.ndarray, output: Path) -> None:
     columns = [
         name
         for name in (
@@ -188,13 +206,19 @@ def write_metadata_subset(traced: pd.DataFrame, bodies: np.ndarray, output: Path
             "subclass",
             "superclass",
             "side",
+            "somaSide",
+            "rootSide",
             "nerve",
+            "entryNerve",
+            "exitNerve",
             "receptorType",
             "fruDsx",
+            "status",
+            "statusLabel",
         )
-        if name in traced.columns
+        if name in neurons.columns
     ]
-    aligned = traced.drop_duplicates("bodyId").set_index("bodyId").reindex(bodies).reset_index()
+    aligned = neurons.drop_duplicates("bodyId").set_index("bodyId").reindex(bodies).reset_index()
     feather.write_feather(aligned[columns], output / "annotations.feather")
 
 
@@ -207,7 +231,7 @@ def main() -> int:
     for path in paths.values():
         require_file(path, args.download)
 
-    bodies, traced = select_traced_neurons(paths["annotations"])
+    bodies, neurons = select_annotated_neurons(paths["annotations"])
     transmitters = build_neurotransmitters(paths["neurotransmitters"], bodies)
     row_offsets, pre_indices, counts = build_connectivity(
         paths["weights"], bodies, args.min_synapses
@@ -218,7 +242,7 @@ def main() -> int:
     np.asarray(pre_indices, dtype="<u4").tofile(args.output / "pre_indices.u32le")
     np.asarray(counts, dtype="<u4").tofile(args.output / "synapse_counts.u32le")
     np.asarray(transmitters, dtype=np.uint8).tofile(args.output / "neurotransmitters.u8")
-    write_metadata_subset(traced, bodies, args.output)
+    write_metadata_subset(neurons, bodies, args.output)
 
     source_hashes = {key: sha256(path) for key, path in paths.items()}
     manifest = {
@@ -226,16 +250,18 @@ def main() -> int:
         "dataset": "male-cns:v1.0",
         "neuron_count": int(len(bodies)),
         "edge_count": int(len(pre_indices)),
+        "synapse_count_sum": int(counts.astype(np.uint64).sum()),
         "body_ids_file": "body_ids.u64le",
         "row_offsets_file": "row_offsets.u32le",
         "pre_indices_file": "pre_indices.u32le",
         "synapse_counts_file": "synapse_counts.u32le",
         "neurotransmitters_file": "neurotransmitters.u8",
+        "annotations_file": "annotations.feather",
         "source_sha256": source_hashes,
         "source_base_url": BASE_URL,
         "source_license": "CC-BY",
         "source_edge_filter": {"min_released_synapse_count": args.min_synapses},
-        "node_filter": "status == Traced and statusLabel != Glia when statusLabel is present",
+        "node_filter": "non-empty superclass; exclude explicit Glia in status/statusLabel",
     }
     (args.output / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
