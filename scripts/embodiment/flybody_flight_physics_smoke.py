@@ -15,9 +15,10 @@ from flybody_flight_physics import (
     FLIGHT_FLUID_COEFS,
     FLIGHT_PHYSICS_TIMESTEP_S,
     FLIGHT_WING_DAMPING,
+    FLIGHT_WING_INERTIAL_MASS,
     FLIGHT_WING_POSITION_KP,
     FLIGHT_WING_STIFFNESS,
-    WING_FLUID_GEOMS,
+    WING_FLIGHT_GEOMS,
 )
 
 
@@ -59,16 +60,47 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
     # values. The remaining compiled values are internal derived parameters and
     # are deliberately not asserted here.
     expected_fluid_prefix = np.asarray((1.0, *FLIGHT_FLUID_COEFS), dtype=np.float64)
-    for spec in WING_FLUID_GEOMS:
-        geom_id = find_suffix(geom_names, spec.geom_name)
-        fluid_prefix = geom_fluid[geom_id, :6]
+    for spec in WING_FLIGHT_GEOMS:
+        fluid_id = find_suffix(geom_names, spec.fluid_name)
+        fluid_prefix = geom_fluid[fluid_id, :6]
         if not np.allclose(fluid_prefix, expected_fluid_prefix, rtol=0, atol=1e-12):
             raise RuntimeError(
-                f"{spec.geom_name} fluid coefficients mismatch: {fluid_prefix.tolist()}"
+                f"{spec.fluid_name} fluid coefficients mismatch: {fluid_prefix.tolist()}"
             )
-        if not np.allclose(model.geom_size[geom_id], spec.size_mm, rtol=0, atol=1e-12):
+        if not np.allclose(model.geom_size[fluid_id], spec.size_mm, rtol=0, atol=1e-12):
             raise RuntimeError(
-                f"{spec.geom_name} size mismatch: {model.geom_size[geom_id].tolist()}"
+                f"{spec.fluid_name} size mismatch: {model.geom_size[fluid_id].tolist()}"
+            )
+        if not math.isclose(float(model.geom_mass[fluid_id]), 0.0, rel_tol=0, abs_tol=1e-15):
+            raise RuntimeError(
+                f"{spec.fluid_name} must be massless, got {model.geom_mass[fluid_id]}"
+            )
+
+        inertial_id = find_suffix(geom_names, spec.inertial_name)
+        if not np.allclose(
+            model.geom_size[inertial_id], spec.size_mm, rtol=0, atol=1e-12
+        ):
+            raise RuntimeError(
+                f"{spec.inertial_name} size mismatch: "
+                f"{model.geom_size[inertial_id].tolist()}"
+            )
+        if not math.isclose(
+            float(model.geom_mass[inertial_id]),
+            FLIGHT_WING_INERTIAL_MASS,
+            rel_tol=1e-12,
+            abs_tol=0,
+        ):
+            raise RuntimeError(
+                f"{spec.inertial_name} mass mismatch: {model.geom_mass[inertial_id]}"
+            )
+
+        membrane_id = find_suffix(geom_names, spec.membrane_name)
+        if not math.isclose(
+            float(model.geom_mass[membrane_id]), 0.0, rel_tol=0, abs_tol=1e-15
+        ):
+            raise RuntimeError(
+                f"{spec.membrane_name} still carries transferred inertial mass: "
+                f"{model.geom_mass[membrane_id]}"
             )
 
     joint_names = names(model, mj.mjtObj.mjOBJ_JOINT, model.njnt)
@@ -133,6 +165,20 @@ def assert_reset_initial_condition() -> None:
     ):
         raise RuntimeError("free FlyBody did not receive requested initial velocity")
 
+    initial_wings = body.wing_joint_angles_rad()
+    expected_initial_wings = {
+        "left_yaw": -0.8,
+        "left_roll": -0.1,
+        "left_pitch": 0.8,
+        "right_yaw": -0.8,
+        "right_roll": -0.1,
+        "right_pitch": 0.8,
+    }
+    for name, expected in expected_initial_wings.items():
+        actual = initial_wings[name]
+        if not math.isclose(actual, expected, rel_tol=0, abs_tol=1e-10):
+            raise RuntimeError(f"initial wing phase mismatch for {name}: {actual}")
+
     body.step(WingDrive(left=0.0, right=0.0), physics_steps=10)
     if np.allclose(body.root_linear_velocity_mm_s(), initial_velocity, rtol=0, atol=1e-12):
         raise RuntimeError(
@@ -145,6 +191,20 @@ def assert_reset_initial_condition() -> None:
         body.root_linear_velocity_mm_s(), initial_velocity, rtol=0, atol=1e-12
     ):
         raise RuntimeError("FlyBody reset did not restore requested initial velocity")
+    reset_wings = body.wing_joint_angles_rad()
+    for name, expected in expected_initial_wings.items():
+        actual = reset_wings[name]
+        if not math.isclose(actual, expected, rel_tol=0, abs_tol=1e-10):
+            raise RuntimeError(f"FlyBody reset did not restore wing phase for {name}: {actual}")
+
+    # The source prototype defines one base cycle and repeats it. In particular,
+    # its 1.5*phase roll term must repeat after 2*pi rather than alternating sign
+    # between successive cycles.
+    base = body._wing_pattern(0.4, 1.0)
+    repeated = body._wing_pattern(0.4 + 2.0 * math.pi, 1.0)
+    for axis in ("yaw", "roll", "pitch"):
+        if not math.isclose(base[axis], repeated[axis], rel_tol=0, abs_tol=1e-12):
+            raise RuntimeError(f"wing pattern is not cycle-periodic on axis {axis}")
 
 
 def main() -> int:
@@ -156,9 +216,10 @@ def main() -> int:
     print(f"flight_timestep_s={model.opt.timestep:.8f}")
     print(f"air_density={model.opt.density:.9g}")
     print(f"air_viscosity={model.opt.viscosity:.9g}")
-    print(f"wing_fluid_geoms={len(WING_FLUID_GEOMS)}")
+    print(f"wing_fluid_geoms={len(WING_FLIGHT_GEOMS)}")
+    print(f"wing_inertial_geoms={len(WING_FLIGHT_GEOMS)}")
     print(f"wing_position_kp={FLIGHT_WING_POSITION_KP:.6f}")
-    print("flight_reset_initial_velocity=PASS")
+    print("flight_reset_initial_conditions=PASS")
     print("flybody_flight_physics=PASS")
     return 0
 
