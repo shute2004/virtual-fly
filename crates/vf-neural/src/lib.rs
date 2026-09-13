@@ -3,6 +3,7 @@ mod model;
 mod snapshot;
 
 #[cfg(feature = "gpu")]
+#[path = "gpu30.rs"]
 pub mod gpu;
 
 pub use cpu::{CpuRuntime, StepSummary};
