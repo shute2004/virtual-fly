@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 
 import mujoco as mj
 import numpy as np
@@ -19,6 +20,18 @@ from flybody_flight_physics import (
     FLIGHT_WING_POSITION_KP,
     FLIGHT_WING_STIFFNESS,
     WING_FLIGHT_GEOMS,
+)
+
+# These warnings indicate an architectural regression: the flight adapter should
+# create only six wing POSITION actuators and must always provide their kp. Do not
+# allow FlyGym to silently fall back to generic/non-flight actuator settings.
+warnings.filterwarnings(
+    "error",
+    message=r"WARNING: actuator type is POSITION but kp not specified.*",
+)
+warnings.filterwarnings(
+    "error",
+    message=r"No actuator config found for joint .*",
 )
 
 
@@ -161,7 +174,9 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
         if ("-l_wing-" in actuator_names[i] or "-r_wing-" in actuator_names[i])
     ]
     if len(position_actuator_ids) != 6 or len(wing_actuator_ids) != 6:
-        unexpected = [actuator_names[i] for i in position_actuator_ids if i not in wing_actuator_ids]
+        unexpected = [
+            actuator_names[i] for i in position_actuator_ids if i not in wing_actuator_ids
+        ]
         raise RuntimeError(
             "flight adapter must expose exactly six wing POSITION actuators; "
             f"position={len(position_actuator_ids)} wing={len(wing_actuator_ids)} "
