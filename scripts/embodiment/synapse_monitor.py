@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 
 @dataclass(frozen=True)
@@ -70,7 +71,39 @@ class SynapseMonitor:
         if len(self.row_offsets) != self.neuron_count + 1:
             raise RuntimeError("row-offset array does not match snapshot manifest")
 
+        self.labels = self._load_labels()
         self.output.parent.mkdir(parents=True, exist_ok=True)
+
+    def _load_labels(self) -> list[str]:
+        annotations_path = self.snapshot / "annotations.feather"
+        if not annotations_path.exists():
+            return [str(int(body_id)) for body_id in self.body_ids]
+
+        frame = pd.read_feather(annotations_path)
+        if len(frame) != self.neuron_count:
+            raise RuntimeError("annotation table does not match snapshot neuron count")
+        if "bodyId" in frame.columns:
+            annotation_ids = frame["bodyId"].astype(np.uint64).to_numpy()
+            if not np.array_equal(annotation_ids, np.asarray(self.body_ids)):
+                raise RuntimeError("annotation table order does not match snapshot body IDs")
+
+        preferred = [
+            name
+            for name in ("type", "flywireType", "mancType", "instance")
+            if name in frame.columns
+        ]
+        labels: list[str] = []
+        for index, row in frame.iterrows():
+            label = ""
+            for column in preferred:
+                value = row[column]
+                if pd.notna(value) and str(value).strip():
+                    label = str(value).strip()
+                    break
+            if not label:
+                label = str(int(self.body_ids[index]))
+            labels.append(label)
+        return labels
 
     def capture(self, brain, *, episode: int, control_step: int) -> dict[str, object]:
         temp = self.output.with_suffix(f".episode-{episode:04d}.weights.tmp")
@@ -165,6 +198,8 @@ class SynapseMonitor:
             "post_index": post_index,
             "pre_body_id": int(self.body_ids[pre_index]),
             "post_body_id": int(self.body_ids[post_index]),
+            "pre_label": self.labels[pre_index],
+            "post_label": self.labels[post_index],
             "synapse_count": int(self.synapse_counts[edge]),
             "initial_weight": initial_weight,
             "current_weight": current_weight,
