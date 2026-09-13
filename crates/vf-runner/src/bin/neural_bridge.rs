@@ -8,7 +8,8 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
-use vf_neural::{ConnectomeSnapshot, CpuRuntime, NeuralParams, Stimulus};
+use vf_neural::{ConnectomeSnapshot, CpuRuntime, NeuralParams, NeuralState, Stimulus};
+use vf_runner::checkpoint::{load_checkpoint, save_checkpoint};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -66,6 +67,12 @@ enum Request {
     SaveWeights {
         path: PathBuf,
     },
+    SaveCheckpoint {
+        path: PathBuf,
+    },
+    LoadCheckpoint {
+        path: PathBuf,
+    },
     Quit,
 }
 
@@ -102,11 +109,21 @@ struct StepResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct CheckpointResponse {
+struct WeightCheckpointResponse {
     ok: bool,
     event: &'static str,
     path: String,
     weights: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct StateCheckpointResponse {
+    ok: bool,
+    event: &'static str,
+    path: String,
+    step: u64,
+    neurons: usize,
+    edges: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -158,7 +175,21 @@ impl Runtime {
     fn weights(&self) -> Result<Vec<f32>> {
         match self {
             Runtime::Cpu(runtime) => Ok(runtime.weights().to_vec()),
-            Runtime::Gpu(runtime) => Ok(runtime.readback()?.weights),
+            Runtime::Gpu(runtime) => Ok(runtime.state()?.weights),
+        }
+    }
+
+    fn state(&self) -> Result<NeuralState> {
+        match self {
+            Runtime::Cpu(runtime) => Ok(runtime.state()),
+            Runtime::Gpu(runtime) => runtime.state(),
+        }
+    }
+
+    fn load_state(&mut self, state: &NeuralState) -> Result<()> {
+        match self {
+            Runtime::Cpu(runtime) => runtime.load_state(state),
+            Runtime::Gpu(runtime) => runtime.load_state(state),
         }
     }
 
@@ -362,11 +393,54 @@ fn main() -> Result<()> {
                 write_weights(&path, &weights)?;
                 write_json(
                     &mut stdout,
-                    &CheckpointResponse {
+                    &WeightCheckpointResponse {
                         ok: true,
                         event: "weights_saved",
                         path: path.display().to_string(),
                         weights: weights.len(),
+                    },
+                )?;
+                Ok(true)
+            }
+            Request::SaveCheckpoint { path } => {
+                let state = runtime.state()?;
+                let manifest = save_checkpoint(
+                    &path,
+                    &snapshot.manifest.dataset,
+                    step_counter,
+                    &state,
+                )?;
+                write_json(
+                    &mut stdout,
+                    &StateCheckpointResponse {
+                        ok: true,
+                        event: "checkpoint_saved",
+                        path: path.display().to_string(),
+                        step: manifest.step,
+                        neurons: manifest.neuron_count,
+                        edges: manifest.edge_count,
+                    },
+                )?;
+                Ok(true)
+            }
+            Request::LoadCheckpoint { path } => {
+                let (manifest, state) = load_checkpoint(
+                    &path,
+                    &snapshot.manifest.dataset,
+                    snapshot.neuron_count(),
+                    snapshot.edge_count(),
+                )?;
+                runtime.load_state(&state)?;
+                step_counter = manifest.step;
+                write_json(
+                    &mut stdout,
+                    &StateCheckpointResponse {
+                        ok: true,
+                        event: "checkpoint_loaded",
+                        path: path.display().to_string(),
+                        step: manifest.step,
+                        neurons: manifest.neuron_count,
+                        edges: manifest.edge_count,
                     },
                 )?;
                 Ok(true)
