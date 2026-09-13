@@ -3,7 +3,8 @@
 
 The selected cell types come from released MaleCNS annotations. Functional
 interpretation is kept explicit: DNg02 is used as a flight-amplitude descending
-readout; PAM08/PPL1 remain experimental neuromodulatory groups.
+readout; PAM08/PPL1 remain experimental neuromodulatory groups; T4/T5 c/d
+populations are used as the first vertical-motion sensory interface.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 DOPAMINE_CODE = 4
+VERTICAL_MOTION_TYPES = ("T4c", "T4d", "T5c", "T5d")
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +58,23 @@ def body_ids(records: list[dict[str, object]]) -> list[int]:
     return [int(record["body_id"]) for record in records]
 
 
+def add_group(
+    groups: dict[str, dict[str, object]],
+    resolved: dict[str, list[dict[str, object]]],
+    name: str,
+    records: list[dict[str, object]],
+    *,
+    modulator_role: int = 0,
+) -> None:
+    if not records:
+        raise RuntimeError(f"group {name} resolved to zero neurons")
+    groups[name] = {
+        "body_ids": body_ids(records),
+        "modulator_role": modulator_role,
+    }
+    resolved[name] = records
+
+
 def main() -> int:
     args = parse_args()
     annotations = pd.read_feather(args.snapshot / "annotations.feather")
@@ -73,71 +92,93 @@ def main() -> int:
     instance = text_column(annotations, "instance")
     searchable = type_text + " | " + flywire_type + " | " + instance
 
-    dng02 = searchable.str.contains(r"\bDNg02(?:_|\b)", case=False, regex=True).to_numpy()
     side = text_column(annotations, "side").str.upper()
     soma_side = text_column(annotations, "somaSide").str.upper()
-    left = (side.eq("L") | soma_side.eq("L")).to_numpy()
-    right = (side.eq("R") | soma_side.eq("R")).to_numpy()
+    left = (side.eq("L") | soma_side.eq("L")).to_numpy(copy=True)
+    right = (side.eq("R") | soma_side.eq("R")).to_numpy(copy=True)
 
-    dng02_left_records = row_records(annotations, dng02 & left)
-    dng02_right_records = row_records(annotations, dng02 & right)
-    if not dng02_left_records or not dng02_right_records:
-        raise RuntimeError(
-            "could not resolve bilateral DNg02 groups from released MaleCNS annotations"
-        )
+    groups: dict[str, dict[str, object]] = {}
+    resolved: dict[str, list[dict[str, object]]] = {}
+
+    dng02 = searchable.str.contains(
+        r"\bDNg02(?:_|\b)", case=False, regex=True
+    ).to_numpy(copy=True)
+    add_group(
+        groups,
+        resolved,
+        "flight_thrust_left",
+        row_records(annotations, dng02 & left),
+    )
+    add_group(
+        groups,
+        resolved,
+        "flight_thrust_right",
+        row_records(annotations, dng02 & right),
+    )
 
     dopamine = nt == DOPAMINE_CODE
     pam08_mask = dopamine & searchable.str.contains(
         r"\bPAM08(?:_|\b)", case=False, regex=True
-    ).to_numpy()
+    ).to_numpy(copy=True)
     ppl1_mask = dopamine & searchable.str.contains(
         r"\bPPL1", case=False, regex=True
-    ).to_numpy()
-    pam08_records = row_records(annotations, pam08_mask)
-    ppl1_records = row_records(annotations, ppl1_mask)
-    if not pam08_records or not ppl1_records:
-        raise RuntimeError("could not resolve PAM08/PPL1 groups")
+    ).to_numpy(copy=True)
+    add_group(
+        groups,
+        resolved,
+        "reward_dan",
+        row_records(annotations, pam08_mask),
+        modulator_role=1,
+    )
+    add_group(
+        groups,
+        resolved,
+        "aversive_dan",
+        row_records(annotations, ppl1_mask),
+        modulator_role=-1,
+    )
+
+    # T4/T5 c and d are the vertical-motion channels. We keep ON (T4) and OFF
+    # (T5) pathways separate and preserve the two optic-lobe hemispheres.
+    for visual_type in VERTICAL_MOTION_TYPES:
+        type_mask = searchable.str.contains(
+            rf"\b{visual_type}(?:_|\b)", case=False, regex=True
+        ).to_numpy(copy=True)
+        for side_name, side_mask in (("left", left), ("right", right)):
+            add_group(
+                groups,
+                resolved,
+                f"vision_{visual_type.lower()}_{side_name}",
+                row_records(annotations, type_mask & side_mask),
+            )
 
     bridge = {
         "schema_version": 1,
-        "groups": {
-            "flight_thrust_left": {
-                "body_ids": body_ids(dng02_left_records),
-                "modulator_role": 0,
-            },
-            "flight_thrust_right": {
-                "body_ids": body_ids(dng02_right_records),
-                "modulator_role": 0,
-            },
-            "reward_dan": {
-                "body_ids": body_ids(pam08_records),
-                "modulator_role": 1,
-            },
-            "aversive_dan": {
-                "body_ids": body_ids(ppl1_records),
-                "modulator_role": -1,
-            },
-        },
+        "groups": groups,
         "provenance": {
-            "flight_thrust": "DNg02 population; used as bilateral flight-amplitude descending readout",
-            "reward_dan": "PAM08 annotation candidates; experimental valence assignment",
-            "aversive_dan": "PPL1 annotation candidates; experimental valence assignment",
+            "flight_thrust": (
+                "DNg02 population; used as bilateral flight-amplitude descending readout"
+            ),
+            "reward_dan": (
+                "PAM08 annotation candidates; experimental valence assignment"
+            ),
+            "aversive_dan": (
+                "PPL1 annotation candidates; experimental valence assignment"
+            ),
+            "vertical_motion": (
+                "T4c/T5c are upward-motion channels and T4d/T5d are "
+                "downward-motion channels; population-level input is provisional "
+                "until an individual MaleCNS retinotopic mapping is available"
+            ),
         },
-        "resolved": {
-            "flight_thrust_left": dng02_left_records,
-            "flight_thrust_right": dng02_right_records,
-            "reward_dan": pam08_records,
-            "aversive_dan": ppl1_records,
-        },
+        "resolved": resolved,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(bridge, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    print(f"flight_thrust_left={len(dng02_left_records)}")
-    print(f"flight_thrust_right={len(dng02_right_records)}")
-    print(f"reward_dan={len(pam08_records)}")
-    print(f"aversive_dan={len(ppl1_records)}")
+    for name in sorted(groups):
+        print(f"{name}={len(resolved[name])}")
     print(f"wrote {args.output}")
     return 0
 
