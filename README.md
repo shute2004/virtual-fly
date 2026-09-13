@@ -41,9 +41,9 @@ Flyppy physical world
 
 ゲート通過時は `PAM08` 候補群、衝突時は `PPL1` 候補群を刺激します。ゲームのゲート座標をCNSへ直接入力したり、外部プログラムから個々のシナプス重みを指定したりはしません。
 
-視覚入力では、MaleCNS公式annotationの `assignedOlHex1` / `assignedOlHex2` をretinotopic座標として使い、対応する実際の `R1-R6` body IDへ局所受光量に応じた電流を流します。R1-R6自身にcolumn座標がない場合は、column座標を持つL1への実際のMaleCNS接続からR1-R6を逆引きします。外部でT4/T5運動応答、edge、障害物位置、gap位置などを計算してCNSへ与える処理はありません。
+視覚入力では、MaleCNS公式annotationで `assignedOlHex1` / `assignedOlHex2` を持つL1をretinotopicなlamina cartridgeの座標として使い、そのL1へ実際に接続しているannotated R1-R6 body IDをreleased MaleCNS connectivityから解決します。これはneural superposition――同じoptical axisを見る近傍ommatidia由来のR1-R6が同じlamina cartridgeへ収束する――を、body IDの順序や幾何推測ではなく実配線から再現するためです。外部でT4/T5運動応答、edge、障害物位置、gap位置などを計算してCNSへ与える処理はありません。
 
-この境界で `observed` なのはMaleCNSのbody ID、接続、optic-lobe hex座標です。FlyBody眼カメラ上へhex latticeを投影する幾何変換と、局所受光量から外部電流へのscaleは現時点では `calibrated` な感覚変換境界です。空間情報を平均・poolingして意味情報へ変換する処理は行いません。
+この境界で `observed` なのはMaleCNSのbody ID、R1-R6→L1接続、L1のoptic-lobe hex座標です。neural superpositionという配線原理は `literature`、FlyBody眼カメラ上へhex latticeを投影する幾何変換と局所受光量から外部電流へのscaleは現時点では `calibrated` な感覚変換境界です。空間情報を平均・poolingして意味情報へ変換する処理は行いません。
 
 ### FlyBody飛翔物理
 
