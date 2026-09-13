@@ -54,8 +54,6 @@ class TrainingVisualizer:
             self._viewer = mjviewer.launch_passive(
                 self.sim.mj_model,
                 self.sim.mj_data,
-                show_left_ui=False,
-                show_right_ui=False,
             )
 
     @property
