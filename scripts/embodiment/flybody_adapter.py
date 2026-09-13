@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
+import mujoco as mj
 import numpy as np
 
 from flygym import Simulation
@@ -46,6 +47,7 @@ from flygym.flybody.anatomy_flybody import (
 from flygym.utils.math import Rotation3D
 
 from flybody_flight_physics import (
+    FLIGHT_BODY_PITCH_DEG,
     FLIGHT_PHYSICS_TIMESTEP_S,
     add_flight_position_actuators,
     add_flight_wing_aerodynamics,
@@ -68,6 +70,8 @@ class FlyBodyWingAdapter:
         *,
         tethered: bool = True,
         spawn_position_mm: tuple[float, float, float] = (0.0, 0.0, 4.0),
+        flight_body_pitch_deg: float = FLIGHT_BODY_PITCH_DEG,
+        initial_linear_velocity_mm_s: tuple[float, float, float] = (0.0, 0.0, 0.0),
         wingbeat_hz: float = 200.0,
         dng02_mean_gain: float = 0.30,
         dng02_steering_gain: float = 0.50,
@@ -84,9 +88,20 @@ class FlyBodyWingAdapter:
             raise ValueError("DNg02 gains must be non-negative")
         if not 0 < min_scale <= max_scale:
             raise ValueError("invalid wing amplitude scale limits")
+        if not math.isfinite(flight_body_pitch_deg):
+            raise ValueError("flight_body_pitch_deg must be finite")
         if tethered and world is not None:
             raise ValueError("custom world is only supported for free-body simulations")
 
+        initial_velocity = np.asarray(initial_linear_velocity_mm_s, dtype=np.float64)
+        if initial_velocity.shape != (3,) or not np.all(np.isfinite(initial_velocity)):
+            raise ValueError("initial_linear_velocity_mm_s must contain 3 finite values")
+        if tethered and not np.allclose(initial_velocity, 0.0):
+            raise ValueError("initial linear velocity is only valid for free-body simulations")
+
+        self.tethered = bool(tethered)
+        self.flight_body_pitch_deg = float(flight_body_pitch_deg)
+        self.initial_linear_velocity_mm_s = initial_velocity.copy()
         self.wingbeat_hz = float(wingbeat_hz)
         self.dng02_mean_gain = float(dng02_mean_gain)
         self.dng02_steering_gain = float(dng02_steering_gain)
@@ -124,7 +139,7 @@ class FlyBodyWingAdapter:
                 fovy=45.0,
             )
 
-        if tethered:
+        if self.tethered:
             active_world = TetheredWorld()
             active_world.add_fly(
                 self.fly,
@@ -133,10 +148,15 @@ class FlyBodyWingAdapter:
             )
         else:
             active_world = world if world is not None else FlatGroundWorld()
+            pitch = math.radians(self.flight_body_pitch_deg)
+            spawn_rotation = Rotation3D(
+                "quat",
+                (math.cos(pitch / 2.0), 0.0, math.sin(pitch / 2.0), 0.0),
+            )
             active_world.add_fly(
                 self.fly,
                 spawn_position_mm,
-                Rotation3D("quat", (1.0, 0.0, 0.0, 0.0)),
+                spawn_rotation,
                 bodysegs_with_ground_contact=FlyBodyContactBodiesPreset.LEGS_THORAX_ABDOMEN_HEAD,
                 add_ground_contact_sensors=True,
             )
@@ -164,6 +184,8 @@ class FlyBodyWingAdapter:
         self.sim.reset()
         self.timestep = float(self.sim.mj_model.opt.timestep)
         self._time = 0.0
+        if not self.tethered:
+            self.set_root_linear_velocity_mm_s(self.initial_linear_velocity_mm_s)
 
         self._all_dofs = list(self.fly.get_jointdofs_order())
         self._actuated_dofs = list(
@@ -202,9 +224,36 @@ class FlyBodyWingAdapter:
     def _dof_key(dof) -> tuple[str, str, str]:
         return dof.parent.name, dof.child.name, dof.axis.value
 
+    def _root_freejoint_dof_address(self) -> int:
+        joint_types = np.asarray(self.sim.mj_model.jnt_type)
+        free_ids = np.flatnonzero(joint_types == int(mj.mjtJoint.mjJNT_FREE))
+        if len(free_ids) != 1:
+            raise RuntimeError(f"expected one root freejoint, found {len(free_ids)}")
+        return int(self.sim.mj_model.jnt_dofadr[int(free_ids[0])])
+
+    def set_root_linear_velocity_mm_s(self, velocity: np.ndarray | tuple[float, float, float]) -> None:
+        if self.tethered:
+            raise RuntimeError("tethered FlyBody has no free root velocity")
+        vector = np.asarray(velocity, dtype=np.float64)
+        if vector.shape != (3,) or not np.all(np.isfinite(vector)):
+            raise ValueError("root linear velocity must contain 3 finite values")
+        dof_address = self._root_freejoint_dof_address()
+        self.sim.mj_data.qvel[dof_address : dof_address + 3] = vector
+        mj.mj_forward(self.sim.mj_model, self.sim.mj_data)
+
+    def root_linear_velocity_mm_s(self) -> np.ndarray:
+        if self.tethered:
+            raise RuntimeError("tethered FlyBody has no free root velocity")
+        dof_address = self._root_freejoint_dof_address()
+        return np.asarray(
+            self.sim.mj_data.qvel[dof_address : dof_address + 3], dtype=np.float64
+        ).copy()
+
     def reset(self) -> None:
         self.sim.reset()
         self._time = 0.0
+        if not self.tethered:
+            self.set_root_linear_velocity_mm_s(self.initial_linear_velocity_mm_s)
 
     @staticmethod
     def _bounded_activity(value: float) -> float:
