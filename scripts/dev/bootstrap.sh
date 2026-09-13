@@ -28,7 +28,13 @@ command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 
 run "Python dependencies" uv sync
-run "MaleCNS v1.0 download and preprocessing" uv run python scripts/data/prepare_malecns.py --download --output "$SNAPSHOT"
+
+if [ -f "$SNAPSHOT/manifest.json" ]; then
+  printf '\n== MaleCNS snapshot ==\nreusing existing %s\n' "$SNAPSHOT"
+else
+  run "MaleCNS v1.0 download and preprocessing" uv run python scripts/data/prepare_malecns.py --download --output "$SNAPSHOT"
+fi
+
 run "Conditioning group discovery" uv run python scripts/data/make_conditioning_config.py --snapshot "$SNAPSHOT" --output "$SNAPSHOT/conditioning-v0.json"
 run "Rust compile check" cargo check --workspace
 run "Rust tests" cargo test --workspace
