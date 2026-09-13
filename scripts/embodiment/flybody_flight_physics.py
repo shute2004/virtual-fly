@@ -2,13 +2,15 @@
 """Flight-physics compatibility layer for FlyGym 2.1's experimental FlyBody.
 
 FlyGym 2.1 imports the FlyBody articulated body, joints, meshes, and actuator
-configuration, but its FlyBody conversion intentionally omits the source model's
-``*_fluid`` wing geoms. That is appropriate for walking experiments, but it removes
-the per-wing MuJoCo fluid interaction used by the original FlyBody flight tasks.
+configuration, but its conversion intentionally omits the source model's
+``*_fluid`` and ``*_inertial`` wing geoms. The inertial mass is transferred to the
+wing membrane mesh, which preserves mass but not necessarily the source inertia
+tensor. That is suitable for non-flight use but is a mismatch for the original
+FlyBody flight task.
 
-This module restores only those missing flight-physics pieces and applies the
-flight-specific joint/actuator calibration published with the source FlyBody task.
-It does not implement a controller or choose behavior for the fly.
+This module restores those flight-only pieces and applies the flight-specific
+joint/actuator calibration published with the source FlyBody task. It does not
+implement a controller or choose behavior for the fly.
 
 Unit conversion
 ---------------
@@ -21,6 +23,7 @@ same conversion here:
 * torque-like stiffness, damping, actuator gain: x100
 * fluid density (mass / length^3): x1e-3
 * dynamic viscosity (mass / length / time): x1e-1
+* mass: unchanged
 
 The source constants come from TuragaLab/flybody's public ``fruitfly.xml`` and
 ``flybody/tasks/constants.py``.
@@ -48,6 +51,7 @@ SOURCE_BODY_PITCH_DEG = 47.5
 SOURCE_WING_GAIN = 18.0
 SOURCE_WING_STIFFNESS = 0.01
 SOURCE_WING_DAMPING = 0.007769230
+SOURCE_WING_INERTIAL_MASS = 8.0e-6
 SOURCE_FLUID_COEFS = (1.0, 0.5, 1.5, 1.7, 1.0)
 SOURCE_AIR_DENSITY = 0.00128
 SOURCE_AIR_VISCOSITY = 0.000185
@@ -57,37 +61,53 @@ FLIGHT_BODY_PITCH_DEG = SOURCE_BODY_PITCH_DEG
 FLIGHT_WING_POSITION_KP = SOURCE_WING_GAIN * SOURCE_TORQUE_TO_FLYGYM
 FLIGHT_WING_STIFFNESS = SOURCE_WING_STIFFNESS * SOURCE_TORQUE_TO_FLYGYM
 FLIGHT_WING_DAMPING = SOURCE_WING_DAMPING * SOURCE_TORQUE_TO_FLYGYM
+FLIGHT_WING_INERTIAL_MASS = SOURCE_WING_INERTIAL_MASS
 FLIGHT_FLUID_COEFS = SOURCE_FLUID_COEFS
 FLIGHT_AIR_DENSITY = SOURCE_AIR_DENSITY * SOURCE_DENSITY_TO_FLYGYM
 FLIGHT_AIR_VISCOSITY = SOURCE_AIR_VISCOSITY * SOURCE_VISCOSITY_TO_FLYGYM
 
 
 @dataclass(frozen=True)
-class WingFluidGeom:
+class WingFlightGeom:
     body_segment: str
-    geom_name: str
+    source_side: str
     size_mm: tuple[float, float, float]
     pos_mm: tuple[float, float, float]
     quat: tuple[float, float, float, float]
 
+    @property
+    def fluid_name(self) -> str:
+        return f"wing_{self.source_side}_fluid"
+
+    @property
+    def inertial_name(self) -> str:
+        return f"wing_{self.source_side}_inertial"
+
+    @property
+    def membrane_name(self) -> str:
+        return f"{self.body_segment}_membrane"
+
 
 # Geometry copied from the source FlyBody MJCF and converted cm -> mm.
-WING_FLUID_GEOMS = (
-    WingFluidGeom(
+WING_FLIGHT_GEOMS = (
+    WingFlightGeom(
         body_segment="l_wing",
-        geom_name="wing_left_fluid",
+        source_side="left",
         size_mm=(0.005, 0.551, 1.14),
         pos_mm=(0.263, -1.48, -0.289),
         quat=(-0.685, -0.634, 0.265, -0.243),
     ),
-    WingFluidGeom(
+    WingFlightGeom(
         body_segment="r_wing",
-        geom_name="wing_right_fluid",
+        source_side="right",
         size_mm=(0.005, 0.551, 1.14),
         pos_mm=(-0.263, 1.48, 0.289),
         quat=(0.243, 0.265, 0.634, -0.685),
     ),
 )
+
+# Backward-compatible alias used by the flight-physics smoke test.
+WING_FLUID_GEOMS = WING_FLIGHT_GEOMS
 
 
 def partition_wing_dofs(jointdofs: Iterable) -> tuple[list, list]:
@@ -114,11 +134,51 @@ def apply_flight_wing_joint_parameters(fly: FlyBody) -> None:
         raise RuntimeError(f"expected 6 FlyBody wing DOFs, found {wing_count}")
 
 
+def restore_flight_wing_inertia(fly: FlyBody) -> None:
+    """Restore source wing inertial boxes instead of membrane-mesh mass transfer."""
+
+    body_by_name = {segment.name: body for segment, body in fly.bodyseg_to_mjcfbody.items()}
+    geoms_by_name = {
+        segment.name: list(geoms) for segment, geoms in fly.bodyseg_to_mjcfgeom.items()
+    }
+
+    for spec in WING_FLIGHT_GEOMS:
+        try:
+            wing_body = body_by_name[spec.body_segment]
+            wing_geoms = geoms_by_name[spec.body_segment]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"FlyBody segment {spec.body_segment!r} required for flight is missing"
+            ) from exc
+
+        membranes = [geom for geom in wing_geoms if geom.name == spec.membrane_name]
+        if len(membranes) != 1:
+            raise RuntimeError(
+                f"expected one {spec.membrane_name!r} geom, found {len(membranes)}"
+            )
+        # FlyGym transfers the source wing-inertial mass onto the membrane mesh.
+        # Remove that transferred mass before re-introducing the source inertial box.
+        membranes[0].mass = 0.0
+
+        wing_body.add_geom(
+            type=GEOM_TYPES["box"],
+            name=spec.inertial_name,
+            size=spec.size_mm,
+            pos=spec.pos_mm,
+            quat=spec.quat,
+            mass=FLIGHT_WING_INERTIAL_MASS,
+            contype=0,
+            conaffinity=0,
+            group=3,
+            rgba=(0.0, 0.0, 0.0, 0.0),
+        )
+
+
 def add_flight_wing_aerodynamics(fly: FlyBody) -> None:
     """Restore the two per-wing MuJoCo ellipsoid-fluid geoms omitted by FlyGym."""
 
     body_by_name = {segment.name: body for segment, body in fly.bodyseg_to_mjcfbody.items()}
-    for spec in WING_FLUID_GEOMS:
+    for spec in WING_FLIGHT_GEOMS:
         try:
             wing_body = body_by_name[spec.body_segment]
         except KeyError as exc:
@@ -131,7 +191,7 @@ def add_flight_wing_aerodynamics(fly: FlyBody) -> None:
         # mutability details of the generated fixed-size array bindings.
         wing_body.add_geom(
             type=GEOM_TYPES["ellipsoid"],
-            name=spec.geom_name,
+            name=spec.fluid_name,
             size=spec.size_mm,
             pos=spec.pos_mm,
             quat=spec.quat,
