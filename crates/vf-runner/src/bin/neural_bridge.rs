@@ -57,6 +57,8 @@ enum Request {
     Step {
         #[serde(default)]
         stimulate: HashMap<String, f32>,
+        #[serde(default)]
+        stimulate_body: Vec<(u64, f32)>,
         #[serde(default = "default_true")]
         plasticity: bool,
         #[serde(default = "default_one")]
@@ -265,6 +267,23 @@ fn stimuli_from_groups(
     Ok(stimuli)
 }
 
+fn stimuli_from_body_ids(
+    snapshot: &ConnectomeSnapshot,
+    requested: &[(u64, f32)],
+) -> Result<Vec<Stimulus>> {
+    let mut stimuli = Vec::with_capacity(requested.len());
+    for &(body_id, current) in requested {
+        if !current.is_finite() {
+            bail!("stimulus current for body ID {body_id} is non-finite");
+        }
+        let neuron = snapshot
+            .index_of_body_id(body_id)
+            .with_context(|| format!("stimulus body ID {body_id} is not present in snapshot"))?;
+        stimuli.push(Stimulus { neuron, current });
+    }
+    Ok(stimuli)
+}
+
 fn read_groups(
     groups: &HashMap<String, Group>,
     names: &[String],
@@ -457,6 +476,7 @@ fn main() -> Result<()> {
             }
             Request::Step {
                 stimulate,
+                stimulate_body,
                 plasticity,
                 steps,
                 read,
@@ -464,7 +484,8 @@ fn main() -> Result<()> {
                 if steps == 0 {
                     bail!("step request requires steps >= 1");
                 }
-                let stimuli = stimuli_from_groups(&groups, &stimulate)?;
+                let mut stimuli = stimuli_from_groups(&groups, &stimulate)?;
+                stimuli.extend(stimuli_from_body_ids(&snapshot, &stimulate_body)?);
                 for _ in 0..steps {
                     runtime.step(&stimuli, plasticity)?;
                     step_counter += 1;
