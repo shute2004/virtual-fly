@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""First embodied MaleCNS <-> FlyBody <-> Flyppy learning loop.
+"""Embodied MaleCNS <-> peripheral muscle <-> FlyBody <-> Flyppy learning loop.
 
 Information flow is deliberately constrained:
 
@@ -8,15 +8,17 @@ Information flow is deliberately constrained:
       -> local MaleCNS optic-column light sampling
       -> current into actual R1-R6 photoreceptor body IDs
       -> persistent MaleCNS runtime with local plasticity
-      -> bilateral DNg02 population readout
-      -> FlyBody wing-amplitude adapter
+      -> exact spikes from individual released wing motor-neuron body IDs
+      -> independent motor-unit / neuromuscular states
+      -> anatomical wing-muscle identities
+      -> virtual-muscle physical torque at the FlyBody wing hinge
       -> physical world
 
-The sensory boundary does not calculate motion, edges, gate position, or any other
-visual feature. Spatial and temporal visual processing is left to the MaleCNS
-network. Gate coordinates are never injected into the CNS. Passing a gate
-stimulates the configured reward DAN population; collision stimulates the
-configured aversive DAN population.
+No DNg02 population average, action vector, matrix policy, reward scalar, or
+externally computed steering decision is part of this path. Gate coordinates are
+never injected into the CNS. A gate pass or collision only causes current to be
+injected into configured released dopaminergic neurons; subsequent dopamine and
+plasticity arise inside the simulated MaleCNS connectivity.
 """
 
 from __future__ import annotations
@@ -29,16 +31,14 @@ import time
 
 import numpy as np
 
-from flybody_adapter import FlyBodyWingAdapter, WingDrive
+from flybody_muscle_adapter import FlyBodyMuscleAdapter
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from malecns_retina import MaleCNSRetina
 from neural_bridge_client import NeuralBridgeClient
 from synapse_monitor import SynapseMonitor, SynapseMonitorConfig
 from training_visualizer import TrainingVisualizer
-
-
-MOTOR_GROUPS = ("flight_thrust_left", "flight_thrust_right")
+from wing_muscle_periphery import WingMusclePeriphery
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,6 +55,12 @@ def parse_args() -> argparse.Namespace:
         "--retinotopic-map",
         type=Path,
         default=Path("artifacts/malecns-v1.0/retinotopic-vision-v1.json"),
+    )
+    parser.add_argument(
+        "--wing-motor-map",
+        type=Path,
+        default=Path("artifacts/malecns-v1.0/wing-motor-neurons-v0.json"),
+        help="individual released wing-MN -> muscle inventory",
     )
     parser.add_argument("--backend", choices=("cpu", "gpu"), default="gpu")
     parser.add_argument(
@@ -92,7 +98,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("artifacts/experiments/flyppy-v0"),
+        default=Path("artifacts/experiments/flyppy-v1"),
     )
     parser.add_argument(
         "--resume-checkpoint",
@@ -158,6 +164,8 @@ def deliver_reinforcement(
     current: float,
     steps: int,
 ) -> None:
+    """Inject current into an explicit released DAN group, never a reward scalar."""
+
     if current <= 0.0 or steps < 1:
         raise ValueError("reinforcement parameters must be positive")
     brain.step(
@@ -207,13 +215,15 @@ def main() -> int:
         raise SystemExit("synapse-min-delta must be >= 0")
     if not args.retinotopic_map.exists():
         raise SystemExit(f"retinotopic vision map not found: {args.retinotopic_map}")
+    if not args.wing_motor_map.exists():
+        raise SystemExit(f"wing motor map not found: {args.wing_motor_map}")
     if args.resume_checkpoint is not None and not args.resume_checkpoint.exists():
         raise SystemExit(f"resume checkpoint not found: {args.resume_checkpoint}")
 
     visualization_enabled = args.render or args.record_video is not None
     course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
     world = FlyppyWorld(course)
-    body = FlyBodyWingAdapter(
+    body = FlyBodyMuscleAdapter(
         tethered=False,
         world=world,
         spawn_position_mm=(0.0, 0.0, 5.0),
@@ -221,9 +231,19 @@ def main() -> int:
         enable_vision=True,
         enable_observer_camera=visualization_enabled,
     )
+    periphery = WingMusclePeriphery(args.wing_motor_map)
     vision = MaleCNSRetina(
         args.retinotopic_map,
         current_gain=args.photoreceptor_current_gain,
+    )
+    control_dt_s = body.timestep * args.physics_steps
+
+    print(
+        "motor_boundary=individual-wing-MN selected={} excluded={} control_dt_s={:.6g}".format(
+            periphery.selected_count,
+            periphery.excluded_count,
+            control_dt_s,
+        )
     )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -289,6 +309,7 @@ def main() -> int:
                     episode = start_episode + local_episode
                     course.reset()
                     body.reset()
+                    periphery.reset()
                     if visualizer.enabled:
                         visualizer.begin_episode(episode)
                     episode_passed = 0
@@ -299,19 +320,23 @@ def main() -> int:
                     max_z = float("-inf")
                     final_velocity = body.root_linear_velocity_mm_s()
                     step_count = 0
+                    last_peripheral = None
 
                     for control_step in range(args.max_control_steps):
                         retinal = vision.encode(body.sim, body.fly)
-                        readout = brain.step(
+                        _, motor_spikes = brain.step_with_body_readout(
                             stimulate_body=retinal.body_currents,
-                            read=MOTOR_GROUPS,
+                            read=(),
+                            read_body=periphery.body_ids,
                             plasticity=True,
                         )
-                        left = float(readout["flight_thrust_left"]["spike_fraction"])
-                        right = float(readout["flight_thrust_right"]["spike_fraction"])
-
-                        body.step(
-                            WingDrive(left=left, right=right),
+                        peripheral_state = periphery.step(
+                            motor_spikes,
+                            dt_s=control_dt_s,
+                        )
+                        last_peripheral = peripheral_state
+                        body.step_muscles(
+                            peripheral_state,
                             physics_steps=args.physics_steps,
                         )
                         if visualizer.enabled:
@@ -370,8 +395,8 @@ def main() -> int:
                                         "vy_mm_s": float(final_velocity[1]),
                                         "vz_mm_s": float(final_velocity[2]),
                                         "next_gate": course.next_gate_index,
-                                        "motor_left": left,
-                                        "motor_right": right,
+                                        "motor_periphery": peripheral_state.compact_diagnostics(),
+                                        "wing_torque": dict(body.last_wing_torque),
                                         "retinal_input": {
                                             "active_columns": retinal.active_columns,
                                             "active_photoreceptors": retinal.active_photoreceptors,
@@ -442,6 +467,11 @@ def main() -> int:
                         "final_vx_mm_s": float(final_velocity[0]),
                         "final_vy_mm_s": float(final_velocity[1]),
                         "final_vz_mm_s": float(final_velocity[2]),
+                        "final_motor_periphery": (
+                            last_peripheral.compact_diagnostics()
+                            if last_peripheral is not None
+                            else None
+                        ),
                         "video": video_path,
                         "synapse_snapshot": synapse_snapshot is not None,
                         "checkpoint_saved": checkpoint_saved_this_episode,
@@ -466,8 +496,8 @@ def main() -> int:
     second_half = passed_by_episode[len(passed_by_episode) // 2 :]
     checkpoint_weight_file = checkpoint_dir / "weights.f32le"
     summary = {
-        "schema_version": 4,
-        "experiment": "flyppy_closed_loop_v0",
+        "schema_version": 5,
+        "experiment": "flyppy_closed_loop_v1_individual_wing_mn",
         "backend": ready.get("backend"),
         "neurons": ready.get("neurons"),
         "edges": ready.get("edges"),
@@ -476,6 +506,7 @@ def main() -> int:
         "episode_end": start_episode + args.episodes - 1,
         "gate_count": args.gate_count,
         "physics_steps_per_control": args.physics_steps,
+        "control_dt_seconds": control_dt_s,
         "initial_forward_speed_mm_s": args.initial_forward_speed_mm_s,
         "initial_forward_speed_scope": (
             "one-shot episode initial condition only; no external forward-velocity "
@@ -492,10 +523,10 @@ def main() -> int:
         "checkpoint_neural_step": state_checkpoint_info.get("step"),
         "checkpoint_scope": (
             "CNS membrane potentials, spikes, refractory counters, activity traces, "
-            "neuromodulation state, synaptic weights, and eligibility traces. Topology, "
-            "neurotransmitter annotations, numerical parameters, and modulator roles are "
-            "reconstructed from the same snapshot/configuration. Body/environment state "
-            "is intentionally reset at the episode boundary."
+            "local dopaminergic modulation state, synaptic weights, and eligibility "
+            "traces. Topology, neurotransmitter annotations, and numerical parameters "
+            "are reconstructed from the same snapshot/configuration. Peripheral muscle, "
+            "body, and environment state intentionally reset at the episode boundary."
         ),
         "learned_weights_file": str(checkpoint_weight_file),
         "visualization": {
@@ -514,20 +545,35 @@ def main() -> int:
         ),
         "retinotopic_map": str(args.retinotopic_map),
         "photoreceptor_current_gain": args.photoreceptor_current_gain,
-        "motor_interface": "MaleCNS DNg02 populations -> FlyBody wing amplitude",
+        "motor_interface": {
+            "wing_motor_map": str(args.wing_motor_map),
+            "selected_individual_motor_units": periphery.selected_count,
+            "excluded_uncertain_motor_units": periphery.excluded_count,
+            "path": (
+                "exact individual MaleCNS wing-MN spikes -> independent motor-unit state -> "
+                "anatomical muscle activation -> calibrated virtual-muscle joint torque -> FlyBody"
+            ),
+            "population_action_decoder": False,
+            "dng02_population_readout_used_for_action": False,
+        },
         "body_physics": (
-            "FlyGym 2.1 FlyBody with source FlyBody flight wing gains, damping, "
-            "stiffness, 50-us timestep, restored per-wing MuJoCo ellipsoid-fluid "
-            "geometries, and unit-corrected air density/viscosity"
+            "FlyGym 2.1 FlyBody with source FlyBody flight wing damping, stiffness, "
+            "50-us timestep, restored per-wing MuJoCo ellipsoid-fluid geometries, "
+            "unit-corrected air density/viscosity, and qfrc_applied virtual-muscle torque"
         ),
         "teaching_signal": (
-            "gate pass -> PAM08 candidate stimulation; collision -> PPL1 candidate stimulation"
+            "gate pass -> current into released PAM01 (PAM-gamma5) DANs; collision -> "
+            "current into released PPL101 (PPL1-gamma1pedc) DANs; no signed scalar "
+            "reward/punishment enters neural dynamics or plasticity"
         ),
         "important_limit": (
-            "Optic-column/body-ID retinotopy comes from MaleCNS data, while the geometric "
-            "projection of those columns onto FlyBody's eye camera and the local "
-            "irradiance-to-current scale remain calibrated sensory-transduction seams. "
-            "The CNS itself performs downstream visual processing."
+            "Optic-column/body-ID retinotopy comes from MaleCNS data. FlyBody lacks "
+            "anatomical wing muscles, so muscle-to-hinge mechanics are a calibrated "
+            "virtual-muscle approximation. The first torque model activates only "
+            "qualitatively constrained b1/b2/b3/i1 steering effects; other identified "
+            "muscles retain independent activation state but do not receive guessed "
+            "moment arms. The geometric eye projection and irradiance-to-current scale "
+            "also remain calibrated sensory-transduction seams."
         ),
     }
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
