@@ -2,20 +2,21 @@
 """Local optical stimulation of MaleCNS R1-R6 photoreceptors.
 
 This module deliberately does not detect motion, edges, obstacles, gap position, or
-any other visual feature outside the nervous system. Each MaleCNS optic-lobe column
-samples one local point in the corresponding FlyBody eye image; that local light is
-converted to current for the actual R1-R6 body IDs assigned to that column. All
-subsequent spatial/temporal integration is left to the MaleCNS network.
+any other visual feature outside the nervous system. Each observed MaleCNS lamina
+cartridge samples one local point in the corresponding FlyBody eye image; that
+local light is converted to current for the actual R1-R6 body IDs that connect to
+the cartridge's L1 neuron. All subsequent spatial/temporal integration is left to
+the MaleCNS network.
 
 Provenance boundaries:
-- optic-lobe hex coordinates and R1-R6 body IDs: loaded from the prepared MaleCNS map;
+- L1 optic-column coordinates and R1-R6 -> L1 wiring: MaleCNS-derived map;
 - hex-lattice unrolling into the FlyBody eye camera: calibrated geometric seam;
-- green-channel irradiance -> injected current gain: calibrated transduction seam.
+- local green-channel irradiance -> injected current gain: calibrated transduction seam.
 
-The Flyppy world is achromatic, so a single rendered green channel is used as a
-local broadband-light proxy rather than combining spatial samples or extracting a
-feature. A future spectral/phototransduction model can replace only that local
-conversion without changing the retinotopic boundary.
+The Flyppy world is achromatic, so one local rendered color channel is sufficient
+to represent local brightness without combining spatial samples or extracting a
+visual feature. A future spectral/phototransduction model can replace only this
+local conversion without changing the retinotopic boundary.
 """
 
 from __future__ import annotations
@@ -50,8 +51,14 @@ class MaleCNSRetina:
             raise ValueError("current_floor must be finite and non-negative")
 
         data = json.loads(mapping_path.read_text(encoding="utf-8"))
-        if data.get("schema_version") != 1:
+        if data.get("schema_version") != 2:
             raise ValueError("unsupported retinotopic vision map schema")
+        if data.get("assignment_method") != (
+            "observed_R1-R6_to_L1_connectivity_with_observed_L1_hex"
+        ):
+            raise ValueError(
+                "retinotopic map was not built from observed R1-R6 -> L1 wiring"
+            )
         columns = data.get("columns")
         if not isinstance(columns, list) or not columns:
             raise ValueError("retinotopic vision map contains no columns")
@@ -90,9 +97,9 @@ class MaleCNSRetina:
 
     @staticmethod
     def _attach_uv(columns: list[dict[str, object]]) -> None:
-        # MaleCNS uses axial coordinates for the optic-lobe hex lattice. This is the
-        # standard axial->planar unrolling also used by existing MaleCNS retinotopic
-        # screen samplers. It changes coordinates only; it does not combine columns.
+        # Standard axial-hex planar unrolling. This is a calibrated optical seam:
+        # it preserves every MaleCNS column independently but does not claim that
+        # normalized (u,v) is a measured ommatidial optical-axis calibration.
         h1 = np.asarray([int(item["hex1"]) for item in columns], dtype=np.float64)
         h2 = np.asarray([int(item["hex2"]) for item in columns], dtype=np.float64)
         x = h1 + 0.5 * h2
@@ -115,7 +122,10 @@ class MaleCNSRetina:
             raise RuntimeError(
                 f"eye camera/frame mismatch: names={names}, frames={len(frames)}"
             )
-        by_name = {name: np.asarray(frame) for name, frame in zip(names, frames, strict=True)}
+        by_name = {
+            name: np.asarray(frame)
+            for name, frame in zip(names, frames, strict=True)
+        }
         try:
             return {"L": by_name["l_eye_cam"], "R": by_name["r_eye_cam"]}
         except KeyError as exc:
@@ -126,8 +136,8 @@ class MaleCNSRetina:
         if frame.ndim != 3 or frame.shape[2] < 2:
             raise ValueError(f"expected RGB eye frame, got shape {frame.shape}")
         height, width = frame.shape[:2]
-        # Image row 0 is dorsal/top in the unrolled camera. MaleCNS +v is mapped
-        # dorsally, hence the inversion from v to row.
+        # The orientation between MaleCNS hex axes and the FlyBody camera plane is
+        # part of the calibrated seam. No neighboring pixels are pooled here.
         col = int(round(np.clip(u, 0.0, 1.0) * (width - 1)))
         row = int(round((1.0 - np.clip(v, 0.0, 1.0)) * (height - 1)))
         value = float(frame[row, col, 1])
