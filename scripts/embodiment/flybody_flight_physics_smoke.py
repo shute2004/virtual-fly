@@ -50,13 +50,21 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
 
     geom_names = names(model, mj.mjtObj.mjOBJ_GEOM, model.ngeom)
     geom_fluid = np.asarray(model.geom_fluid, dtype=np.float64).reshape(model.ngeom, -1)
-    expected_fluid = np.asarray((1.0, *FLIGHT_FLUID_COEFS), dtype=np.float64)
+    if geom_fluid.shape[1] < 6:
+        raise RuntimeError(
+            f"MuJoCo geom_fluid row is unexpectedly short: {geom_fluid.shape[1]}"
+        )
+    # MuJoCo 3.x currently stores mjNFLUID=12 values per geom. The first six are
+    # the ellipsoid-model activation flag followed by the five MJCF fluidcoef
+    # values. The remaining compiled values are internal derived parameters and
+    # are deliberately not asserted here.
+    expected_fluid_prefix = np.asarray((1.0, *FLIGHT_FLUID_COEFS), dtype=np.float64)
     for spec in WING_FLUID_GEOMS:
         geom_id = find_suffix(geom_names, spec.geom_name)
-        if not np.allclose(geom_fluid[geom_id], expected_fluid, rtol=0, atol=1e-12):
+        fluid_prefix = geom_fluid[geom_id, :6]
+        if not np.allclose(fluid_prefix, expected_fluid_prefix, rtol=0, atol=1e-12):
             raise RuntimeError(
-                f"{spec.geom_name} fluid coefficients mismatch: "
-                f"{geom_fluid[geom_id].tolist()}"
+                f"{spec.geom_name} fluid coefficients mismatch: {fluid_prefix.tolist()}"
             )
         if not np.allclose(model.geom_size[geom_id], spec.size_mm, rtol=0, atol=1e-12):
             raise RuntimeError(
