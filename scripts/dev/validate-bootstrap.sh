@@ -28,14 +28,11 @@ run_step "cargo fmt" cargo fmt --all -- --check
 run_step "cargo check" cargo check --workspace
 run_step "cargo test" cargo test --workspace
 run_step "CPU parallel plasticity smoke" cargo run -p vf-runner --release -- kernel-smoke --backend cpu --cycles 250 --flies 8
-
-if [ "$(uname -s)" = "Darwin" ]; then
-  run_step "Metal GPU plasticity smoke" env WGPU_BACKEND=metal cargo run -p vf-runner --release -- kernel-smoke --backend gpu --cycles 250
-fi
+run_step "GPU plasticity smoke" cargo run -p vf-runner --release -- kernel-smoke --backend gpu --cycles 250
 
 if [ -n "${VF_SNAPSHOT:-}" ] && [ -d "${VF_SNAPSHOT}" ]; then
   run_step "MaleCNS snapshot info" cargo run -p vf-runner --release -- snapshot-info --snapshot "$VF_SNAPSHOT"
-  run_step "MaleCNS GPU scale smoke" cargo run -p vf-runner --release -- snapshot-benchmark --snapshot "$VF_SNAPSHOT" --backend auto --steps 5
+  run_step "MaleCNS GPU scale smoke" cargo run -p vf-runner --release -- snapshot-benchmark --snapshot "$VF_SNAPSHOT" --backend gpu --steps 5
 fi
 
 printf '\n== validation summary ==\n'
