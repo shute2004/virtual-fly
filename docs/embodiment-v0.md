@@ -19,6 +19,8 @@
 - 上記を一本化した閉ループ局所可塑性学習runner。
 - 学習終了時の全シナプス重み保存。
 - 任意の3Dライブ表示とepisodeごとのMP4保存。
+- 任意の低頻度シナプス変化snapshot。
+- 学習中または学習後に開けるブラウザ3D神経ビューア。
 
 ## 2. 情報経路
 
@@ -104,7 +106,7 @@ bash scripts/dev/train_flyppy.sh
 bash scripts/dev/train_flyppy.sh --render
 ```
 
-episodeごとの動画保存:
+episodeごとの身体動画保存:
 
 ```bash
 bash scripts/dev/train_flyppy.sh \
@@ -113,10 +115,60 @@ bash scripts/dev/train_flyppy.sh \
 
 ライブ表示と録画は同時指定できる。どちらも指定しない場合、observer camera / rendererは生成せず、学習速度を優先する。
 
-## 7. 次の改善点
+神経可視化用のシナプス変化snapshotも保存する場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh --synapse-trace
+```
+
+`synapse-trace` は毎control stepで2,558万接続を読み戻さない。既定ではepisode終了時だけ全重みを一時dumpし、集計値と変化量上位64接続だけを `synapse-snapshots.jsonl` に残して一時dumpを削除する。
+
+## 7. 3D神経ビューア
+
+学習後に開く場合:
+
+```bash
+bash scripts/dev/view_neural.sh
+```
+
+別の実験ディレクトリを開く場合:
+
+```bash
+bash scripts/dev/view_neural.sh artifacts/experiments/flyppy-v0
+```
+
+学習中に見る場合は、1つ目のターミナルで:
+
+```bash
+bash scripts/dev/train_flyppy.sh --synapse-trace
+```
+
+2つ目のターミナルで:
+
+```bash
+bash scripts/dev/view_neural.sh
+```
+
+ビューアはlocalhostだけにbindした静的HTTP serverを起動し、`trajectory.jsonl` と `synapse-snapshots.jsonl` を1秒ごとに再取得する。ビューアを閉じても学習プロセスには影響しない。serverを止める場合はビューアを起動したターミナルでCtrl-Cする。
+
+現在の3D表示は以下を示す。
+
+- T4c/T5cの上向き視覚入力。
+- T4d/T5dの下向き視覚入力。
+- 左右DNg02発火率。
+- PAM08/PPL1刺激イベント。
+- 変化したシナプス数、平均・最大weight変化。
+- weight変化量上位シナプスを3D発光edgeとして表示。
+
+重要: 上位シナプスのノード座標はbody IDから決定論的に生成した模式配置であり、実際のMaleCNS解剖学的位置ではない。実形態・実シナプス座標を取得できた段階で表示層だけ差し替える。
+
+ビューアのThree.jsはビューアを開いた時だけCDNから読み込む。通常のheadless学習には関与しない。
+
+## 8. 次の改善点
 
 - 個々のommatidiumとMaleCNS視覚ニューロンのretinotopic対応。
 - flight motor neuron / flight muscle単位の詳細neuromuscular model。
 - weight以外も含む完全checkpointと学習再開。
 - 視覚・運動・可塑性パラメータの生理学的校正。
 - 学習前後比較、対照群、複数seedでの統計評価。
+- MaleCNSの実3D neuron morphology / synapse coordinatesを使った解剖学的ビューア。
