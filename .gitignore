@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Rust
+target/
+
+# Environment / credentials
+.env
+.env.*
+!.env.example
+*.token
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+# External datasets and generated artifacts
+data/raw/
+data/cache/
+data/external/
+artifacts/
+checkpoints/
+runs/
+results/
+renders/
+profiles/
+
+# Large scientific files
+*.h5
+*.hdf5
+*.zarr
+*.n5
+*.parquet
+*.arrow
+*.feather
+*.npz
+*.npy
+*.bin
+*.mp4
+
+# Keep small fixtures when explicitly placed under tests/fixtures
+!tests/fixtures/**/*.npz
+!tests/fixtures/**/*.npy
+!tests/fixtures/**/*.bin
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.maturin/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
