@@ -4,6 +4,7 @@ use rayon::prelude::*;
 use crate::{
     model::{NeuralParams, Stimulus, assumed_fast_sign},
     snapshot::ConnectomeSnapshot,
+    state::NeuralState,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -78,6 +79,30 @@ impl CpuRuntime {
 
     pub fn modulation(&self) -> &[f32] {
         &self.modulation
+    }
+
+    pub fn state(&self) -> NeuralState {
+        NeuralState {
+            membrane: self.membrane.clone(),
+            spikes: self.spikes.iter().map(|&value| value as u32).collect(),
+            refractory: self.refractory.clone(),
+            activity_trace: self.activity_trace.clone(),
+            modulation: self.modulation.clone(),
+            weights: self.weights.clone(),
+            eligibility: self.eligibility.clone(),
+        }
+    }
+
+    pub fn load_state(&mut self, state: &NeuralState) -> Result<()> {
+        state.validate(self.snapshot.neuron_count(), self.snapshot.edge_count())?;
+        self.membrane.clone_from(&state.membrane);
+        self.spikes = state.spikes.iter().map(|&value| value as u8).collect();
+        self.refractory.clone_from(&state.refractory);
+        self.activity_trace.clone_from(&state.activity_trace);
+        self.modulation.clone_from(&state.modulation);
+        self.weights.clone_from(&state.weights);
+        self.eligibility.clone_from(&state.eligibility);
+        Ok(())
     }
 
     pub fn set_modulator_role(&mut self, neuron: usize, role: i8) -> Result<()> {
@@ -278,5 +303,26 @@ mod tests {
         }
 
         assert_abs_diff_ne!(runtime.weights()[0], before, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn state_round_trip_restores_dynamics_and_plasticity_memory() {
+        let mut runtime = CpuRuntime::new(tiny_snapshot(), NeuralParams::default());
+        runtime.set_modulator_role(3, 1).unwrap();
+        runtime
+            .step(
+                &[
+                    Stimulus { neuron: 0, current: 2.0 },
+                    Stimulus { neuron: 3, current: 2.0 },
+                ],
+                true,
+            )
+            .unwrap();
+        let saved = runtime.state();
+        runtime.step(&[], true).unwrap();
+        runtime.load_state(&saved).unwrap();
+        assert_eq!(runtime.state().spikes, saved.spikes);
+        assert_eq!(runtime.state().weights, saved.weights);
+        assert_eq!(runtime.state().eligibility, saved.eligibility);
     }
 }
