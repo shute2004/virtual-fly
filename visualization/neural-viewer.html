@@ -7,7 +7,7 @@
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
     html, body { margin: 0; width: 100%; height: 100%; background: #0b0d10; color: #e6e8eb; overflow: hidden; }
-    #root { display: grid; grid-template-columns: minmax(0, 1fr) 330px; width: 100%; height: 100%; }
+    #root { display: grid; grid-template-columns: minmax(0, 1fr) 350px; width: 100%; height: 100%; }
     #scene { min-width: 0; position: relative; }
     #panel { border-left: 1px solid #2a2f38; background: #11151a; padding: 16px; overflow: auto; }
     h1 { font-size: 18px; margin: 0 0 8px; }
@@ -16,7 +16,9 @@
     .note { color: #9aa4b2; }
     .warning { color: #ffca7a; }
     .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-    input[type=file] { width: 100%; }
+    .stack { display: grid; gap: 5px; margin: 8px 0; }
+    input[type=file], input[type=text] { width: 100%; box-sizing: border-box; }
+    input[type=text] { background: #0d1117; border: 1px solid #39414d; color: #e6e8eb; border-radius: 5px; padding: 5px 7px; }
     input[type=range] { width: 100%; }
     button { border: 1px solid #39414d; color: #e6e8eb; background: #1a2028; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
     button:hover { background: #252d38; }
@@ -24,6 +26,7 @@
     .bar { height: 7px; background: #20262e; border-radius: 9px; overflow: hidden; margin: 4px 0 9px; }
     .fill { height: 100%; width: 0%; background: #d8dee9; transition: width 80ms linear; }
     #badge { position: absolute; left: 14px; top: 12px; background: rgba(10,12,15,.78); border: 1px solid #2a2f38; border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none; }
+    #status { color: #8fc7ff; min-height: 18px; }
     code { color: #c5d3e0; }
   </style>
 </head>
@@ -34,9 +37,18 @@
     <h1>virtual-fly neural viewer</h1>
     <p class="warning">現在のノード位置は模式配置です。MaleCNSの実際の3D形態・シナプス座標を示すものではありません。</p>
 
-    <h2>データ</h2>
-    <label>trajectory.jsonl<input id="trajectoryFile" type="file" accept=".jsonl,.txt" /></label>
-    <label>synapse-snapshots.jsonl<input id="synapseFile" type="file" accept=".jsonl,.txt" /></label>
+    <h2>学習データ</h2>
+    <div class="stack">
+      <label>実験ディレクトリ</label>
+      <input id="experimentPath" type="text" value="artifacts/experiments/flyppy-v0" />
+      <div class="row"><button id="loadServer">読み込み</button><label><input id="follow" type="checkbox" checked /> 自動追従</label></div>
+      <div id="status">-</div>
+    </div>
+    <details>
+      <summary>ファイルを手動選択</summary>
+      <label>trajectory.jsonl<input id="trajectoryFile" type="file" accept=".jsonl,.txt" /></label>
+      <label>synapse-snapshots.jsonl<input id="synapseFile" type="file" accept=".jsonl,.txt" /></label>
+    </details>
 
     <h2>再生</h2>
     <div class="row"><button id="play">再生</button><button id="pause">停止</button><span id="frameText">0 / 0</span></div>
@@ -50,18 +62,19 @@
     <div class="metric"><span>gate</span><span id="gate">-</span></div>
     <div class="metric"><span>event</span><span id="event">-</span></div>
 
-    <h2>神経群活動</h2>
+    <h2>神経群信号</h2>
     <div>T4/T5 上向き入力<div class="bar"><div id="upBar" class="fill"></div></div></div>
     <div>T4/T5 下向き入力<div class="bar"><div id="downBar" class="fill"></div></div></div>
-    <div>DNg02 左<div class="bar"><div id="leftBar" class="fill"></div></div></div>
-    <div>DNg02 右<div class="bar"><div id="rightBar" class="fill"></div></div></div>
-    <div>PAM08 報酬<div class="bar"><div id="rewardBar" class="fill"></div></div></div>
-    <div>PPL1 嫌悪<div class="bar"><div id="aversiveBar" class="fill"></div></div></div>
+    <div>DNg02 左発火率<div class="bar"><div id="leftBar" class="fill"></div></div></div>
+    <div>DNg02 右発火率<div class="bar"><div id="rightBar" class="fill"></div></div></div>
+    <div>PAM08 刺激<div class="bar"><div id="rewardBar" class="fill"></div></div></div>
+    <div>PPL1 刺激<div class="bar"><div id="aversiveBar" class="fill"></div></div></div>
 
     <h2>シナプス変化</h2>
     <div class="metric"><span>changed</span><span id="changed">-</span></div>
+    <div class="metric"><span>mean |Δw|</span><span id="meanDelta">-</span></div>
     <div class="metric"><span>max |Δw|</span><span id="maxDelta">-</span></div>
-    <p class="note">太く明るい線ほど変化量が大きい上位シナプスです。緑=強化、赤=弱化。</p>
+    <p class="note">太く明るい円柱ほど変化量が大きい上位シナプスです。緑=強化、赤=弱化。スナップショットは通常エピソード単位なので、各stepの瞬時重みではありません。</p>
   </aside>
 </div>
 <script type="module">
@@ -98,7 +111,7 @@ const groupMeshes = {};
 for (const [name, d] of Object.entries(groupDefs)) {
   const mat = new THREE.MeshStandardMaterial({ color: d.c, emissive: d.c, emissiveIntensity: 0.08, roughness: .5 });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(.75, 32, 20), mat);
-  mesh.position.set(...d.p); mesh.userData.baseScale = 1; groupRoot.add(mesh); groupMeshes[name] = mesh;
+  mesh.position.set(...d.p); groupRoot.add(mesh); groupMeshes[name] = mesh;
 }
 
 const shell = new THREE.Mesh(
@@ -111,11 +124,22 @@ let trajectory = [];
 let synapseFrames = [];
 let frame = 0;
 let timer = null;
+let pollTimer = null;
+let serverMode = false;
 
-function parseJsonl(text) {
-  return text.split(/\r?\n/).map(x => x.trim()).filter(Boolean).map((line, i) => {
-    try { return JSON.parse(line); } catch (e) { throw new Error(`JSONL line ${i + 1}: ${e}`); }
-  });
+function parseJsonl(text, tolerateFinalPartial = false) {
+  const lines = text.split(/\r?\n/);
+  const result = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try { result.push(JSON.parse(line)); }
+    catch (e) {
+      if (tolerateFinalPartial && i === lines.length - 1) break;
+      throw new Error(`JSONL line ${i + 1}: ${e}`);
+    }
+  }
+  return result;
 }
 
 async function readFile(input) {
@@ -123,12 +147,59 @@ async function readFile(input) {
   return parseJsonl(await file.text());
 }
 
+function normalizedExperimentPath() {
+  return document.getElementById('experimentPath').value.trim().replace(/^\/+|\/+$/g, '');
+}
+
+async function fetchMaybe(path) {
+  const response = await fetch('/' + path, { cache: 'no-store' });
+  if (response.status === 404) return '';
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${path}`);
+  return await response.text();
+}
+
+async function loadFromServer({ quiet = false } = {}) {
+  const experiment = normalizedExperimentPath();
+  if (!experiment) return;
+  try {
+    const oldLength = trajectory.length;
+    const wasAtEnd = oldLength === 0 || frame >= oldLength - 2;
+    const [trajectoryText, synapseText] = await Promise.all([
+      fetchMaybe(`${experiment}/trajectory.jsonl`),
+      fetchMaybe(`${experiment}/synapse-snapshots.jsonl`),
+    ]);
+    if (trajectoryText) trajectory = parseJsonl(trajectoryText, true);
+    if (synapseText) synapseFrames = parseJsonl(synapseText, true);
+    serverMode = true;
+    const slider = document.getElementById('timeline');
+    slider.max = Math.max(0, trajectory.length - 1);
+    if (document.getElementById('follow').checked || wasAtEnd) {
+      frame = Math.max(0, trajectory.length - 1);
+      slider.value = frame;
+    }
+    updateFrame();
+    if (!quiet) document.getElementById('status').textContent = `読み込み: ${trajectory.length} frames / ${synapseFrames.length} synapse snapshots`;
+  } catch (error) {
+    if (!quiet) document.getElementById('status').textContent = `読み込み失敗: ${error}`;
+  }
+}
+
+function configurePolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+  if (serverMode && document.getElementById('follow').checked) {
+    pollTimer = setInterval(() => loadFromServer({ quiet: true }), 1000);
+  }
+}
+
+document.getElementById('loadServer').addEventListener('click', async () => { await loadFromServer(); configurePolling(); });
+document.getElementById('follow').addEventListener('change', configurePolling);
 document.getElementById('trajectoryFile').addEventListener('change', async e => {
-  trajectory = await readFile(e.target); frame = 0;
+  trajectory = await readFile(e.target); frame = 0; serverMode = false; configurePolling();
   const slider = document.getElementById('timeline'); slider.max = Math.max(0, trajectory.length - 1); slider.value = 0;
   updateFrame();
 });
-document.getElementById('synapseFile').addEventListener('change', async e => { synapseFrames = await readFile(e.target); updateFrame(); });
+document.getElementById('synapseFile').addEventListener('change', async e => { synapseFrames = await readFile(e.target); serverMode = false; configurePolling(); updateFrame(); });
 document.getElementById('timeline').addEventListener('input', e => { frame = Number(e.target.value); updateFrame(); });
 document.getElementById('speed').addEventListener('input', e => { document.getElementById('speedText').textContent = `${e.target.value} fps`; if (timer) startPlayback(); });
 document.getElementById('play').addEventListener('click', startPlayback);
@@ -146,9 +217,9 @@ function startPlayback() {
 }
 function stopPlayback() { if (timer) clearInterval(timer); timer = null; }
 
-function stimulusValue(record, suffixes) {
+function stimulusValue(record, keys) {
   const s = record?.visual_stimuli || {};
-  return Math.max(0, ...suffixes.map(k => Number(s[k] || 0)));
+  return Math.max(0, ...keys.map(k => Number(s[k] || 0)));
 }
 function setBar(id, value, max = 1) {
   const pct = Math.max(0, Math.min(100, 100 * Number(value || 0) / max));
@@ -161,9 +232,9 @@ function pulse(mesh, value) {
 }
 function matchingSynapseSnapshot(record) {
   if (!synapseFrames.length || !record) return null;
-  let best = synapseFrames[0];
+  let best = null;
   for (const s of synapseFrames) {
-    if (s.episode <= record.episode) best = s; else break;
+    if (Number(s.episode) <= Number(record.episode)) best = s; else break;
   }
   return best;
 }
@@ -174,17 +245,29 @@ function hashPosition(id, radius = 7.2) {
   const r = radius * (0.55 + Number((x >> 32n) & 0xffn) / 255 * 0.45);
   return new THREE.Vector3(r * Math.cos(b) * Math.cos(a), r * Math.sin(b), r * Math.cos(b) * Math.sin(a));
 }
+function cylinderBetween(a, b, radius, color, opacity) {
+  const direction = new THREE.Vector3().subVectors(b, a);
+  const length = direction.length();
+  if (length <= 1e-9) return null;
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, 7, 1, true);
+  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+  const cylinder = new THREE.Mesh(geometry, material);
+  cylinder.position.copy(a).add(b).multiplyScalar(0.5);
+  cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  return cylinder;
+}
 function renderSynapses(snapshot) {
   synapseRoot.clear();
   if (!snapshot?.top_changed?.length) return;
   const max = Math.max(...snapshot.top_changed.map(e => Number(e.abs_delta || 0)), 1e-9);
   for (const edge of snapshot.top_changed) {
     const a = hashPosition(edge.pre_body_id); const b = hashPosition(edge.post_body_id);
-    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-    const strength = Math.max(.08, Number(edge.abs_delta) / max);
+    const strength = Math.max(.04, Number(edge.abs_delta) / max);
     const color = Number(edge.delta) >= 0 ? 0x58f28b : 0xff5f70;
-    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: .2 + .8 * strength });
-    const line = new THREE.Line(geo, mat); line.scale.setScalar(1); synapseRoot.add(line);
+    const glow = cylinderBetween(a, b, .025 + .12 * strength, color, .08 + .16 * strength);
+    const core = cylinderBetween(a, b, .008 + .035 * strength, color, .35 + .6 * strength);
+    if (glow) synapseRoot.add(glow);
+    if (core) synapseRoot.add(core);
     if (strength > .55) {
       for (const p of [a, b]) {
         const dot = new THREE.Mesh(new THREE.SphereGeometry(.05 + .12 * strength, 10, 8), new THREE.MeshBasicMaterial({ color }));
@@ -205,8 +288,8 @@ function updateFrame() {
   const event = r.collision ? 'collision' : r.passed_gate ? 'passed' : r.finished ? 'finished' : '-';
   document.getElementById('event').textContent = event;
 
-  const up = stimulusValue(r, ['visual_up_on_left','visual_up_on_right','visual_up_off_left','visual_up_off_right']);
-  const down = stimulusValue(r, ['visual_down_on_left','visual_down_on_right','visual_down_off_left','visual_down_off_right']);
+  const up = stimulusValue(r, ['vision_t4c_left','vision_t4c_right','vision_t5c_left','vision_t5c_right']);
+  const down = stimulusValue(r, ['vision_t4d_left','vision_t4d_right','vision_t5d_left','vision_t5d_right']);
   const left = Number(r.motor_left || 0), right = Number(r.motor_right || 0);
   const reward = r.reward_stimulated ? 1 : 0, aversive = r.aversive_stimulated ? 1 : 0;
   setBar('upBar', up, 2); setBar('downBar', down, 2); setBar('leftBar', left); setBar('rightBar', right); setBar('rewardBar', reward); setBar('aversiveBar', aversive);
@@ -214,6 +297,7 @@ function updateFrame() {
 
   const s = matchingSynapseSnapshot(r);
   document.getElementById('changed').textContent = s ? Number(s.changed_synapses).toLocaleString() : '-';
+  document.getElementById('meanDelta').textContent = s ? Number(s.mean_abs_delta).toExponential(3) : '-';
   document.getElementById('maxDelta').textContent = s ? Number(s.max_abs_delta).toExponential(3) : '-';
   renderSynapses(s);
 }
@@ -223,6 +307,14 @@ function resize() {
 }
 window.addEventListener('resize', resize); resize();
 (function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+
+const queryExperiment = new URLSearchParams(location.search).get('experiment');
+if (queryExperiment) document.getElementById('experimentPath').value = queryExperiment;
+if (location.protocol === 'http:' || location.protocol === 'https:') {
+  loadFromServer().then(configurePolling);
+} else {
+  document.getElementById('status').textContent = '自動追従には scripts/dev/view_neural.sh から開いてください';
+}
 </script>
 </body>
 </html>
