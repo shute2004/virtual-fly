@@ -72,7 +72,8 @@ class FlyBodyWingAdapter:
         spawn_position_mm: tuple[float, float, float] = (0.0, 0.0, 4.0),
         flight_body_pitch_deg: float = FLIGHT_BODY_PITCH_DEG,
         initial_linear_velocity_mm_s: tuple[float, float, float] = (0.0, 0.0, 0.0),
-        wingbeat_hz: float = 200.0,
+        initial_wing_phase: float = 0.0,
+        wingbeat_hz: float = 218.0,
         dng02_mean_gain: float = 0.30,
         dng02_steering_gain: float = 0.50,
         min_scale: float = 0.65,
@@ -90,6 +91,8 @@ class FlyBodyWingAdapter:
             raise ValueError("invalid wing amplitude scale limits")
         if not math.isfinite(flight_body_pitch_deg):
             raise ValueError("flight_body_pitch_deg must be finite")
+        if not math.isfinite(initial_wing_phase):
+            raise ValueError("initial_wing_phase must be finite")
         if tethered and world is not None:
             raise ValueError("custom world is only supported for free-body simulations")
 
@@ -102,6 +105,7 @@ class FlyBodyWingAdapter:
         self.tethered = bool(tethered)
         self.flight_body_pitch_deg = float(flight_body_pitch_deg)
         self.initial_linear_velocity_mm_s = initial_velocity.copy()
+        self.initial_wing_phase = float(initial_wing_phase) % (2.0 * math.pi)
         self.wingbeat_hz = float(wingbeat_hz)
         self.dng02_mean_gain = float(dng02_mean_gain)
         self.dng02_steering_gain = float(dng02_steering_gain)
@@ -164,12 +168,11 @@ class FlyBodyWingAdapter:
             if add_obstacle_contacts is not None:
                 add_obstacle_contacts(self.fly)
 
-        # BaseWorld.add_fly() copies FlyBody's global options into the parent world.
-        # FlyGym 2.1's generated globals retain source density/viscosity even though
-        # the parsed model uses mm. Override them only when the restored wing-fluid
-        # model is active so MuJoCo sees the same physical air after unit conversion.
-        if self.wing_aerodynamics_enabled:
-            apply_flight_air_parameters(active_world)
+        # BaseWorld.add_fly() copies FlyBody's globals into the parent world, but
+        # FlyGym's parsed model is in mm whereas the source air values are authored
+        # for cm. Correct the global air values regardless of whether the explicit
+        # wing-fluid geoms are enabled, so aero/no-aero controls share one unit system.
+        apply_flight_air_parameters(active_world)
 
         if enable_observer_camera:
             # MjSpec.attach() prefixes element names with the fly namespace.
@@ -183,9 +186,6 @@ class FlyBodyWingAdapter:
         self.sim = Simulation(active_world, timestep=FLIGHT_PHYSICS_TIMESTEP_S)
         self.sim.reset()
         self.timestep = float(self.sim.mj_model.opt.timestep)
-        self._time = 0.0
-        if not self.tethered:
-            self.set_root_linear_velocity_mm_s(self.initial_linear_velocity_mm_s)
 
         self._all_dofs = list(self.fly.get_jointdofs_order())
         self._actuated_dofs = list(
@@ -219,6 +219,8 @@ class FlyBodyWingAdapter:
         self._thorax_index = next(
             i for i, segment in enumerate(body_order) if segment.name == "c_thorax"
         )
+        self._time = 0.0
+        self._initialize_episode_state()
 
     @staticmethod
     def _dof_key(dof) -> tuple[str, str, str]:
@@ -231,7 +233,21 @@ class FlyBodyWingAdapter:
             raise RuntimeError(f"expected one root freejoint, found {len(free_ids)}")
         return int(self.sim.mj_model.jnt_dofadr[int(free_ids[0])])
 
-    def set_root_linear_velocity_mm_s(self, velocity: np.ndarray | tuple[float, float, float]) -> None:
+    def _wing_state_addresses(self, dof) -> tuple[int, int]:
+        joint_name = self.fly.jointdof_to_mjcfjoint[dof].name
+        joint_id = mj.mj_name2id(
+            self.sim.mj_model, mj.mjtObj.mjOBJ_JOINT, joint_name
+        )
+        if joint_id < 0:
+            raise RuntimeError(f"compiled FlyBody wing joint not found: {joint_name}")
+        return (
+            int(self.sim.mj_model.jnt_qposadr[joint_id]),
+            int(self.sim.mj_model.jnt_dofadr[joint_id]),
+        )
+
+    def set_root_linear_velocity_mm_s(
+        self, velocity: np.ndarray | tuple[float, float, float]
+    ) -> None:
         if self.tethered:
             raise RuntimeError("tethered FlyBody has no free root velocity")
         vector = np.asarray(velocity, dtype=np.float64)
@@ -249,11 +265,35 @@ class FlyBodyWingAdapter:
             self.sim.mj_data.qvel[dof_address : dof_address + 3], dtype=np.float64
         ).copy()
 
+    def _initialize_episode_state(self) -> None:
+        """Place wings on the analytic cycle and apply the one-shot root velocity."""
+
+        phase = self.initial_wing_phase
+        target = self._neutral_target.copy()
+        pattern = self._wing_pattern(phase, 1.0)
+        velocity = self._wing_pattern_velocity(phase, 1.0)
+        for side in ("left", "right"):
+            for axis in ("yaw", "roll", "pitch"):
+                actuator_index = self._wing_indices[(side, axis)]
+                dof = self._actuated_dofs[actuator_index]
+                qpos_address, qvel_address = self._wing_state_addresses(dof)
+                self.sim.mj_data.qpos[qpos_address] = pattern[axis]
+                self.sim.mj_data.qvel[qvel_address] = velocity[axis]
+                target[actuator_index] = pattern[axis]
+
+        if not self.tethered:
+            root_dof = self._root_freejoint_dof_address()
+            self.sim.mj_data.qvel[root_dof : root_dof + 3] = (
+                self.initial_linear_velocity_mm_s
+            )
+
+        self.sim.set_actuator_inputs(self.fly.name, ActuatorType.POSITION, target)
+        self._time = phase / (2.0 * math.pi * self.wingbeat_hz)
+        mj.mj_forward(self.sim.mj_model, self.sim.mj_data)
+
     def reset(self) -> None:
         self.sim.reset()
-        self._time = 0.0
-        if not self.tethered:
-            self.set_root_linear_velocity_mm_s(self.initial_linear_velocity_mm_s)
+        self._initialize_episode_state()
 
     @staticmethod
     def _bounded_activity(value: float) -> float:
@@ -296,6 +336,23 @@ class FlyBodyWingAdapter:
             "pitch": 0.8 + amplitude_scale * 1.35 * math.sin(phase),
         }
 
+    def _wing_pattern_velocity(
+        self, phase: float, amplitude_scale: float
+    ) -> dict[str, float]:
+        omega = 2.0 * math.pi * self.wingbeat_hz
+        return {
+            "yaw": amplitude_scale
+            * 1.1
+            * math.cos(phase - math.pi / 2.0)
+            * omega,
+            "roll": amplitude_scale
+            * 0.25
+            * 1.5
+            * math.cos(1.5 * phase)
+            * omega,
+            "pitch": amplitude_scale * 1.35 * math.cos(phase) * omega,
+        }
+
     def step(self, drive: WingDrive, *, physics_steps: int = 1) -> None:
         if physics_steps < 1:
             raise ValueError("physics_steps must be >= 1")
@@ -321,14 +378,20 @@ class FlyBodyWingAdapter:
     def ommatidia_readouts(self) -> np.ndarray:
         if not self.vision_enabled:
             raise RuntimeError("vision was not enabled for this FlyBody instance")
-        return np.asarray(self.sim.get_ommatidia_readouts(self.fly.name), dtype=np.float32)
+        return np.asarray(
+            self.sim.get_ommatidia_readouts(self.fly.name), dtype=np.float32
+        )
 
     def wing_joint_angles_rad(self) -> dict[str, float]:
-        all_angles = np.asarray(self.sim.get_joint_angles(self.fly.name), dtype=np.float64)
+        all_angles = np.asarray(
+            self.sim.get_joint_angles(self.fly.name), dtype=np.float64
+        )
         all_index = {self._dof_key(dof): i for i, dof in enumerate(self._all_dofs)}
         result: dict[str, float] = {}
         for side, axis in sorted(self._wing_indices):
             actuator_idx = self._wing_indices[(side, axis)]
             dof = self._actuated_dofs[actuator_idx]
-            result[f"{side}_{axis}"] = float(all_angles[all_index[self._dof_key(dof)]])
+            result[f"{side}_{axis}"] = float(
+                all_angles[all_index[self._dof_key(dof)]]
+            )
         return result
