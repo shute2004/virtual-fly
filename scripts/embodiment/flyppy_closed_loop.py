@@ -34,6 +34,7 @@ from flybody_adapter import FlyBodyWingAdapter, WingDrive
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from neural_bridge_client import NeuralBridgeClient
+from synapse_monitor import SynapseMonitor, SynapseMonitorConfig
 from training_visualizer import TrainingVisualizer
 from visual_motion_encoder import VerticalMotionEncoder
 
@@ -85,6 +86,23 @@ def parse_args() -> argparse.Namespace:
         help="3D playback speed relative to simulated time (default: 0.2x)",
     )
     parser.add_argument("--video-fps", type=int, default=30)
+    parser.add_argument(
+        "--synapse-trace",
+        action="store_true",
+        help=(
+            "at low frequency, dump current CNS weights and keep only aggregate "
+            "plasticity statistics plus the largest changed synapses; off by default"
+        ),
+    )
+    parser.add_argument("--synapse-top-n", type=int, default=64)
+    parser.add_argument(
+        "--synapse-trace-every",
+        type=int,
+        default=1,
+        metavar="EPISODES",
+        help="capture a synapse-change snapshot every N episodes",
+    )
+    parser.add_argument("--synapse-min-delta", type=float, default=1e-7)
     return parser.parse_args()
 
 
@@ -118,6 +136,10 @@ def main() -> int:
         raise SystemExit("gate-count and trajectory-stride must be >= 1")
     if args.playback_speed <= 0.0 or args.video_fps <= 0:
         raise SystemExit("playback-speed and video-fps must be positive")
+    if args.synapse_top_n < 1 or args.synapse_trace_every < 1:
+        raise SystemExit("synapse-top-n and synapse-trace-every must be >= 1")
+    if args.synapse_min_delta < 0.0:
+        raise SystemExit("synapse-min-delta must be >= 0")
 
     visualization_enabled = args.render or args.record_video is not None
     course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
@@ -135,6 +157,19 @@ def main() -> int:
     trajectory_path = args.output_dir / "trajectory.jsonl"
     summary_path = args.output_dir / "summary.json"
     learned_weights_path = args.output_dir / "learned_weights.f32le"
+    synapse_trace_path = args.output_dir / "synapse-snapshots.jsonl"
+    if args.synapse_trace:
+        synapse_trace_path.unlink(missing_ok=True)
+        synapse_monitor: SynapseMonitor | None = SynapseMonitor(
+            snapshot=args.snapshot,
+            output=synapse_trace_path,
+            config=SynapseMonitorConfig(
+                top_n=args.synapse_top_n,
+                min_abs_delta=args.synapse_min_delta,
+            ),
+        )
+    else:
+        synapse_monitor = None
 
     episode_results: list[dict[str, object]] = []
     total_passed = 0
@@ -209,6 +244,8 @@ def main() -> int:
                         step_count = control_step + 1
 
                         event = course.update(x_mm, z_mm)
+                        reward_stimulated = False
+                        aversive_stimulated = False
                         if event.passed_gate:
                             episode_passed += 1
                             total_passed += 1
@@ -218,6 +255,7 @@ def main() -> int:
                                 args.reward_current,
                                 args.reinforcement_steps,
                             )
+                            reward_stimulated = True
                         if event.collision:
                             collision = True
                             total_collisions += 1
@@ -227,6 +265,7 @@ def main() -> int:
                                 args.aversive_current,
                                 args.reinforcement_steps,
                             )
+                            aversive_stimulated = True
                         if event.finished:
                             finished = True
 
@@ -248,6 +287,8 @@ def main() -> int:
                                         "motor_left": left,
                                         "motor_right": right,
                                         "visual_stimuli": sensory,
+                                        "reward_stimulated": reward_stimulated,
+                                        "aversive_stimulated": aversive_stimulated,
                                         "passed_gate": event.passed_gate,
                                         "collision": event.collision,
                                         "finished": event.finished,
@@ -264,6 +305,25 @@ def main() -> int:
                     if visualizer.enabled:
                         saved = visualizer.end_episode(save=True)
                         video_path = str(saved) if saved is not None else None
+
+                    synapse_snapshot = None
+                    if synapse_monitor is not None and (
+                        (episode + 1) % args.synapse_trace_every == 0
+                        or episode + 1 == args.episodes
+                    ):
+                        print(f"capturing synapse snapshot after episode {episode} ...")
+                        synapse_snapshot = synapse_monitor.capture(
+                            brain,
+                            episode=episode,
+                            control_step=step_count,
+                        )
+                        print(
+                            "synapse_changed={} max_abs_delta={:.6f}".format(
+                                synapse_snapshot["changed_synapses"],
+                                synapse_snapshot["max_abs_delta"],
+                            )
+                        )
+
                     result = {
                         "episode": episode,
                         "control_steps": step_count,
@@ -274,6 +334,7 @@ def main() -> int:
                         "min_z_mm": min_z,
                         "max_z_mm": max_z,
                         "video": video_path,
+                        "synapse_snapshot": synapse_snapshot is not None,
                     }
                     episode_results.append(result)
                     print(
@@ -321,10 +382,13 @@ def main() -> int:
             "eligibility, and body state are not yet serialized."
         ),
         "visualization": {
-            "live": bool(args.render),
+            "live_body_3d": bool(args.render),
             "record_dir": str(args.record_video) if args.record_video else None,
             "playback_speed": args.playback_speed,
             "fps": args.video_fps,
+            "trajectory_trace": str(trajectory_path),
+            "synapse_trace": str(synapse_trace_path) if args.synapse_trace else None,
+            "synapse_top_n": args.synapse_top_n if args.synapse_trace else None,
         },
         "episode_results": episode_results,
         "sensory_interface": (
@@ -344,6 +408,8 @@ def main() -> int:
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(f"summary={summary_path}")
     print(f"trajectory={trajectory_path}")
+    if args.synapse_trace:
+        print(f"synapse_trace={synapse_trace_path}")
     print(f"elapsed={elapsed:.3f}s")
     print("flyppy_closed_loop=PASS")
     return 0
