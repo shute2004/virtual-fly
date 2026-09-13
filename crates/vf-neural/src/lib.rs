@@ -7,4 +7,4 @@ pub mod gpu;
 
 pub use cpu::{CpuRuntime, StepSummary};
 pub use model::{BackendKind, NeuralParams, Stimulus};
-pub use snapshot::{ConnectomeSnapshot, SnapshotManifest};
+pub use snapshot::{ConnectomeSnapshot, EdgeInput, SnapshotManifest};
