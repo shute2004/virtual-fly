@@ -19,12 +19,16 @@ from flygym import Simulation
 from flygym.compose import ActuatorType, KinematicPosePreset, TetheredWorld
 from flygym.compose.fly import FlyBody
 from flygym.flybody.anatomy_flybody import (
-    FlyBodyActuatedDOFPreset,
     FlyBodyAxisOrder,
     FlyBodyJointPreset,
     FlyBodySkeleton,
 )
 from flygym.utils.math import Rotation3D
+
+from flybody_flight_physics import (
+    FLIGHT_PHYSICS_TIMESTEP_S,
+    add_flight_position_actuators,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,8 +56,10 @@ def build_simulation() -> tuple[FlyBody, Simulation]:
     )
     fly.add_joints(skeleton, KinematicPosePreset.FLYBODY_NEUTRAL)
 
-    actuated_dofs = skeleton.get_actuated_dofs_from_preset(FlyBodyActuatedDOFPreset.ALL)
-    fly.add_actuators(actuated_dofs, ActuatorType.POSITION)
+    # Use the same six-wing-DOF actuator boundary as the real flight adapter.
+    # In particular, do not use FlyGym's ALL preset: it includes non-flight joints
+    # such as halteres and would exercise a different actuator topology than Flyppy.
+    add_flight_position_actuators(fly, list(skeleton.iter_jointdofs()))
     fly.add_tendons()
     fly.add_tendon_actuators()
 
@@ -63,7 +69,7 @@ def build_simulation() -> tuple[FlyBody, Simulation]:
         (0.0, 0.0, 0.0),
         Rotation3D("quat", (1.0, 0.0, 0.0, 0.0)),
     )
-    return fly, Simulation(world)
+    return fly, Simulation(world, timestep=FLIGHT_PHYSICS_TIMESTEP_S)
 
 
 def main() -> int:
@@ -76,6 +82,12 @@ def main() -> int:
 
     all_dofs = list(fly.get_jointdofs_order())
     actuated_dofs = list(fly.get_actuated_jointdofs_order(ActuatorType.POSITION))
+    if len(actuated_dofs) != 6 or not all(dof.child.is_wing() for dof in actuated_dofs):
+        raise RuntimeError(
+            "wing smoke must expose exactly six wing POSITION actuator DoFs, got "
+            f"{[dof_key(dof) for dof in actuated_dofs]}"
+        )
+
     all_index = {dof_key(dof): i for i, dof in enumerate(all_dofs)}
     neutral_joint_angles = np.asarray(sim.get_joint_angles(fly.name), dtype=np.float64)
     target = np.asarray(
@@ -83,14 +95,7 @@ def main() -> int:
         dtype=np.float64,
     )
 
-    wing_actuator_indices = np.asarray(
-        [i for i, dof in enumerate(actuated_dofs) if dof.child.is_wing()],
-        dtype=np.int64,
-    )
-    if len(wing_actuator_indices) != 6:
-        raise RuntimeError(
-            f"expected 6 FlyBody wing DoFs (pitch/roll/yaw x2), got {len(wing_actuator_indices)}"
-        )
+    wing_actuator_indices = np.arange(len(actuated_dofs), dtype=np.int64)
 
     # Use opposite phases on left/right stroke-related axes. This is only an
     # interface excitation pattern; it is not claimed to be a biological motor program.
