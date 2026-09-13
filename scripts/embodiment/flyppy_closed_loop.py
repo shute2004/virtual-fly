@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import time
 
 import numpy as np
@@ -87,7 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-every",
         type=int,
-        default=1,
+        default=8,
         metavar="EPISODES",
         help="save full CNS state every N episodes; final episode is always saved",
     )
@@ -201,7 +202,6 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     trajectory_path = args.output_dir / "trajectory.jsonl"
     summary_path = args.output_dir / "summary.json"
-    learned_weights_path = args.output_dir / "learned_weights.f32le"
     synapse_trace_path = args.output_dir / "synapse-snapshots.jsonl"
     checkpoint_dir = args.checkpoint_dir or (args.output_dir / "checkpoint")
     resuming = args.resume_checkpoint is not None
@@ -210,6 +210,8 @@ def main() -> int:
     if not resuming:
         trajectory_path.unlink(missing_ok=True)
         synapse_trace_path.unlink(missing_ok=True)
+        if checkpoint_dir.exists():
+            shutil.rmtree(checkpoint_dir)
 
     if args.synapse_trace:
         synapse_monitor: SynapseMonitor | None = SynapseMonitor(
@@ -226,7 +228,6 @@ def main() -> int:
     episode_results: list[dict[str, object]] = []
     total_passed = 0
     total_collisions = 0
-    weight_checkpoint_info: dict[str, object] = {}
     state_checkpoint_info: dict[str, object] = {}
     resume_info: dict[str, object] | None = None
     started = time.perf_counter()
@@ -387,12 +388,14 @@ def main() -> int:
                             )
                         )
 
+                    checkpoint_saved_this_episode = False
                     if (
                         (local_episode + 1) % args.checkpoint_every == 0
                         or local_episode + 1 == args.episodes
                     ):
                         print(f"saving full CNS checkpoint after episode {episode} ...")
                         state_checkpoint_info = brain.save_checkpoint(checkpoint_dir)
+                        checkpoint_saved_this_episode = True
                         print(
                             "checkpoint={} neural_step={}".format(
                                 state_checkpoint_info.get("path"),
@@ -411,8 +414,7 @@ def main() -> int:
                         "max_z_mm": max_z,
                         "video": video_path,
                         "synapse_snapshot": synapse_snapshot is not None,
-                        "checkpoint_saved": bool(state_checkpoint_info)
-                        and state_checkpoint_info.get("path") == str(checkpoint_dir),
+                        "checkpoint_saved": checkpoint_saved_this_episode,
                     }
                     episode_results.append(result)
                     print(
@@ -427,19 +429,11 @@ def main() -> int:
                     )
                     trajectory_file.flush()
 
-                print("saving learned synaptic weights ...")
-                weight_checkpoint_info = brain.save_weights(learned_weights_path)
-                print(
-                    "learned_weights={} count={}".format(
-                        weight_checkpoint_info.get("path"),
-                        weight_checkpoint_info.get("weights"),
-                    )
-                )
-
     elapsed = time.perf_counter() - started
     passed_by_episode = [int(item["passed_gates"]) for item in episode_results]
     first_half = passed_by_episode[: max(1, len(passed_by_episode) // 2)]
     second_half = passed_by_episode[len(passed_by_episode) // 2 :]
+    checkpoint_weight_file = checkpoint_dir / "weights.f32le"
     summary = {
         "schema_version": 2,
         "experiment": "flyppy_closed_loop_v0",
@@ -467,8 +461,7 @@ def main() -> int:
             "reconstructed from the same snapshot/configuration. Body/environment state "
             "is intentionally reset at the episode boundary."
         ),
-        "learned_weights_file": str(learned_weights_path),
-        "learned_weight_count": weight_checkpoint_info.get("weights"),
+        "learned_weights_file": str(checkpoint_weight_file),
         "visualization": {
             "live_body_3d": bool(args.render),
             "record_dir": str(args.record_video) if args.record_video else None,
