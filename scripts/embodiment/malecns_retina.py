@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Local optical stimulation of MaleCNS R1-R6 photoreceptors.
+"""Local optical stimulation of released MaleCNS R1-R6 photoreceptors.
 
 This module deliberately does not detect motion, edges, obstacles, gap position, or
-any other visual feature outside the nervous system. Each observed MaleCNS lamina
-cartridge samples one local point in the corresponding FlyBody eye image; that
-local light is converted to current for the actual R1-R6 body IDs that connect to
-the cartridge's L1 neuron. All subsequent spatial/temporal integration is left to
-the MaleCNS network.
+any other visual feature outside the nervous system. Each inferred MaleCNS optical
+column samples one local point in the corresponding FlyBody eye image; that local
+light is converted to current for the released R1-R6 body IDs assigned to the
+column. All subsequent spatial/temporal integration is left to the MaleCNS network.
 
 Provenance boundaries:
-- L1 optic-column coordinates and R1-R6 -> L1 wiring: MaleCNS-derived map;
+- R1-R6 identity, root side, lamina wiring and assignedOlHex coordinates:
+  MaleCNS-derived map;
 - hex-lattice unrolling into the FlyBody eye camera: calibrated geometric seam;
 - local green-channel irradiance -> injected current gain: calibrated transduction seam.
 
-The Flyppy world is achromatic, so one local rendered color channel is sufficient
-to represent local brightness without combining spatial samples or extracting a
-visual feature. A future spectral/phototransduction model can replace only this
-local conversion without changing the retinotopic boundary.
+The Flyppy world is achromatic, so one local rendered color channel is used as a
+local brightness proxy without combining spatial samples or extracting a visual
+feature. A future spectral/phototransduction model can replace only this local
+conversion without changing the retinotopic boundary.
 """
 
 from __future__ import annotations
@@ -26,6 +26,11 @@ import json
 from pathlib import Path
 
 import numpy as np
+
+
+EXPECTED_ASSIGNMENT_METHOD = (
+    "dominant_R1-R6_contacts_to_coordinate_L1_L2_L3_with_R1-R6_rootSide"
+)
 
 
 @dataclass(frozen=True)
@@ -51,13 +56,12 @@ class MaleCNSRetina:
             raise ValueError("current_floor must be finite and non-negative")
 
         data = json.loads(mapping_path.read_text(encoding="utf-8"))
-        if data.get("schema_version") != 2:
+        if data.get("schema_version") != 3:
             raise ValueError("unsupported retinotopic vision map schema")
-        if data.get("assignment_method") != (
-            "observed_R1-R6_to_L1_connectivity_with_observed_L1_hex"
-        ):
+        if data.get("assignment_method") != EXPECTED_ASSIGNMENT_METHOD:
             raise ValueError(
-                "retinotopic map was not built from observed R1-R6 -> L1 wiring"
+                "retinotopic map was not built from the expected MaleCNS lamina "
+                "contact-distribution inference"
             )
         columns = data.get("columns")
         if not isinstance(columns, list) or not columns:
