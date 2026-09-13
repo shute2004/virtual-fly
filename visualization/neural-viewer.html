@@ -29,6 +29,14 @@
     #status { color: #8fc7ff; min-height: 18px; }
     code { color: #c5d3e0; }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
 <div id="root">
@@ -78,8 +86,8 @@
   </aside>
 </div>
 <script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const host = document.getElementById('scene');
 const scene = new THREE.Scene();
@@ -256,8 +264,20 @@ function cylinderBetween(a, b, radius, color, opacity) {
   cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
   return cylinder;
 }
+function disposeObject(object) {
+  object.traverse(child => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      if (Array.isArray(child.material)) child.material.forEach(material => material.dispose());
+      else child.material.dispose();
+    }
+  });
+}
 function renderSynapses(snapshot) {
-  synapseRoot.clear();
+  for (const child of [...synapseRoot.children]) {
+    disposeObject(child);
+    synapseRoot.remove(child);
+  }
   if (!snapshot?.top_changed?.length) return;
   const max = Math.max(...snapshot.top_changed.map(e => Number(e.abs_delta || 0)), 1e-9);
   for (const edge of snapshot.top_changed) {
