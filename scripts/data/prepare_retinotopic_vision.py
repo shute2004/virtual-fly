@@ -1,23 +1,30 @@
 #!/usr/bin/env python3
-"""Build the MaleCNS R1-R6 retinotopic stimulation map from observed wiring.
+"""Build a MaleCNS R1-R6 retinotopic stimulation map from released wiring.
 
-The spatial unit is the lamina cartridge represented by an L1 neuron carrying the
-official MaleCNS optic-lobe coordinates ``assignedOlHex1`` / ``assignedOlHex2``.
-Each annotated R1-R6 photoreceptor is assigned to the coordinate-bearing L1 target
-with which it has the largest released synapse count.
+The released MaleCNS volume does not contain a complete anatomical eye map for
+outer photoreceptors.  In particular, the lamina is incompletely contained and
+R1-R6 reconstructions are an undercount of the biological eye.  We therefore do
+not fabricate missing receptors or force six cells into every column.
 
-This deliberately follows neural superposition rather than assigning R1-R6 to
-columns by row order or by an assumed one-ommatidium grouping. Weak secondary
-R1-R6 -> L1 contacts are not treated as additional optical-axis assignments. If a
-photoreceptor has an exact tie for its strongest L1 target, the map is considered
-ambiguous and this script fails instead of guessing.
+For every released neuron whose official MaleCNS ``type`` is exactly ``R1-R6``:
+
+1. collect all released synaptic contacts onto coordinate-bearing L1/L2/L3
+   neurons;
+2. sum those contacts by the target's ``assignedOlHex1/assignedOlHex2`` column;
+3. assign the photoreceptor to the column with the largest total observed contact
+   count;
+4. use the R1-R6 neuron's own ``rootSide`` as eye side.
+
+This follows the same information-preserving inference used by an existing
+MaleCNS retinal projection implementation.  Exact ties are left unmapped rather
+than broken arbitrarily.  The map is a sensory-coordinate inference only; the
+released neural graph itself is never filtered or rewritten.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -31,11 +38,7 @@ ANNOTATION_URL = (
     "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/"
     f"flat-connectome/{ANNOTATION_FILENAME}"
 )
-# MaleCNS/FlyWire annotations encountered in the ecosystem use forms such as
-# R1-R6, R1-6, and occasionally underscore-separated variants.
-R1_R6_PATTERN = re.compile(
-    r"(?:^|[^A-Za-z0-9])R1(?:-|–|_)R?6(?:$|[^A-Za-z0-9])", re.I
-)
+LAMINA_ANCHOR_TYPES = frozenset(("L1", "L2", "L3"))
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,143 +90,147 @@ def text_series(frame: pd.DataFrame, name: str) -> pd.Series:
     return frame[name].fillna("").astype(str)
 
 
-def searchable_types(frame: pd.DataFrame) -> pd.Series:
-    fields = [text_series(frame, name) for name in ("type", "flywireType", "instance")]
-    return fields[0] + " | " + fields[1] + " | " + fields[2]
-
-
-def r1_r6_mask(frame: pd.DataFrame) -> np.ndarray:
-    return searchable_types(frame).map(
-        lambda value: bool(R1_R6_PATTERN.search(value))
-    ).to_numpy()
-
-
-def l1_mask(frame: pd.DataFrame) -> np.ndarray:
-    return searchable_types(frame).str.contains(
-        r"(?:^|\W)L1(?:$|\W)", case=False, regex=True
-    ).to_numpy()
-
-
-def side_values(frame: pd.DataFrame) -> np.ndarray:
-    # Some optic-lobe neurons have no soma-side label. Prefer the direct `side`
-    # field, then somaSide, then rootSide; all are observed MaleCNS metadata.
-    result = np.full(len(frame), "", dtype=object)
-    for name in ("side", "somaSide", "rootSide"):
-        values = text_series(frame, name).str.upper().str.strip().to_numpy(dtype=str)
-        take = (result == "") & np.isin(values, ["L", "R"])
-        result[take] = values[take]
-    return np.asarray(result, dtype=str)
-
-
 def numeric_coordinate(series: pd.Series) -> np.ndarray:
     return pd.to_numeric(series, errors="coerce").to_numpy(dtype=np.float64)
 
 
-def connectivity_columns(
+def root_sides(frame: pd.DataFrame) -> np.ndarray:
+    return text_series(frame, "rootSide").str.upper().str.strip().to_numpy(dtype=str)
+
+
+def build_projection(
     annotations: pd.DataFrame,
     body_ids: np.ndarray,
     row_offsets: np.ndarray,
     pre_indices: np.ndarray,
     synapse_counts: np.ndarray,
-) -> tuple[list[dict[str, object]], dict[str, int]]:
+) -> tuple[list[dict[str, object]], dict[str, object]]:
     aligned = (
         annotations.drop_duplicates("bodyId")
         .set_index("bodyId")
         .reindex(body_ids)
         .reset_index()
     )
-    r_mask = r1_r6_mask(aligned)
-    l_mask = l1_mask(aligned)
-    sides = side_values(aligned)
+    types = text_series(aligned, "type")
+    receptor_mask = types.eq("R1-R6").to_numpy()
+    anchor_mask = types.isin(LAMINA_ANCHOR_TYPES).to_numpy()
     h1 = numeric_coordinate(aligned["assignedOlHex1"])
     h2 = numeric_coordinate(aligned["assignedOlHex2"])
+    sides = root_sides(aligned)
+    coordinate_anchor_mask = anchor_mask & np.isfinite(h1) & np.isfinite(h2)
 
-    valid_l1: dict[int, tuple[str, int, int]] = {}
-    # For each R1-R6 neuron, collect every observed connection to a coordinate-bearing
-    # L1 cartridge together with the released synapse count on that edge.
-    candidates: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    # Incoming CSR is arranged by post neuron.  Aggregate every observed
+    # R1-R6 -> L1/L2/L3 edge into a per-receptor, per-column contact total.
+    receptor_columns: dict[int, dict[tuple[int, int], int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    receptor_anchor_types: dict[int, dict[tuple[int, int], Counter[str]]] = defaultdict(
+        lambda: defaultdict(Counter)
+    )
     raw_candidate_edges = 0
 
-    for post_idx in np.flatnonzero(l_mask):
-        side = sides[post_idx]
-        if (
-            side not in ("L", "R")
-            or not np.isfinite(h1[post_idx])
-            or not np.isfinite(h2[post_idx])
-        ):
-            continue
-
-        valid_l1[int(post_idx)] = (side, int(h1[post_idx]), int(h2[post_idx]))
+    for post_idx in np.flatnonzero(coordinate_anchor_mask):
+        key = (int(h1[post_idx]), int(h2[post_idx]))
+        anchor_type = str(types.iloc[post_idx])
         begin = int(row_offsets[post_idx])
         end = int(row_offsets[post_idx + 1])
         incoming = pre_indices[begin:end].astype(np.int64, copy=False)
         counts = synapse_counts[begin:end].astype(np.uint32, copy=False)
-        receptor_mask = r_mask[incoming]
-        receptor_indices = incoming[receptor_mask]
-        receptor_counts = counts[receptor_mask]
-
-        for pre_idx, count in zip(receptor_indices.tolist(), receptor_counts.tolist(), strict=True):
-            candidates[int(pre_idx)].append((int(post_idx), int(count)))
+        keep = receptor_mask[incoming]
+        for pre_idx, count in zip(
+            incoming[keep].tolist(), counts[keep].tolist(), strict=True
+        ):
+            receptor_columns[int(pre_idx)][key] += int(count)
+            receptor_anchor_types[int(pre_idx)][key][anchor_type] += int(count)
             raw_candidate_edges += 1
 
-    assignments: dict[int, list[tuple[int, int]]] = defaultdict(list)
-    ambiguous: list[dict[str, object]] = []
-    multi_target_receptors = 0
+    # Group non-ambiguous receptor assignments by eye side + optical column.
+    grouped: dict[tuple[str, int, int], list[dict[str, object]]] = defaultdict(list)
+    confidences: list[float] = []
+    ambiguous_ties: list[dict[str, object]] = []
+    invalid_side: list[int] = []
+    multi_column_candidates = 0
 
-    for pre_idx, targets in candidates.items():
-        if len(targets) > 1:
-            multi_target_receptors += 1
-        max_count = max(count for _, count in targets)
-        winners = [(post_idx, count) for post_idx, count in targets if count == max_count]
-        winner_posts = sorted({post_idx for post_idx, _ in winners})
-        if len(winner_posts) != 1:
-            ambiguous.append(
+    for pre_idx in np.flatnonzero(receptor_mask):
+        side = str(sides[pre_idx])
+        if side not in ("L", "R"):
+            invalid_side.append(int(body_ids[pre_idx]))
+            continue
+        counts_by_column = receptor_columns.get(int(pre_idx))
+        if not counts_by_column:
+            continue
+        if len(counts_by_column) > 1:
+            multi_column_candidates += 1
+
+        max_contacts = max(counts_by_column.values())
+        winners = sorted(
+            key for key, contacts in counts_by_column.items() if contacts == max_contacts
+        )
+        total_contacts = int(sum(counts_by_column.values()))
+        if len(winners) != 1:
+            ambiguous_ties.append(
                 {
                     "r1_r6_body_id": int(body_ids[pre_idx]),
-                    "max_synapse_count": int(max_count),
-                    "l1_targets": [
-                        {
-                            "l1_body_id": int(body_ids[post_idx]),
-                            "side": valid_l1[post_idx][0],
-                            "hex1": valid_l1[post_idx][1],
-                            "hex2": valid_l1[post_idx][2],
-                        }
-                        for post_idx in winner_posts
-                    ],
+                    "root_side": side,
+                    "max_column_contacts": int(max_contacts),
+                    "total_anchor_contacts": total_contacts,
+                    "tied_columns": [list(key) for key in winners],
                 }
             )
             continue
-        assignments[winner_posts[0]].append((pre_idx, max_count))
 
-    if ambiguous:
-        raise RuntimeError(
-            "R1-R6 neurons have exact ties for strongest coordinate-bearing L1 target; "
-            f"refusing to guess optical-column assignment: {ambiguous[:8]}"
+        hex1, hex2 = winners[0]
+        confidence = float(max_contacts / total_contacts)
+        confidences.append(confidence)
+        grouped[(side, hex1, hex2)].append(
+            {
+                "body_id": int(body_ids[pre_idx]),
+                "dominant_contacts": int(max_contacts),
+                "total_anchor_contacts": total_contacts,
+                "projection_confidence": confidence,
+                "anchor_contact_breakdown": dict(
+                    sorted(receptor_anchor_types[int(pre_idx)][(hex1, hex2)].items())
+                ),
+            }
         )
 
     columns: list[dict[str, object]] = []
-    for post_idx, receptors in sorted(assignments.items()):
-        side, hex1, hex2 = valid_l1[post_idx]
-        receptors = sorted(receptors, key=lambda item: int(body_ids[item[0]]))
+    for (side, hex1, hex2), receptors in sorted(grouped.items()):
+        receptors.sort(key=lambda item: int(item["body_id"]))
         columns.append(
             {
                 "side": side,
                 "hex1": hex1,
                 "hex2": hex2,
-                "l1_body_id": int(body_ids[post_idx]),
-                "r1_r6_body_ids": [int(body_ids[index]) for index, _ in receptors],
-                "r1_r6_assignment_synapses": {
-                    str(int(body_ids[index])): int(count) for index, count in receptors
-                },
-                "assignment": "strongest_observed_R1-R6_to_L1_synapse_count",
+                "r1_r6_body_ids": [int(item["body_id"]) for item in receptors],
+                "r1_r6_assignments": receptors,
+                "assignment": "dominant_observed_contacts_to_L1_L2_L3_column",
             }
         )
 
-    diagnostics = {
-        "coordinate_bearing_l1": len(valid_l1),
-        "r1_r6_with_l1_candidates": len(candidates),
-        "raw_r1_r6_to_l1_candidate_edges": raw_candidate_edges,
-        "r1_r6_with_multiple_l1_targets": multi_target_receptors,
+    total_receptors = int(receptor_mask.sum())
+    mapped_receptors = int(sum(len(item["r1_r6_body_ids"]) for item in columns))
+    candidate_receptors = len(receptor_columns)
+    confidence_array = np.asarray(confidences, dtype=np.float64)
+    diagnostics: dict[str, object] = {
+        "annotated_r1_r6_in_snapshot": total_receptors,
+        "coordinate_bearing_l1_l2_l3": int(coordinate_anchor_mask.sum()),
+        "r1_r6_with_anchor_contacts": candidate_receptors,
+        "mapped_r1_r6_neurons": mapped_receptors,
+        "unmapped_without_coordinate_anchor_contacts": total_receptors
+        - candidate_receptors,
+        "unmapped_invalid_root_side": len(invalid_side),
+        "unmapped_exact_ties": len(ambiguous_ties),
+        "r1_r6_with_multiple_candidate_columns": multi_column_candidates,
+        "raw_r1_r6_to_lamina_candidate_edges": raw_candidate_edges,
+        "projection_confidence_median": (
+            float(np.median(confidence_array)) if len(confidence_array) else 0.0
+        ),
+        "projection_confidence_below_0_8": int(
+            np.sum(confidence_array < 0.8)
+        ),
+        "invalid_root_side_sample": invalid_side[:16],
+        "exact_tie_sample": ambiguous_ties[:16],
     }
     return columns, diagnostics
 
@@ -241,22 +248,22 @@ def validate_columns(columns: list[dict[str, object]], minimum: int) -> None:
     )
     clashes = [key for key, count in coordinate_counts.items() if count > 1]
     if clashes:
-        raise RuntimeError(f"duplicate L1 optic-column coordinates: {clashes[:8]}")
+        raise RuntimeError(f"duplicate optic-column coordinates: {clashes[:8]}")
 
     body_to_columns: dict[int, list[tuple[str, int, int]]] = {}
     for item in columns:
         key = (str(item["side"]), int(item["hex1"]), int(item["hex2"]))
         for body_id in item["r1_r6_body_ids"]:
             body_to_columns.setdefault(int(body_id), []).append(key)
-    multi = {
+    duplicated = {
         body_id: keys
         for body_id, keys in body_to_columns.items()
         if len(set(keys)) > 1
     }
-    if multi:
+    if duplicated:
         raise RuntimeError(
-            "internal error: strongest-target assignment still produced duplicate R1-R6 "
-            f"column membership: {list(multi.items())[:8]}"
+            "internal error: one R1-R6 neuron was assigned to multiple optical columns: "
+            f"{list(duplicated.items())[:8]}"
         )
 
 
@@ -276,14 +283,20 @@ def main() -> int:
         raise RuntimeError("snapshot synapse_counts length is inconsistent with pre_indices")
 
     annotations = pd.read_feather(args.raw_annotations)
-    required = {"bodyId", "type", "assignedOlHex1", "assignedOlHex2"}
+    required = {
+        "bodyId",
+        "type",
+        "rootSide",
+        "assignedOlHex1",
+        "assignedOlHex2",
+    }
     missing = required - set(annotations.columns)
     if missing:
         raise RuntimeError(
             f"official annotation file is missing required retinotopy fields: {sorted(missing)}"
         )
 
-    columns, diagnostics = connectivity_columns(
+    columns, diagnostics = build_projection(
         annotations,
         body_ids,
         row_offsets,
@@ -292,46 +305,39 @@ def main() -> int:
     )
     validate_columns(columns, args.min_columns_per_side)
 
-    counts = Counter(str(item["side"]) for item in columns)
-    r_counts = Counter(len(item["r1_r6_body_ids"]) for item in columns)
-    unique_receptors = sorted(
-        {
-            int(body_id)
-            for item in columns
-            for body_id in item["r1_r6_body_ids"]
-        }
-    )
-    method = "dominant_R1-R6_to_L1_synapse_count_with_observed_L1_hex"
+    column_counts = Counter(str(item["side"]) for item in columns)
+    receptor_counts = Counter(len(item["r1_r6_body_ids"]) for item in columns)
+    method = "dominant_R1-R6_contacts_to_coordinate_L1_L2_L3_with_R1-R6_rootSide"
 
     output = {
-        "schema_version": 2,
+        "schema_version": 3,
         "dataset": "male-cns:v1.0",
-        "sensory_boundary": "R1-R6 photoreceptors",
-        "column_coordinate_system": "L1 MaleCNS assignedOlHex1/assignedOlHex2",
+        "sensory_boundary": "released R1-R6 photoreceptors",
+        "column_coordinate_system": "MaleCNS assignedOlHex1/assignedOlHex2",
         "assignment_method": method,
         "columns": columns,
         "counts": {
-            "left_columns": counts["L"],
-            "right_columns": counts["R"],
-            "unique_r1_r6_neurons": len(unique_receptors),
+            "left_columns": column_counts["L"],
+            "right_columns": column_counts["R"],
             "r1_r6_per_column_histogram": {
-                str(key): value for key, value in sorted(r_counts.items())
+                str(key): value for key, value in sorted(receptor_counts.items())
             },
             **diagnostics,
         },
         "provenance": {
+            "photoreceptor_identity": "observed: official MaleCNS type == R1-R6",
             "optic_column_coordinates": (
-                "observed: official MaleCNS assignedOlHex coordinates on L1"
+                "observed: official MaleCNS assignedOlHex coordinates on L1/L2/L3"
             ),
-            "photoreceptor_body_ids": (
-                "inferred from observed wiring: for each annotated R1-R6 neuron, choose "
-                "the coordinate-bearing L1 target with the largest released synapse count"
+            "eye_side": "observed: R1-R6 rootSide",
+            "column_assignment": (
+                "inferred from observed wiring: sum all released R1-R6 -> L1/L2/L3 "
+                "contacts by assignedOlHex column and choose the unique maximum"
             ),
-            "secondary_R1-R6_to_L1_contacts": (
-                "observed but not interpreted as additional optical-axis assignments"
+            "tie_policy": "leave exact ties unmapped; never guess",
+            "incomplete_volume_policy": (
+                "do not synthesize missing R1-R6 cells or force six cells per column"
             ),
-            "tie_policy": "fail on exact strongest-target tie; never guess",
-            "neural_superposition_rule": "literature",
             "no_visual_feature_extraction": True,
             "no_spatial_averaging": True,
         },
@@ -342,12 +348,28 @@ def main() -> int:
     )
 
     print(f"assignment_method={method}")
-    print(f"left_columns={counts['L']}")
-    print(f"right_columns={counts['R']}")
-    print(f"unique_r1_r6_neurons={len(unique_receptors)}")
-    print(f"r1_r6_per_column={dict(sorted(r_counts.items()))}")
-    print(f"coordinate_bearing_l1={diagnostics['coordinate_bearing_l1']}")
-    print(f"r1_r6_with_multiple_l1_targets={diagnostics['r1_r6_with_multiple_l1_targets']}")
+    print(f"left_columns={column_counts['L']}")
+    print(f"right_columns={column_counts['R']}")
+    print(f"annotated_r1_r6={diagnostics['annotated_r1_r6_in_snapshot']}")
+    print(f"mapped_r1_r6={diagnostics['mapped_r1_r6_neurons']}")
+    print(f"r1_r6_per_column={dict(sorted(receptor_counts.items()))}")
+    print(f"coordinate_bearing_l1_l2_l3={diagnostics['coordinate_bearing_l1_l2_l3']}")
+    print(
+        "r1_r6_with_multiple_candidate_columns={}".format(
+            diagnostics["r1_r6_with_multiple_candidate_columns"]
+        )
+    )
+    print(
+        "projection_confidence_median={:.6f}".format(
+            diagnostics["projection_confidence_median"]
+        )
+    )
+    print(
+        "projection_confidence_below_0_8={}".format(
+            diagnostics["projection_confidence_below_0_8"]
+        )
+    )
+    print(f"unmapped_exact_ties={diagnostics['unmapped_exact_ties']}")
     print(f"wrote {args.output}")
     return 0
 
