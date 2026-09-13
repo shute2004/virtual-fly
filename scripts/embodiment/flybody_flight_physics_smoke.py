@@ -46,12 +46,18 @@ def find_suffix(all_names: list[str], suffix: str) -> int:
     return matches[0]
 
 
-def require_spec_geom(body: FlyBodyWingAdapter, name: str):
-    """Return a source MjSpec geom whose compile-time-only fields can be inspected."""
+def require_attached_spec_geom(body: FlyBodyWingAdapter, compiled_name: str):
+    """Return an attached geom from the world's MjSpec.
 
-    geom = body.fly.mjcf_root.geom(name)
+    FlyGym 2.1 attaches the fly MjSpec into the world with a ``<fly-name>/``
+    prefix. After attachment, the world spec is the source of truth for
+    compile-time-only fields. Looking the geom up on ``fly.mjcf_root`` with its
+    pre-attach, unprefixed name is therefore invalid.
+    """
+
+    geom = body.world.mjcf_root.geom(compiled_name)
     if geom is None:
-        raise RuntimeError(f"FlyBody source MjSpec geom not found: {name}")
+        raise RuntimeError(f"attached world MjSpec geom not found: {compiled_name}")
     return geom
 
 
@@ -84,6 +90,7 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
     expected_fluid_prefix = np.asarray((1.0, *FLIGHT_FLUID_COEFS), dtype=np.float64)
     for spec in WING_FLIGHT_GEOMS:
         fluid_id = find_suffix(geom_names, spec.fluid_name)
+        fluid_compiled_name = geom_names[fluid_id]
         fluid_prefix = geom_fluid[fluid_id, :6]
         if not np.allclose(fluid_prefix, expected_fluid_prefix, rtol=0, atol=1e-12):
             raise RuntimeError(
@@ -95,6 +102,7 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
             )
 
         inertial_id = find_suffix(geom_names, spec.inertial_name)
+        inertial_compiled_name = geom_names[inertial_id]
         if not np.allclose(
             model.geom_size[inertial_id], spec.size_mm, rtol=0, atol=1e-12
         ):
@@ -103,17 +111,20 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
                 f"{model.geom_size[inertial_id].tolist()}"
             )
 
+        membrane_id = find_suffix(geom_names, spec.membrane_name)
+        membrane_compiled_name = geom_names[membrane_id]
+
         # Geom mass is a compile-time MjSpec property. MuJoCo folds geom mass and
         # inertia into body inertial properties and deliberately does not retain a
-        # geom_mass array in mjModel, so inspect the source MjSpec rather than a
-        # non-existent runtime field.
-        fluid_spec = require_spec_geom(body, spec.fluid_name)
+        # geom_mass array in mjModel, so inspect the attached world MjSpec rather
+        # than the pre-attach fly spec or a non-existent runtime field.
+        fluid_spec = require_attached_spec_geom(body, fluid_compiled_name)
         if not math.isclose(float(fluid_spec.mass), 0.0, rel_tol=0, abs_tol=1e-15):
             raise RuntimeError(
-                f"{spec.fluid_name} must be massless, got {fluid_spec.mass}"
+                f"{fluid_compiled_name} must be massless, got {fluid_spec.mass}"
             )
 
-        inertial_spec = require_spec_geom(body, spec.inertial_name)
+        inertial_spec = require_attached_spec_geom(body, inertial_compiled_name)
         if not math.isclose(
             float(inertial_spec.mass),
             FLIGHT_WING_INERTIAL_MASS,
@@ -121,15 +132,15 @@ def assert_compiled_flight_physics(body: FlyBodyWingAdapter) -> None:
             abs_tol=0,
         ):
             raise RuntimeError(
-                f"{spec.inertial_name} mass mismatch: {inertial_spec.mass}"
+                f"{inertial_compiled_name} mass mismatch: {inertial_spec.mass}"
             )
 
-        membrane_spec = require_spec_geom(body, spec.membrane_name)
+        membrane_spec = require_attached_spec_geom(body, membrane_compiled_name)
         if not math.isclose(
             float(membrane_spec.mass), 0.0, rel_tol=0, abs_tol=1e-15
         ):
             raise RuntimeError(
-                f"{spec.membrane_name} still carries transferred inertial mass: "
+                f"{membrane_compiled_name} still carries transferred inertial mass: "
                 f"{membrane_spec.mass}"
             )
 
