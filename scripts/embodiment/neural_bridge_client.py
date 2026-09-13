@@ -104,6 +104,12 @@ class NeuralBridgeClient:
         )
         return response.get("read", {})
 
+    def save_weights(self, path: Path) -> dict:
+        response = self._request({"type": "save_weights", "path": str(path)})
+        if response.get("event") != "weights_saved":
+            raise NeuralBridgeError(f"unexpected checkpoint response: {response}")
+        return response
+
     def close(self, *, force: bool = False) -> None:
         if self._proc.poll() is not None:
             return
