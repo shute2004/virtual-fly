@@ -150,8 +150,22 @@ fn main() -> Result<()> {
 
     let started = Instant::now();
     let (before, after, backend_name) = match args.backend {
-        Backend::Cpu => run_cpu(&snapshot, &args, &reward_cue, &aversive_cue, &reward_dan, &aversive_dan)?,
-        Backend::Gpu => run_gpu(&snapshot, &args, &reward_cue, &aversive_cue, &reward_dan, &aversive_dan)?,
+        Backend::Cpu => run_cpu(
+            &snapshot,
+            &args,
+            &reward_cue,
+            &aversive_cue,
+            &reward_dan,
+            &aversive_dan,
+        )?,
+        Backend::Gpu => run_gpu(
+            &snapshot,
+            &args,
+            &reward_cue,
+            &aversive_cue,
+            &reward_dan,
+            &aversive_dan,
+        )?,
     };
     let elapsed = started.elapsed().as_secs_f64();
 
@@ -181,9 +195,9 @@ fn main() -> Result<()> {
         },
         synapses: stats,
         learned_weights_file: weights_path.display().to_string(),
-        interpretation: (
-            "Experience-dependent synaptic state change in the released MaleCNS graph under "
-            "cue/DAN current pairing. Reward and aversive DANs are not assigned external +1/-1 "
+        interpretation: concat!(
+            "Experience-dependent synaptic state change in the released MaleCNS graph under ",
+            "cue/DAN current pairing. Reward and aversive DANs are not assigned external +1/-1 ",
             "signs; their effects differ through the released dopaminergic circuits they occupy."
         )
         .to_owned(),
@@ -248,7 +262,12 @@ fn group_stimuli(group: &[usize], current: f32) -> Vec<Stimulus> {
         .collect()
 }
 
-fn paired_stimuli(cue: &[usize], dan: &[usize], cue_current: f32, dan_current: f32) -> Vec<Stimulus> {
+fn paired_stimuli(
+    cue: &[usize],
+    dan: &[usize],
+    cue_current: f32,
+    dan_current: f32,
+) -> Vec<Stimulus> {
     let mut stimuli = group_stimuli(cue, cue_current);
     stimuli.extend(group_stimuli(dan, dan_current));
     stimuli
