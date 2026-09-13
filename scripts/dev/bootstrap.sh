@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
 SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
+EXPERIMENT_DIR="${VF_EXPERIMENT_DIR:-$ROOT/artifacts/experiments/conditioning-v0}"
+TRAIN_CYCLES="${VF_TRAIN_CYCLES:-24}"
 
 run() {
   printf '\n== %s ==\n' "$1"
@@ -19,19 +21,21 @@ run() {
 
 printf 'repository: %s\n' "$ROOT"
 printf 'snapshot:   %s\n' "$SNAPSHOT"
+printf 'experiment: %s\n' "$EXPERIMENT_DIR"
+printf 'cycles:     %s\n' "$TRAIN_CYCLES"
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 
 run "Python dependencies" uv sync
 run "MaleCNS v1.0 download and preprocessing" uv run python scripts/data/prepare_malecns.py --download --output "$SNAPSHOT"
-run "MaleCNS modulatory candidate discovery" uv run python scripts/data/find_modulatory_neurons.py --snapshot "$SNAPSHOT" --output "$SNAPSHOT/modulatory-candidates.json"
-run "Rust format check" cargo fmt --all -- --check
+run "Conditioning group discovery" uv run python scripts/data/make_conditioning_config.py --snapshot "$SNAPSHOT" --output "$SNAPSHOT/conditioning-v0.json"
+run "Rust format" cargo fmt --all
 run "Rust compile check" cargo check --workspace
 run "Rust tests" cargo test --workspace
-run "CPU parallel plasticity smoke" cargo run -p vf-runner --release -- kernel-smoke --backend cpu --cycles 250 --flies 8
-run "GPU plasticity smoke" cargo run -p vf-runner --release -- kernel-smoke --backend gpu --cycles 250
-run "MaleCNS snapshot info" cargo run -p vf-runner --release -- snapshot-info --snapshot "$SNAPSHOT"
-run "MaleCNS GPU scale benchmark" cargo run -p vf-runner --release -- snapshot-benchmark --snapshot "$SNAPSHOT" --backend gpu --steps 10
+run "GPU plasticity kernel smoke" cargo run -p vf-runner --bin vf-runner --release -- kernel-smoke --backend gpu --cycles 100
+run "Real MaleCNS associative conditioning" cargo run -p vf-runner --bin malecns_conditioning --release -- --snapshot "$SNAPSHOT" --config "$SNAPSHOT/conditioning-v0.json" --output "$EXPERIMENT_DIR" --backend gpu --cycles "$TRAIN_CYCLES"
 
 printf '\nbootstrap=PASS\n'
+printf 'learned state: %s/learned_weights.f32le\n' "$EXPERIMENT_DIR"
+printf 'result:        %s/result.json\n' "$EXPERIMENT_DIR"
