@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""First embodied MaleCNS <-> FlyBody <-> Flyppy learning loop.
+
+Information flow is deliberately constrained:
+
+    physical Flyppy world
+      -> FlyGym compound-eye ommatidia
+      -> population-level T4/T5 vertical-motion encoder
+      -> persistent MaleCNS runtime with local plasticity
+      -> bilateral DNg02 population readout
+      -> FlyBody wing-amplitude adapter
+      -> physical world
+
+Gate coordinates are never injected into the CNS. Passing a gate stimulates the
+configured reward DAN population; collision stimulates the configured aversive
+DAN population. Those outcome events are the only task-specific teaching signal.
+
+The T4/T5 input is currently a documented population-level approximation because
+an individual MaleCNS retinotopic ommatidium mapping is not yet available in the
+local snapshot. Everything downstream of that seam uses the released MaleCNS
+connectome.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import time
+
+import numpy as np
+
+from flybody_adapter import FlyBodyWingAdapter, WingDrive
+from flyppy_course import FlyppyCourse
+from flyppy_world import FlyppyWorld
+from neural_bridge_client import NeuralBridgeClient
+from visual_motion_encoder import VerticalMotionEncoder
+
+
+MOTOR_GROUPS = ("flight_thrust_left", "flight_thrust_right")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--snapshot", type=Path, default=Path("artifacts/malecns-v1.0")
+    )
+    parser.add_argument(
+        "--groups",
+        type=Path,
+        default=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"),
+    )
+    parser.add_argument("--backend", choices=("cpu", "gpu"), default="gpu")
+    parser.add_argument("--episodes", type=int, default=8)
+    parser.add_argument("--max-control-steps", type=int, default=1800)
+    parser.add_argument("--physics-steps", type=int, default=10)
+    parser.add_argument("--gate-count", type=int, default=6)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--reward-current", type=float, default=2.0)
+    parser.add_argument("--aversive-current", type=float, default=2.0)
+    parser.add_argument("--reinforcement-steps", type=int, default=4)
+    parser.add_argument("--trajectory-stride", type=int, default=10)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("artifacts/experiments/flyppy-v0"),
+    )
+    return parser.parse_args()
+
+
+def positive_stimuli(stimuli: dict[str, float], epsilon: float = 1e-6) -> dict[str, float]:
+    return {name: value for name, value in stimuli.items() if value > epsilon}
+
+
+def deliver_reinforcement(
+    brain: NeuralBridgeClient,
+    group: str,
+    current: float,
+    steps: int,
+) -> None:
+    if current <= 0.0 or steps < 1:
+        raise ValueError("reinforcement parameters must be positive")
+    brain.step(
+        stimulate={group: current},
+        read=(),
+        plasticity=True,
+        steps=steps,
+    )
+
+
+def main() -> int:
+    args = parse_args()
+    if args.episodes < 1:
+        raise SystemExit("episodes must be >= 1")
+    if args.max_control_steps < 1 or args.physics_steps < 1:
+        raise SystemExit("control/physics steps must be >= 1")
+    if args.gate_count < 1 or args.trajectory_stride < 1:
+        raise SystemExit("gate-count and trajectory-stride must be >= 1")
+
+    course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
+    world = FlyppyWorld(course)
+    body = FlyBodyWingAdapter(
+        tethered=False,
+        world=world,
+        spawn_position_mm=(0.0, 0.0, 5.0),
+        enable_vision=True,
+    )
+    vision = VerticalMotionEncoder()
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    trajectory_path = args.output_dir / "trajectory.jsonl"
+    summary_path = args.output_dir / "summary.json"
+
+    episode_results: list[dict[str, object]] = []
+    total_passed = 0
+    total_collisions = 0
+    started = time.perf_counter()
+
+    with trajectory_path.open("w", encoding="utf-8") as trajectory_file:
+        with NeuralBridgeClient(
+            snapshot=args.snapshot,
+            groups=args.groups,
+            backend=args.backend,
+        ) as brain:
+            brain.ping()
+            ready = dict(brain.ready)
+
+            for episode in range(args.episodes):
+                course.reset()
+                body.reset()
+                vision.reset()
+                episode_passed = 0
+                collision = False
+                finished = False
+                max_x = float("-inf")
+                min_z = float("inf")
+                max_z = float("-inf")
+                step_count = 0
+
+                # Prime FlyGym's eye renderer and the temporal motion encoder.
+                vision.encode(body.ommatidia_readouts())
+
+                for control_step in range(args.max_control_steps):
+                    sensory = positive_stimuli(
+                        vision.encode(body.ommatidia_readouts()).as_stimuli()
+                    )
+                    readout = brain.step(
+                        stimulate=sensory,
+                        read=MOTOR_GROUPS,
+                        plasticity=True,
+                    )
+                    left = float(readout["flight_thrust_left"]["spike_fraction"])
+                    right = float(readout["flight_thrust_right"]["spike_fraction"])
+
+                    body.step(
+                        WingDrive(left=left, right=right),
+                        physics_steps=args.physics_steps,
+                    )
+                    position = body.thorax_position_mm()
+                    x_mm = float(position[0])
+                    z_mm = float(position[2])
+                    max_x = max(max_x, x_mm)
+                    min_z = min(min_z, z_mm)
+                    max_z = max(max_z, z_mm)
+                    step_count = control_step + 1
+
+                    event = course.update(x_mm, z_mm)
+                    if event.passed_gate:
+                        episode_passed += 1
+                        total_passed += 1
+                        deliver_reinforcement(
+                            brain,
+                            "reward_dan",
+                            args.reward_current,
+                            args.reinforcement_steps,
+                        )
+                    if event.collision:
+                        collision = True
+                        total_collisions += 1
+                        deliver_reinforcement(
+                            brain,
+                            "aversive_dan",
+                            args.aversive_current,
+                            args.reinforcement_steps,
+                        )
+                    if event.finished:
+                        finished = True
+
+                    if (
+                        control_step % args.trajectory_stride == 0
+                        or event.passed_gate
+                        or event.collision
+                        or event.finished
+                    ):
+                        trajectory_file.write(
+                            json.dumps(
+                                {
+                                    "episode": episode,
+                                    "control_step": control_step,
+                                    "x_mm": x_mm,
+                                    "y_mm": float(position[1]),
+                                    "z_mm": z_mm,
+                                    "next_gate": course.next_gate_index,
+                                    "motor_left": left,
+                                    "motor_right": right,
+                                    "visual_stimuli": sensory,
+                                    "passed_gate": event.passed_gate,
+                                    "collision": event.collision,
+                                    "finished": event.finished,
+                                },
+                                separators=(",", ":"),
+                            )
+                            + "\n"
+                        )
+
+                    if collision or finished:
+                        break
+
+                result = {
+                    "episode": episode,
+                    "control_steps": step_count,
+                    "passed_gates": episode_passed,
+                    "collision": collision,
+                    "finished": finished,
+                    "max_x_mm": max_x,
+                    "min_z_mm": min_z,
+                    "max_z_mm": max_z,
+                }
+                episode_results.append(result)
+                print(
+                    "episode={} steps={} passed={} collision={} finished={} max_x={:.3f}".format(
+                        episode,
+                        step_count,
+                        episode_passed,
+                        collision,
+                        finished,
+                        max_x,
+                    )
+                )
+                trajectory_file.flush()
+
+    elapsed = time.perf_counter() - started
+    passed_by_episode = [int(item["passed_gates"]) for item in episode_results]
+    first_half = passed_by_episode[: max(1, len(passed_by_episode) // 2)]
+    second_half = passed_by_episode[len(passed_by_episode) // 2 :]
+    summary = {
+        "schema_version": 1,
+        "experiment": "flyppy_closed_loop_v0",
+        "backend": ready.get("backend"),
+        "neurons": ready.get("neurons"),
+        "edges": ready.get("edges"),
+        "episodes": args.episodes,
+        "gate_count": args.gate_count,
+        "physics_steps_per_control": args.physics_steps,
+        "total_passed_gates": total_passed,
+        "total_collisions": total_collisions,
+        "mean_passed_first_half": float(np.mean(first_half)) if first_half else 0.0,
+        "mean_passed_second_half": float(np.mean(second_half)) if second_half else 0.0,
+        "elapsed_seconds": elapsed,
+        "episode_results": episode_results,
+        "sensory_interface": (
+            "FlyGym ommatidia -> provisional population-level Reichardt-like vertical "
+            "motion encoder -> MaleCNS T4c/T4d/T5c/T5d populations"
+        ),
+        "motor_interface": "MaleCNS DNg02 populations -> FlyBody wing amplitude",
+        "teaching_signal": (
+            "gate pass -> PAM08 candidate stimulation; collision -> PPL1 candidate stimulation"
+        ),
+        "important_limit": (
+            "This run is a real closed loop over the released MaleCNS connectome, but "
+            "the individual-cell retinal mapping and wing kinematics are still provisional "
+            "biophysical approximations and require calibration before biological claims."
+        ),
+    }
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(f"summary={summary_path}")
+    print(f"trajectory={trajectory_path}")
+    print(f"elapsed={elapsed:.3f}s")
+    print("flyppy_closed_loop=PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
