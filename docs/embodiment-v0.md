@@ -17,7 +17,7 @@
 - 上下ゲート、床、天井、明示的MuJoCo contact pairを持つFlyppy world。
 - ゲート通過時のPAM08候補刺激、衝突時のPPL1候補刺激。
 - 上記を一本化した閉ループ局所可塑性学習runner。
-- 学習終了時の全シナプス重み保存。
+- 全CNS動的・可塑性状態のcheckpoint保存と復元。
 - 任意の3Dライブ表示とepisodeごとのMP4保存。
 - 任意の低頻度シナプス変化snapshot。
 - 学習中または学習後に開けるブラウザ3D神経ビューア。
@@ -63,9 +63,9 @@ DNg02は最初の粗い飛翔出力として使用する。DNg02集団活動はw
 
 adapterはFlyppyの障害物位置や報酬状態を見ない。
 
-## 5. 学習
+## 5. 学習とcheckpoint
 
-実行中、同一のMaleCNS runtimeをepisode間で維持するため、可塑的シナプスは前episodeの経験を保持する。
+実行中、同一のMaleCNS runtimeをepisode間で維持するため、可塑的シナプスと神経活動状態は前episodeの経験を保持する。
 
 結果イベントは以下の神経刺激へ変換する。
 
@@ -76,15 +76,35 @@ collision -> PPL1候補群を刺激
 
 外部optimizer、backpropagation、Q-learning、policy gradient、scalar rewardによるweight直接更新は使わない。
 
-学習終了時には:
+checkpointは既定で以下へ保存する。
 
 ```text
-artifacts/experiments/flyppy-v0/learned_weights.f32le
+artifacts/experiments/flyppy-v0/checkpoint/
+├── manifest.json
+├── membrane.f32le
+├── spikes.u32le
+├── refractory.u32le
+├── activity-trace.f32le
+├── modulation.f32le
+├── weights.f32le
+└── eligibility.f32le
 ```
 
-へ全シナプス重みを書き出す。
+保存対象は:
 
-v0 checkpointはsynaptic weightのみであり、膜電位、activity trace、modulation、eligibility、身体状態はまだ保存しない。
+- 膜電位
+- 現在のspike状態
+- refractory counter
+- activity trace
+- neuromodulation状態
+- 全synaptic weight
+- 全eligibility trace
+
+である。
+
+connectome topology、neurotransmitter annotation、数値モデルparameter、PAM/PPL1等のmodulator roleは同じsnapshot/configurationから再構成する。FlyBody・コース状態はepisode境界でリセットするためcheckpointには含めない。
+
+全CNS checkpointは大きいため、既定では8 episodeごとと実行終了時に保存する。`--checkpoint-every 1` とすれば毎episode保存できる。
 
 ## 6. 実行
 
@@ -99,6 +119,22 @@ bash scripts/dev/embodiment.sh
 ```bash
 bash scripts/dev/train_flyppy.sh
 ```
+
+長く回す例:
+
+```bash
+bash scripts/dev/train_flyppy.sh --episodes 100
+```
+
+既存checkpointから継続する場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh \
+  --resume-checkpoint artifacts/experiments/flyppy-v0/checkpoint \
+  --episodes 100
+```
+
+同じ `output-dir` へresumeすると `trajectory.jsonl` は追記され、episode番号も既存traceの続きから採番する。
 
 3Dライブ表示付き:
 
@@ -168,7 +204,7 @@ bash scripts/dev/view_neural.sh
 
 - 個々のommatidiumとMaleCNS視覚ニューロンのretinotopic対応。
 - flight motor neuron / flight muscle単位の詳細neuromuscular model。
-- weight以外も含む完全checkpointと学習再開。
-- 視覚・運動・可塑性パラメータの生理学的校正。
+- checkpointのsnapshot/configuration fingerprint固定と世代管理。
+- 視覚・運動・可塑性parameterの生理学的校正。
 - 学習前後比較、対照群、複数seedでの統計評価。
 - MaleCNSの実3D neuron morphology / synapse coordinatesを使った解剖学的ビューア。
