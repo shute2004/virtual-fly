@@ -63,6 +63,9 @@ enum Request {
         #[serde(default)]
         read: Vec<String>,
     },
+    SaveWeights {
+        path: PathBuf,
+    },
     Quit,
 }
 
@@ -96,6 +99,14 @@ struct StepResponse {
     ok: bool,
     step: u64,
     read: HashMap<String, GroupReadout>,
+}
+
+#[derive(Debug, Serialize)]
+struct CheckpointResponse {
+    ok: bool,
+    event: &'static str,
+    path: String,
+    weights: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -135,8 +146,19 @@ impl Runtime {
 
     fn spikes(&self) -> Result<Vec<u32>> {
         match self {
-            Runtime::Cpu(runtime) => Ok(runtime.spikes().iter().map(|&value| value as u32).collect()),
+            Runtime::Cpu(runtime) => Ok(runtime
+                .spikes()
+                .iter()
+                .map(|&value| value as u32)
+                .collect()),
             Runtime::Gpu(runtime) => runtime.read_spikes(),
+        }
+    }
+
+    fn weights(&self) -> Result<Vec<f32>> {
+        match self {
+            Runtime::Cpu(runtime) => Ok(runtime.weights().to_vec()),
+            Runtime::Gpu(runtime) => Ok(runtime.readback()?.weights),
         }
     }
 
@@ -166,9 +188,9 @@ fn resolve_groups(
         }
         let mut indices = Vec::with_capacity(group.body_ids.len());
         for body_id in group.body_ids {
-            let index = snapshot
-                .index_of_body_id(body_id)
-                .with_context(|| format!("group {name}: body ID {body_id} not present in snapshot"))?;
+            let index = snapshot.index_of_body_id(body_id).with_context(|| {
+                format!("group {name}: body ID {body_id} not present in snapshot")
+            })?;
             indices.push(index);
         }
         indices.sort_unstable();
@@ -237,6 +259,22 @@ fn read_groups(
         );
     }
     Ok(result)
+}
+
+fn write_weights(path: &PathBuf, weights: &[f32]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create {}", parent.display()))?;
+        }
+    }
+    let mut file = fs::File::create(path)
+        .with_context(|| format!("failed to create {}", path.display()))?;
+    for &weight in weights {
+        file.write_all(&weight.to_le_bytes())?;
+    }
+    file.flush()?;
+    Ok(())
 }
 
 fn write_json<T: Serialize>(stdout: &mut impl Write, value: &T) -> Result<()> {
@@ -315,6 +353,20 @@ fn main() -> Result<()> {
                     &SimpleResponse {
                         ok: true,
                         event: "pong",
+                    },
+                )?;
+                Ok(true)
+            }
+            Request::SaveWeights { path } => {
+                let weights = runtime.weights()?;
+                write_weights(&path, &weights)?;
+                write_json(
+                    &mut stdout,
+                    &CheckpointResponse {
+                        ok: true,
+                        event: "weights_saved",
+                        path: path.display().to_string(),
+                        weights: weights.len(),
                     },
                 )?;
                 Ok(true)
