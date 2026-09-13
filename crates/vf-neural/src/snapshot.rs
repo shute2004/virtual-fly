@@ -65,6 +65,9 @@ impl ConnectomeSnapshot {
         if body_ids.len() != manifest.neuron_count {
             bail!("body_ids length does not match manifest");
         }
+        if !body_ids.windows(2).all(|pair| pair[0] < pair[1]) {
+            bail!("body_ids must be strictly increasing");
+        }
         if neurotransmitters.len() != manifest.neuron_count {
             bail!("neurotransmitter length does not match manifest");
         }
@@ -153,6 +156,18 @@ impl ConnectomeSnapshot {
     pub fn edge_count(&self) -> usize {
         self.manifest.edge_count
     }
+
+    /// Resolve a released MaleCNS body ID to the dense runtime neuron index.
+    ///
+    /// Runtime arrays use compact indices for efficient CPU/GPU access, while
+    /// experiment configuration should refer to stable source body IDs.
+    pub fn index_of_body_id(&self, body_id: u64) -> Option<usize> {
+        self.body_ids.binary_search(&body_id).ok()
+    }
+
+    pub fn body_id(&self, index: usize) -> Option<u64> {
+        self.body_ids.get(index).copied()
+    }
 }
 
 fn build_edge_posts(row_offsets: &[u32], edge_count: usize) -> Result<Vec<u32>> {
@@ -212,5 +227,8 @@ mod tests {
         assert_eq!(snapshot.row_offsets, vec![0, 0, 1, 3]);
         assert_eq!(snapshot.pre_indices, vec![0, 0, 1]);
         assert_eq!(snapshot.edge_posts, vec![1, 2, 2]);
+        assert_eq!(snapshot.index_of_body_id(1), Some(1));
+        assert_eq!(snapshot.body_id(2), Some(2));
+        assert_eq!(snapshot.index_of_body_id(99), None);
     }
 }
