@@ -19,7 +19,18 @@ uv run python scripts/data/make_embodiment_groups.py \
   --snapshot "$SNAPSHOT" \
   --output "$GROUPS"
 
-exec uv run python scripts/embodiment/flyppy_closed_loop.py \
+PYTHON_LAUNCHER=(uv run python)
+if [ "$(uname -s)" = "Darwin" ]; then
+  for arg in "$@"; do
+    if [ "$arg" = "--render" ]; then
+      # MuJoCo's passive Cocoa viewer must run under mjpython on macOS.
+      PYTHON_LAUNCHER=(uv run mjpython)
+      break
+    fi
+  done
+fi
+
+exec "${PYTHON_LAUNCHER[@]}" scripts/embodiment/flyppy_closed_loop.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   "$@"
