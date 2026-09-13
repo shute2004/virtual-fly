@@ -1,23 +1,16 @@
 #!/usr/bin/env python3
-"""Build a local-light -> MaleCNS R1-R6 retinotopic stimulation map.
+"""Build the MaleCNS R1-R6 retinotopic stimulation map from observed wiring.
 
-This script does not invent visual features. It preserves optic-lobe column position
-and resolves the actual MaleCNS photoreceptor body IDs that should receive local
-light-driven current.
+The spatial unit is the lamina cartridge represented by an L1 neuron carrying the
+official MaleCNS optic-lobe coordinates ``assignedOlHex1`` / ``assignedOlHex2``.
+The photoreceptors assigned to that optical column are the actual annotated R1-R6
+neurons with released presynaptic connections into that L1 neuron.
 
-Preferred source:
-- official MaleCNS annotation columns ``assignedOlHex1`` / ``assignedOlHex2`` on
-  R1-R6 neurons themselves.
-
-Fallback when R1-R6 rows do not carry those coordinates:
-- official MaleCNS L1 column coordinates;
-- released connectome edges into each L1;
-- incoming neurons whose released cell type is exactly R1-R6 / R1-6.
-
-The fallback follows the biological neural-superposition relation (R1-R6
-photoreceptors with a common optical axis converge on the same lamina cartridge),
-but the body-ID assignment itself is derived from released MaleCNS connectivity,
-not from geometric guessing.
+This deliberately follows neural superposition rather than assigning R1-R6 to
+columns by row order or by an assumed one-ommatidium grouping. Six R1-R6 cells from
+neighboring ommatidia that share an optical axis converge on the same cartridge.
+If enough observed columns cannot be resolved, this script fails instead of
+inventing a geometric correspondence or averaging visual information.
 """
 
 from __future__ import annotations
@@ -26,7 +19,7 @@ import argparse
 import json
 import re
 import urllib.request
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -38,7 +31,11 @@ ANNOTATION_URL = (
     "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/"
     f"flat-connectome/{ANNOTATION_FILENAME}"
 )
-R1_R6_PATTERN = re.compile(r"(?:^|[^A-Za-z0-9])R1(?:-|–)R?6(?:$|[^A-Za-z0-9])", re.I)
+# MaleCNS/FlyWire annotations encountered in the ecosystem use forms such as
+# R1-R6, R1-6, and occasionally underscore-separated variants.
+R1_R6_PATTERN = re.compile(
+    r"(?:^|[^A-Za-z0-9])R1(?:-|–|_)R?6(?:$|[^A-Za-z0-9])", re.I
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--download",
         action="store_true",
-        help="download the official annotation feather only if it is missing",
+        help="download the official MaleCNS annotation feather only if it is missing",
     )
     parser.add_argument(
         "--min-columns-per-side",
@@ -90,76 +87,36 @@ def text_series(frame: pd.DataFrame, name: str) -> pd.Series:
     return frame[name].fillna("").astype(str)
 
 
-def r1_r6_mask(frame: pd.DataFrame) -> np.ndarray:
+def searchable_types(frame: pd.DataFrame) -> pd.Series:
     fields = [text_series(frame, name) for name in ("type", "flywireType", "instance")]
-    searchable = fields[0] + " | " + fields[1] + " | " + fields[2]
-    return searchable.map(lambda value: bool(R1_R6_PATTERN.search(value))).to_numpy()
+    return fields[0] + " | " + fields[1] + " | " + fields[2]
+
+
+def r1_r6_mask(frame: pd.DataFrame) -> np.ndarray:
+    return searchable_types(frame).map(
+        lambda value: bool(R1_R6_PATTERN.search(value))
+    ).to_numpy()
 
 
 def l1_mask(frame: pd.DataFrame) -> np.ndarray:
-    fields = [text_series(frame, name) for name in ("type", "flywireType", "instance")]
-    searchable = fields[0] + " | " + fields[1] + " | " + fields[2]
-    return searchable.str.contains(r"(?:^|\W)L1(?:$|\W)", case=False, regex=True).to_numpy()
+    return searchable_types(frame).str.contains(
+        r"(?:^|\W)L1(?:$|\W)", case=False, regex=True
+    ).to_numpy()
 
 
 def side_values(frame: pd.DataFrame) -> np.ndarray:
-    side = text_series(frame, "side").str.upper().str.strip()
-    soma = text_series(frame, "somaSide").str.upper().str.strip()
-    result = np.where(side.isin(["L", "R"]), side, soma)
+    # Some optic-lobe neurons have no soma-side label. Prefer the direct `side`
+    # field, then somaSide, then rootSide; all are observed MaleCNS metadata.
+    result = np.full(len(frame), "", dtype=object)
+    for name in ("side", "somaSide", "rootSide"):
+        values = text_series(frame, name).str.upper().str.strip().to_numpy(dtype=str)
+        take = (result == "") & np.isin(values, ["L", "R"])
+        result[take] = values[take]
     return np.asarray(result, dtype=str)
 
 
-def integer_coordinate(series: pd.Series) -> np.ndarray:
+def numeric_coordinate(series: pd.Series) -> np.ndarray:
     return pd.to_numeric(series, errors="coerce").to_numpy(dtype=np.float64)
-
-
-def body_index(sorted_body_ids: np.ndarray, body_id: int) -> int | None:
-    pos = int(np.searchsorted(sorted_body_ids, np.uint64(body_id)))
-    if pos >= len(sorted_body_ids) or int(sorted_body_ids[pos]) != int(body_id):
-        return None
-    return pos
-
-
-def direct_columns(
-    annotations: pd.DataFrame,
-    snapshot_ids: set[int],
-) -> tuple[list[dict[str, object]], str]:
-    required = {"assignedOlHex1", "assignedOlHex2"}
-    if not required.issubset(annotations.columns):
-        return [], "missing_assignedOlHex_columns"
-
-    mask = r1_r6_mask(annotations)
-    rows = annotations.loc[mask].copy()
-    if rows.empty:
-        return [], "no_R1-R6_annotations"
-    rows["_side"] = side_values(rows)
-    rows["_h1"] = integer_coordinate(rows["assignedOlHex1"])
-    rows["_h2"] = integer_coordinate(rows["assignedOlHex2"])
-    rows = rows[
-        rows["_side"].isin(["L", "R"])
-        & np.isfinite(rows["_h1"])
-        & np.isfinite(rows["_h2"])
-    ]
-
-    grouped: dict[tuple[str, int, int], list[int]] = defaultdict(list)
-    for _, row in rows.iterrows():
-        body_id = int(row["bodyId"])
-        if body_id not in snapshot_ids:
-            continue
-        grouped[(str(row["_side"]), int(row["_h1"]), int(row["_h2"]))].append(body_id)
-
-    columns = [
-        {
-            "side": side,
-            "hex1": h1,
-            "hex2": h2,
-            "r1_r6_body_ids": sorted(set(body_ids)),
-            "assignment": "observed_annotation",
-        }
-        for (side, h1, h2), body_ids in sorted(grouped.items())
-        if body_ids
-    ]
-    return columns, "observed_R1-R6_assignedOlHex"
 
 
 def connectivity_columns(
@@ -167,32 +124,36 @@ def connectivity_columns(
     body_ids: np.ndarray,
     row_offsets: np.ndarray,
     pre_indices: np.ndarray,
-) -> tuple[list[dict[str, object]], str]:
-    required = {"assignedOlHex1", "assignedOlHex2"}
-    if not required.issubset(annotations.columns):
-        raise RuntimeError(
-            "official annotations do not contain assignedOlHex1/assignedOlHex2; "
-            "cannot construct a retinotopic map without inventing geometry"
-        )
-
-    aligned = annotations.drop_duplicates("bodyId").set_index("bodyId").reindex(body_ids)
-    r_mask = r1_r6_mask(aligned.reset_index())
-    l_mask = l1_mask(aligned.reset_index())
-    sides = side_values(aligned.reset_index())
-    h1 = integer_coordinate(aligned["assignedOlHex1"])
-    h2 = integer_coordinate(aligned["assignedOlHex2"])
+) -> list[dict[str, object]]:
+    aligned = (
+        annotations.drop_duplicates("bodyId")
+        .set_index("bodyId")
+        .reindex(body_ids)
+        .reset_index()
+    )
+    r_mask = r1_r6_mask(aligned)
+    l_mask = l1_mask(aligned)
+    sides = side_values(aligned)
+    h1 = numeric_coordinate(aligned["assignedOlHex1"])
+    h2 = numeric_coordinate(aligned["assignedOlHex2"])
 
     columns: list[dict[str, object]] = []
     for post_idx in np.flatnonzero(l_mask):
         side = sides[post_idx]
-        if side not in ("L", "R") or not np.isfinite(h1[post_idx]) or not np.isfinite(h2[post_idx]):
+        if (
+            side not in ("L", "R")
+            or not np.isfinite(h1[post_idx])
+            or not np.isfinite(h2[post_idx])
+        ):
             continue
+
         begin = int(row_offsets[post_idx])
         end = int(row_offsets[post_idx + 1])
         incoming = pre_indices[begin:end].astype(np.int64, copy=False)
         photoreceptors = incoming[r_mask[incoming]]
         if len(photoreceptors) == 0:
             continue
+
         columns.append(
             {
                 "side": side,
@@ -202,26 +163,43 @@ def connectivity_columns(
                 "r1_r6_body_ids": sorted(
                     {int(body_ids[index]) for index in photoreceptors.tolist()}
                 ),
-                "assignment": "observed_connectivity_to_L1",
+                "assignment": "observed_R1-R6_to_L1_connectivity",
             }
         )
-    return columns, "R1-R6_incoming_to_observed_L1_columns"
+    return columns
 
 
 def validate_columns(columns: list[dict[str, object]], minimum: int) -> None:
     counts = Counter(str(item["side"]) for item in columns)
-    missing = [side for side in ("L", "R") if counts[side] < minimum]
-    if missing:
+    if any(counts[side] < minimum for side in ("L", "R")):
         raise RuntimeError(
             f"retinotopic map resolved too few columns: {dict(counts)}; "
             f"minimum per side is {minimum}. Refusing to substitute a guessed mapping."
         )
-    duplicate = Counter(
+
+    coordinate_counts = Counter(
         (str(item["side"]), int(item["hex1"]), int(item["hex2"])) for item in columns
     )
-    clashes = [key for key, count in duplicate.items() if count > 1]
+    clashes = [key for key, count in coordinate_counts.items() if count > 1]
     if clashes:
-        raise RuntimeError(f"duplicate optic-lobe column coordinates: {clashes[:8]}")
+        raise RuntimeError(f"duplicate L1 optic-column coordinates: {clashes[:8]}")
+
+    body_to_columns: dict[int, list[tuple[str, int, int]]] = {}
+    for item in columns:
+        key = (str(item["side"]), int(item["hex1"]), int(item["hex2"]))
+        for body_id in item["r1_r6_body_ids"]:
+            body_to_columns.setdefault(int(body_id), []).append(key)
+    multi = {
+        body_id: keys
+        for body_id, keys in body_to_columns.items()
+        if len(set(keys)) > 1
+    }
+    if multi:
+        sample = list(multi.items())[:8]
+        raise RuntimeError(
+            "R1-R6 body IDs resolved to multiple optical columns; refusing an "
+            f"ambiguous sensory map: {sample}"
+        )
 
 
 def main() -> int:
@@ -233,28 +211,20 @@ def main() -> int:
     pre_indices = np.fromfile(args.snapshot / "pre_indices.u32le", dtype="<u4")
     if len(row_offsets) != len(body_ids) + 1:
         raise RuntimeError("snapshot row_offsets length is inconsistent with body IDs")
+    if int(row_offsets[-1]) != len(pre_indices):
+        raise RuntimeError("snapshot CSR edge count is inconsistent with pre_indices")
 
     annotations = pd.read_feather(args.raw_annotations)
     required = {"bodyId", "type", "assignedOlHex1", "assignedOlHex2"}
     missing = required - set(annotations.columns)
     if missing:
         raise RuntimeError(
-            f"official annotation file is missing required retinotopy columns: {sorted(missing)}"
+            f"official annotation file is missing required retinotopy fields: {sorted(missing)}"
         )
 
-    snapshot_set = {int(value) for value in body_ids.tolist()}
-    columns, method = direct_columns(annotations, snapshot_set)
-    direct_counts = Counter(str(item["side"]) for item in columns)
-    if any(direct_counts[side] < args.min_columns_per_side for side in ("L", "R")):
-        print(
-            "R1-R6 direct column annotations are incomplete; "
-            "resolving R1-R6 by released incoming connectivity to L1"
-        )
-        columns, method = connectivity_columns(
-            annotations, body_ids, row_offsets, pre_indices
-        )
-
+    columns = connectivity_columns(annotations, body_ids, row_offsets, pre_indices)
     validate_columns(columns, args.min_columns_per_side)
+
     counts = Counter(str(item["side"]) for item in columns)
     r_counts = Counter(len(item["r1_r6_body_ids"]) for item in columns)
     unique_receptors = sorted(
@@ -264,12 +234,13 @@ def main() -> int:
             for body_id in item["r1_r6_body_ids"]
         }
     )
+    method = "observed_R1-R6_to_L1_connectivity_with_observed_L1_hex"
 
     output = {
-        "schema_version": 1,
+        "schema_version": 2,
         "dataset": "male-cns:v1.0",
         "sensory_boundary": "R1-R6 photoreceptors",
-        "column_coordinate_system": "MaleCNS assignedOlHex1/assignedOlHex2",
+        "column_coordinate_system": "L1 MaleCNS assignedOlHex1/assignedOlHex2",
         "assignment_method": method,
         "columns": columns,
         "counts": {
@@ -281,18 +252,23 @@ def main() -> int:
             },
         },
         "provenance": {
-            "optic_column_coordinates": "observed: official MaleCNS annotations",
-            "photoreceptor_body_ids": (
-                "observed annotation when R1-R6 carries assignedOlHex coordinates; "
-                "otherwise inferred only from observed R1-R6 -> L1 released connectivity"
+            "optic_column_coordinates": (
+                "observed: official MaleCNS assignedOlHex coordinates on L1"
             ),
+            "photoreceptor_body_ids": (
+                "observed/inferred boundary: annotated R1-R6 neurons selected only from "
+                "released presynaptic connections into each observed L1 cartridge"
+            ),
+            "neural_superposition_rule": "literature",
             "no_visual_feature_extraction": True,
+            "no_spatial_averaging": True,
         },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+
     print(f"assignment_method={method}")
     print(f"left_columns={counts['L']}")
     print(f"right_columns={counts['R']}")
