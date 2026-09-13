@@ -15,7 +15,7 @@
 - body IDを指定した個々のMaleCNSニューロンへの直接外部電流刺激。
 - MaleCNS注釈からのbilateral DNg02 / PAM08 / PPL1抽出。
 - MaleCNS L1の `assignedOlHex1` / `assignedOlHex2` に基づくretinotopic lamina-cartridge map。
-- 各L1へ実際に接続するR1-R6 photoreceptor body IDの解決。
+- 各R1-R6について、座標付きL1へのreleased synapse countが最大のtargetをそのoptical columnとして解決。
 - FlyBody眼カメラの局所受光量を、対応するR1-R6だけへ電流として与える感覚境界。
 - DNg02左右集団活動から左右wing-beat amplitudeへのmotor adapter。
 - 上下ゲート、床、天井、明示的MuJoCo contact pairを持つFlyppy world。
@@ -33,7 +33,7 @@
 Flyppy物理環境
   -> FlyBody raw eye cameras
   -> MaleCNS L1 lamina cartridgeごとの局所受光
-  -> そのL1へ実接続するR1-R6 body IDへの外部電流
+  -> 各R1-R6のdominant L1 cartridgeに対応する局所電流
   -> whole MaleCNS + local plasticity
   -> bilateral DNg02
   -> wing-beat amplitude adapter
@@ -53,9 +53,11 @@ Flyppy物理環境
 
 MaleCNS公式annotationにはoptic-lobeのhex column座標 `assignedOlHex1` / `assignedOlHex2` が含まれる。
 
-`scripts/data/prepare_retinotopic_vision.py` は、column座標を持つ実際のL1ニューロンをlamina cartridgeの空間単位とし、そのL1へreleased MaleCNS connectivity上で実際にpresynaptic connectionを持つannotated R1-R6ニューロンだけを同じoptical columnへ割り当てる。
+`scripts/data/prepare_retinotopic_vision.py` は、column座標を持つ実際のL1ニューロンをlamina cartridgeの空間単位とする。R1-R6は一つのL1だけに接触するとは限らないため、「接続が存在する」という二値条件だけではcolumn所属を決めない。各annotated R1-R6について、座標付きL1 targetへのreleased synapse countを比較し、最大のL1だけをそのphotoreceptorのdominant cartridgeとして採用する。
 
-これはショウジョウバエのneural superposition――同じvisual axisを見る近傍ommatidia由来のR1-R6が同じlamina cartridgeへ収束する――を利用する。R1-R6のbody ID順やommatidiumの配列順からcolumn所属を推測しない。
+これはショウジョウバエのneural superposition――同じvisual axisを見る近傍ommatidia由来のR1-R6が同じlamina cartridgeへ収束する――を利用しつつ、弱い副次的R1-R6 -> L1接続を別のoptical axisと誤認しないためのdata-drivenな解決規則である。R1-R6のbody ID順やommatidiumの配列順からcolumn所属を推測しない。
+
+最大synapse countが複数L1で完全同率になったR1-R6は曖昧として扱い、適当に一方へ割り当てず実行を失敗させる。
 
 解決結果は:
 
@@ -63,26 +65,27 @@ MaleCNS公式annotationにはoptic-lobeのhex column座標 `assignedOlHex1` / `a
 artifacts/malecns-v1.0/retinotopic-vision-v1.json
 ```
 
-へ保存する。十分なcolumn数を解決できない、同じR1-R6が複数columnへ割り当たる、同じL1 column座標が重複する、といった場合は、適当な順序対応や全体平均へfallbackせず実行を失敗させる。
+へ保存する。十分なcolumn数を解決できない、同率首位のR1-R6が存在する、同じL1 column座標が重複する、といった場合は、適当な順序対応や全体平均へfallbackせず実行を失敗させる。
 
 ### 3.2 感覚変換境界
 
 `scripts/embodiment/malecns_retina.py` は各眼についてMaleCNS hex latticeをFlyBodyのraw eye cameraへ展開し、それぞれのcolumn位置の局所受光値だけを読む。
 
-その局所値を、当該L1 cartridgeへ実際に接続しているR1-R6への外部電流へ変換する。
+その局所値を、当該L1 cartridgeをdominant targetとするR1-R6への外部電流へ変換する。
 
 ```text
 one observed L1 cartridge / optic column
   -> one local eye-camera sample
   -> local photoreceptor transduction scale
-  -> its observed presynaptic R1-R6 currents
+  -> R1-R6 currents assigned by dominant observed L1 synapse count
 ```
 
 column間の平均、pooling、Reichardt-like motion detector、edge detector、object detectorは使用しない。T4/T5を含む下流視覚ニューロンの応答はMaleCNS自身に計算させる。
 
 ### 3.3 provenance
 
-- `observed`: MaleCNS body ID、released R1-R6 -> L1 connectivity、L1の `assignedOlHex1` / `assignedOlHex2`。
+- `observed`: MaleCNS body ID、released R1-R6 -> L1 synapse counts、L1の `assignedOlHex1` / `assignedOlHex2`。
+- `inferred`: 各R1-R6のdominant optical cartridgeを、座標付きL1への最大released synapse countで選ぶ規則。
 - `literature`: neural superpositionにより、同じoptical axisのR1-R6が同じlamina cartridgeへ収束するという配線原理。
 - `calibrated`: MaleCNS hex latticeからFlyBody eye-camera平面への幾何投影。
 - `calibrated`: 局所受光値からR1-R6へ注入するcurrentのscale。
