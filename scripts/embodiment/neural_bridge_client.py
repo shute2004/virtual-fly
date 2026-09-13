@@ -89,6 +89,7 @@ class NeuralBridgeClient:
         self,
         *,
         stimulate: Mapping[str, float] | None = None,
+        stimulate_body: Sequence[tuple[int, float]] = (),
         read: Sequence[str] = (),
         plasticity: bool = True,
         steps: int = 1,
@@ -97,6 +98,10 @@ class NeuralBridgeClient:
             {
                 "type": "step",
                 "stimulate": dict(stimulate or {}),
+                "stimulate_body": [
+                    [int(body_id), float(current)]
+                    for body_id, current in stimulate_body
+                ],
                 "read": list(read),
                 "plasticity": bool(plasticity),
                 "steps": int(steps),
