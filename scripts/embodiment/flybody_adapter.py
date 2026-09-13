@@ -3,12 +3,21 @@
 
 The adapter does not decide whether the fly should climb, descend, or avoid an
 obstacle. It only maps bilateral DNg02 population activity to modulation of a
-nominal wing-beat pattern, consistent with experiments showing that DNg02
-population activity regulates wing stroke amplitude and thrust.
+nominal wing-beat pattern.
+
+Experiments report two useful constraints on this mapping:
+
+- increasing DNg02 population activity raises mean wingbeat amplitude;
+- unilateral DNg02 activity correlates positively with contralateral wingbeat
+  amplitude and negatively with ipsilateral wingbeat amplitude.
+
+The adapter therefore separates a bilateral mean-amplitude term from a
+left-right differential term. The exact gains remain calibration parameters,
+not measured MaleCNS constants.
 
 The nominal analytic wing beat is a prototype pattern adapted from the public
-FlyBody test pattern. Its exact kinematics are a calibration parameter, not a
-claim about measured D. melanogaster wing motion.
+FlyBody test pattern. Its exact kinematics are likewise a calibration parameter,
+not a claim about measured D. melanogaster wing motion.
 """
 
 from __future__ import annotations
@@ -39,6 +48,8 @@ from flygym.utils.math import Rotation3D
 
 @dataclass(frozen=True)
 class WingDrive:
+    """Normalized left/right DNg02 population activity."""
+
     left: float
     right: float
 
@@ -50,7 +61,8 @@ class FlyBodyWingAdapter:
         tethered: bool = True,
         spawn_position_mm: tuple[float, float, float] = (0.0, 0.0, 4.0),
         wingbeat_hz: float = 200.0,
-        dng02_gain: float = 0.35,
+        dng02_mean_gain: float = 0.30,
+        dng02_steering_gain: float = 0.50,
         min_scale: float = 0.65,
         max_scale: float = 1.45,
         enable_vision: bool = False,
@@ -59,13 +71,16 @@ class FlyBodyWingAdapter:
     ) -> None:
         if wingbeat_hz <= 0:
             raise ValueError("wingbeat_hz must be positive")
+        if dng02_mean_gain < 0 or dng02_steering_gain < 0:
+            raise ValueError("DNg02 gains must be non-negative")
         if not 0 < min_scale <= max_scale:
             raise ValueError("invalid wing amplitude scale limits")
         if tethered and world is not None:
             raise ValueError("custom world is only supported for free-body simulations")
 
         self.wingbeat_hz = float(wingbeat_hz)
-        self.dng02_gain = float(dng02_gain)
+        self.dng02_mean_gain = float(dng02_mean_gain)
+        self.dng02_steering_gain = float(dng02_steering_gain)
         self.min_scale = float(min_scale)
         self.max_scale = float(max_scale)
         self.vision_enabled = bool(enable_vision)
@@ -170,11 +185,38 @@ class FlyBodyWingAdapter:
         self.sim.reset()
         self._time = 0.0
 
-    def _scale_from_activity(self, spike_fraction: float) -> float:
-        if not math.isfinite(spike_fraction):
+    @staticmethod
+    def _bounded_activity(value: float) -> float:
+        if not math.isfinite(value):
             raise ValueError("DNg02 spike fraction must be finite")
-        activity = min(1.0, max(0.0, spike_fraction))
-        return min(self.max_scale, max(self.min_scale, 1.0 + self.dng02_gain * activity))
+        return min(1.0, max(0.0, value))
+
+    def _wing_scales(self, drive: WingDrive) -> tuple[float, float]:
+        left_activity = self._bounded_activity(drive.left)
+        right_activity = self._bounded_activity(drive.right)
+        mean_activity = 0.5 * (left_activity + right_activity)
+
+        # Positive differential means the contralateral DNg02 population for
+        # that wing is more active. This implements the measured sign relation:
+        # contralateral positive, ipsilateral negative, while preserving a
+        # separate bilateral mean-amplitude increase.
+        left_differential = right_activity - left_activity
+        right_differential = left_activity - right_activity
+
+        left_scale = (
+            1.0
+            + self.dng02_mean_gain * mean_activity
+            + self.dng02_steering_gain * left_differential
+        )
+        right_scale = (
+            1.0
+            + self.dng02_mean_gain * mean_activity
+            + self.dng02_steering_gain * right_differential
+        )
+        return (
+            min(self.max_scale, max(self.min_scale, left_scale)),
+            min(self.max_scale, max(self.min_scale, right_scale)),
+        )
 
     @staticmethod
     def _wing_pattern(phase: float, amplitude_scale: float) -> dict[str, float]:
@@ -187,8 +229,7 @@ class FlyBodyWingAdapter:
     def step(self, drive: WingDrive, *, physics_steps: int = 1) -> None:
         if physics_steps < 1:
             raise ValueError("physics_steps must be >= 1")
-        left_scale = self._scale_from_activity(drive.left)
-        right_scale = self._scale_from_activity(drive.right)
+        left_scale, right_scale = self._wing_scales(drive)
 
         for _ in range(physics_steps):
             phase = 2.0 * math.pi * self.wingbeat_hz * self._time
