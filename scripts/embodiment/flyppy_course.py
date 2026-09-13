@@ -62,7 +62,7 @@ class FlyppyCourse:
         gate_count: int = 12,
         first_gate_x_mm: float = 8.0,
         gate_spacing_mm: float = 7.0,
-        corridor_low_z_mm: float = 1.0,
+        corridor_low_z_mm: float = 0.0,
         corridor_high_z_mm: float = 10.0,
         gap_half_height_mm: float = 2.0,
         center_margin_mm: float = 0.5,
@@ -101,6 +101,10 @@ class FlyppyCourse:
     @property
     def finished(self) -> bool:
         return self._next_gate >= len(self.gates)
+
+    def reset(self) -> None:
+        self._next_gate = 0
+        self._last_x_mm = -math.inf
 
     def observe(self, x_mm: float, z_mm: float) -> CourseObservation:
         if self.finished:
@@ -163,6 +167,9 @@ def _self_test() -> None:
     assert not course.update(gate.x_mm - 1.0, z).collision
     event = course.update(gate.x_mm + 0.1, z)
     assert event.passed_gate and event.gate_index == 0
+
+    course.reset()
+    assert course.next_gate_index == 0 and not course.finished
 
     bad = FlyppyCourse(seed=7, gate_count=1)
     gate = bad.gates[0]
