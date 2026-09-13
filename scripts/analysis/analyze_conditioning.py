@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 # Must match NeuralParams::default().synapse_scale for conditioning-v0.
-INITIAL_SYNAPSE_SCALE = 0.001
+INITIAL_SYNAPSE_SCALE = 0.02
 CHANGE_EPSILON = 1e-7
 
 
