@@ -24,12 +24,10 @@ if [ ! -f "$GROUPS" ]; then
     --snapshot "$SNAPSHOT" \
     --output "$GROUPS"
 fi
-if [ ! -f "$RETINOTOPIC_MAP" ]; then
-  uv run python scripts/data/prepare_retinotopic_vision.py \
-    --snapshot "$SNAPSHOT" \
-    --output "$RETINOTOPIC_MAP" \
-    --download
-fi
+uv run python scripts/data/prepare_retinotopic_vision.py \
+  --snapshot "$SNAPSHOT" \
+  --output "$RETINOTOPIC_MAP" \
+  --download
 
 exec uv run python scripts/embodiment/evaluate_flyppy.py \
   --snapshot "$SNAPSHOT" \
