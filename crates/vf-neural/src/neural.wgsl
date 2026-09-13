@@ -42,6 +42,14 @@ struct Params {
 @group(0) @binding(6) var<storage, read_write> synapses: array<SynapseState>;
 @group(0) @binding(7) var<uniform> params: Params;
 
+const WORKGROUP_SIZE: u32 = 256u;
+
+fn linear_invocation_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
+    // Workgroups are tiled over X then Y. The local workgroup is 256x1x1, so
+    // one Y row spans num_workgroups.x * 256 scalar invocations.
+    return gid.x + gid.y * num_workgroups.x * WORKGROUP_SIZE;
+}
+
 fn nt_code(neuron: u32) -> u32 {
     return metadata[neuron] & 0xffu;
 }
@@ -74,8 +82,11 @@ fn fast_sign(neuron: u32) -> f32 {
 }
 
 @compute @workgroup_size(256)
-fn neuron_step(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let post = gid.x;
+fn neuron_step(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+) {
+    let post = linear_invocation_index(gid, num_workgroups);
     if post >= params.neuron_count {
         return;
     }
@@ -128,8 +139,11 @@ fn neuron_step(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 @compute @workgroup_size(256)
-fn plasticity_step(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let edge = gid.x;
+fn plasticity_step(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+) {
+    let edge = linear_invocation_index(gid, num_workgroups);
     if edge >= params.edge_count {
         return;
     }
@@ -153,8 +167,11 @@ fn plasticity_step(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 @compute @workgroup_size(256)
-fn trace_step(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let neuron = gid.x;
+fn trace_step(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+) {
+    let neuron = linear_invocation_index(gid, num_workgroups);
     if neuron >= params.neuron_count {
         return;
     }
