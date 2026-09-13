@@ -37,11 +37,15 @@ def text_column(frame: pd.DataFrame, name: str) -> pd.Series:
     return frame[name].fillna("").astype(str).str.strip()
 
 
+def cell_text(row: pd.Series, name: str) -> str:
+    if name not in row or pd.isna(row[name]):
+        return ""
+    return str(row[name]).strip()
+
+
 def resolved_side(row: pd.Series) -> str:
     for column in ("side", "somaSide", "rootSide"):
-        if column not in row:
-            continue
-        value = str(row[column]).strip().upper()
+        value = cell_text(row, column).upper()
         if value in ("L", "R"):
             return value
     return ""
@@ -78,7 +82,7 @@ def main() -> int:
     for _, row in rows.iterrows():
         record: dict[str, object] = {
             "body_id": int(row["bodyId"]),
-            "type": str(row.get("type", "") or "").strip(),
+            "type": cell_text(row, "type"),
             "side": resolved_side(row),
         }
         for column in (
@@ -92,8 +96,9 @@ def main() -> int:
             "exitNerve",
             "receptorType",
         ):
-            if column in row and pd.notna(row[column]) and str(row[column]).strip():
-                record[column] = str(row[column]).strip()
+            value = cell_text(row, column)
+            if value:
+                record[column] = value
         neurons.append(record)
 
     neurons.sort(key=lambda item: (str(item["type"]), str(item["side"]), int(item["body_id"])))
