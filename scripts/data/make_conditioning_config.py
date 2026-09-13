@@ -2,7 +2,7 @@
 """Build a first real MaleCNS associative-conditioning experiment config.
 
 The selected cue neurons, DANs and readout neurons all come from released
-MaleCNS annotations.  This script only identifies anatomical groups; the
+MaleCNS annotations. This script only identifies anatomical groups; the
 learning rule remains inside the neural simulator.
 """
 
@@ -38,9 +38,9 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("artifacts/malecns-v1.0/conditioning-v0.json"),
     )
-    parser.add_argument("--reward-cue", default=r"(^|[^A-Za-z0-9])DA1_lPN([^A-Za-z0-9]|$)|DA1 lPN")
-    parser.add_argument("--aversive-cue", default=r"(^|[^A-Za-z0-9])DL3_lPN([^A-Za-z0-9]|$)|DL3 lPN")
-    parser.add_argument("--reward-dan", default=r"(^|[^A-Za-z0-9])PAM08([^A-Za-z0-9]|$)")
+    parser.add_argument("--reward-cue", default=r"(?:^|[^A-Za-z0-9])DA1_lPN(?:[^A-Za-z0-9]|$)|DA1 lPN")
+    parser.add_argument("--aversive-cue", default=r"(?:^|[^A-Za-z0-9])DL3_lPN(?:[^A-Za-z0-9]|$)|DL3 lPN")
+    parser.add_argument("--reward-dan", default=r"(?:^|[^A-Za-z0-9])PAM08(?:[^A-Za-z0-9]|$)")
     parser.add_argument("--aversive-dan", default=r"PPL1")
     parser.add_argument("--readout", default=r"MBON")
     parser.add_argument("--max-cue-neurons", type=int, default=64)
@@ -65,9 +65,9 @@ def select(
     dopamine_only: bool,
 ) -> list[dict[str, object]]:
     regex = re.compile(pattern, re.IGNORECASE)
-    mask = text.str.contains(regex, regex=True, na=False).to_numpy()
+    mask = text.str.contains(regex, regex=True, na=False).to_numpy(dtype=bool, copy=True)
     if dopamine_only:
-        mask &= frame["nt_code"].to_numpy() == DOPAMINE_CODE
+        mask = mask & (frame["nt_code"].to_numpy() == DOPAMINE_CODE)
     indices = np.flatnonzero(mask)[:limit]
     rows: list[dict[str, object]] = []
     for index in indices:
