@@ -43,6 +43,7 @@ struct Params {
 @group(0) @binding(7) var<uniform> params: Params;
 
 const WORKGROUP_SIZE: u32 = 256u;
+const NT_DOPAMINE: u32 = 4u;
 
 fn linear_invocation_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
     // Workgroups are tiled over X then Y. The local workgroup is 256x1x1, so
@@ -54,15 +55,8 @@ fn nt_code(neuron: u32) -> u32 {
     return metadata[neuron] & 0xffu;
 }
 
-fn modulator_role(neuron: u32) -> f32 {
-    let code = (metadata[neuron] >> 8u) & 0xffu;
-    if code == 1u {
-        return 1.0;
-    }
-    if code == 2u {
-        return -1.0;
-    }
-    return 0.0;
+fn is_dopamine(neuron: u32) -> bool {
+    return nt_code(neuron) == NT_DOPAMINE;
 }
 
 // This transmitter->fast-sign mapping is an explicit bootstrap assumption.
@@ -92,7 +86,7 @@ fn neuron_step(
     }
 
     var fast_current = external_current[post];
-    var modulator_input = 0.0;
+    var dopaminergic_input = 0.0;
     let begin = topology[post];
     let end = topology[post + 1u];
 
@@ -103,10 +97,11 @@ fn neuron_step(
         }
         let pre = topology[params.pre_start + edge];
         if spikes_prev[pre] != 0u {
-            let role = modulator_role(pre);
-            if role != 0.0 {
+            if is_dopamine(pre) {
+                // PAM/PPL1/etc. are not assigned an external +1/-1 valence.
+                // They differ through their actual released connectivity.
                 let count = f32(topology[params.count_start + edge]);
-                modulator_input += role * count * params.modulator_scale;
+                dopaminergic_input += count * params.modulator_scale;
             } else {
                 fast_current += fast_sign(pre) * synapses[edge].weight;
             }
@@ -116,7 +111,7 @@ fn neuron_step(
 
     let old = neurons[post];
     var next = old;
-    next.modulation = old.modulation * params.modulator_decay + modulator_input;
+    next.modulation = old.modulation * params.modulator_decay + dopaminergic_input;
 
     if old.refractory > 0u {
         next.membrane = params.reset;
@@ -150,7 +145,7 @@ fn plasticity_step(
 
     let pre = topology[params.pre_start + edge];
     let post = topology[params.post_start + edge];
-    if fast_sign(pre) == 0.0 || modulator_role(pre) != 0.0 {
+    if fast_sign(pre) == 0.0 {
         return;
     }
 

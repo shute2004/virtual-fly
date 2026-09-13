@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use rayon::prelude::*;
 
 use crate::{
-    model::{NeuralParams, Stimulus, assumed_fast_sign},
+    model::{NeuralParams, Stimulus, assumed_fast_sign, nt},
     snapshot::ConnectomeSnapshot,
     state::NeuralState,
 };
@@ -10,6 +10,8 @@ use crate::{
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StepSummary {
     pub spike_count: usize,
+    /// Diagnostic only. This aggregate is never fed back into neural dynamics,
+    /// plasticity, motor output, or an action decoder.
     pub mean_modulation: f32,
     pub max_abs_membrane: f32,
 }
@@ -18,7 +20,8 @@ pub struct StepSummary {
 ///
 /// The implementation is data-parallel but keeps the update order explicit:
 /// propagation -> neuron state -> local plasticity -> activity trace. There is
-/// no gradient, optimizer, target weight, or externally supplied reward value.
+/// no gradient, optimizer, target weight, externally supplied reward value, or
+/// externally supplied positive/negative valence sign.
 pub struct CpuRuntime {
     snapshot: ConnectomeSnapshot,
     params: NeuralParams,
@@ -26,11 +29,10 @@ pub struct CpuRuntime {
     spikes: Vec<u8>,
     refractory: Vec<u32>,
     activity_trace: Vec<f32>,
+    /// Coarse local dopaminergic drive at each postsynaptic neuron. The current
+    /// bootstrap model derives this only from released dopaminergic presynaptic
+    /// neurons and released connectivity; the environment never writes it.
     modulation: Vec<f32>,
-    /// Per-neuron experimental interpretation of neuromodulatory output.
-    /// 0 = no special role, +1/-1 = opposite modulatory valence. This is not
-    /// part of the released MaleCNS snapshot and must be configured explicitly.
-    modulator_roles: Vec<i8>,
     /// Mutable fast-synapse magnitudes. Sign comes from the current explicit
     /// transmitter model rather than being baked into the source connectome.
     weights: Vec<f32>,
@@ -55,7 +57,6 @@ impl CpuRuntime {
             refractory: vec![0; neuron_count],
             activity_trace: vec![0.0; neuron_count],
             modulation: vec![0.0; neuron_count],
-            modulator_roles: vec![0; neuron_count],
             weights,
             eligibility: vec![0.0; edge_count],
         }
@@ -105,17 +106,6 @@ impl CpuRuntime {
         Ok(())
     }
 
-    pub fn set_modulator_role(&mut self, neuron: usize, role: i8) -> Result<()> {
-        if neuron >= self.modulator_roles.len() {
-            bail!("modulator neuron index {neuron} is out of range");
-        }
-        if !(-1..=1).contains(&role) {
-            bail!("modulator role must be -1, 0, or 1");
-        }
-        self.modulator_roles[neuron] = role;
-        Ok(())
-    }
-
     pub fn step(&mut self, stimuli: &[Stimulus], plasticity_enabled: bool) -> Result<StepSummary> {
         let n = self.snapshot.neuron_count();
         let mut external = vec![0.0f32; n];
@@ -128,7 +118,6 @@ impl CpuRuntime {
 
         let spikes_prev = &self.spikes;
         let weights = &self.weights;
-        let roles = &self.modulator_roles;
         let params = self.params;
         let snapshot = &self.snapshot;
 
@@ -136,7 +125,7 @@ impl CpuRuntime {
             .into_par_iter()
             .map(|post| {
                 let mut fast_current = external[post];
-                let mut modulator_input = 0.0f32;
+                let mut dopaminergic_input = 0.0f32;
                 let start = snapshot.row_offsets[post] as usize;
                 let end = snapshot.row_offsets[post + 1] as usize;
 
@@ -145,17 +134,18 @@ impl CpuRuntime {
                     if spikes_prev[pre] == 0 {
                         continue;
                     }
-                    let role = roles[pre];
-                    if role != 0 {
-                        modulator_input += role as f32
-                            * snapshot.synapse_counts[edge] as f32
+                    if snapshot.neurotransmitters[pre] == nt::DOPAMINE {
+                        // No reward/aversive sign is supplied here. PAM, PPL1,
+                        // and other dopamine neurons differ through their actual
+                        // released connectivity and their own neural activity.
+                        dopaminergic_input += snapshot.synapse_counts[edge] as f32
                             * params.modulator_scale;
                     } else {
                         let sign = assumed_fast_sign(snapshot.neurotransmitters[pre]);
                         fast_current += sign * weights[edge];
                     }
                 }
-                (fast_current, modulator_input)
+                (fast_current, dopaminergic_input)
             })
             .collect();
 
@@ -291,7 +281,6 @@ mod tests {
         params.learning_rate = 0.05;
         params.modulator_scale = 0.1;
         let mut runtime = CpuRuntime::new(tiny_snapshot(), params);
-        runtime.set_modulator_role(3, 1).unwrap();
         let before = runtime.weights()[0];
 
         for _ in 0..50 {
@@ -313,7 +302,6 @@ mod tests {
     #[test]
     fn state_round_trip_restores_dynamics_and_plasticity_memory() {
         let mut runtime = CpuRuntime::new(tiny_snapshot(), NeuralParams::default());
-        runtime.set_modulator_role(3, 1).unwrap();
         runtime
             .step(
                 &[

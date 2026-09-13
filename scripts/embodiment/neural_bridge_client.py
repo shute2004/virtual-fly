@@ -85,15 +85,23 @@ class NeuralBridgeClient:
         if response.get("event") != "pong":
             raise NeuralBridgeError(f"unexpected ping response: {response}")
 
-    def step(
+    def step_with_body_readout(
         self,
         *,
         stimulate: Mapping[str, float] | None = None,
         stimulate_body: Sequence[tuple[int, float]] = (),
         read: Sequence[str] = (),
+        read_body: Sequence[int] = (),
         plasticity: bool = True,
         steps: int = 1,
-    ) -> dict[str, dict]:
+    ) -> tuple[dict[str, dict], dict[int, bool]]:
+        """Advance the CNS and return optional group diagnostics + exact body spikes.
+
+        ``read_body`` is the target motor-boundary primitive: each requested
+        released MaleCNS body ID is returned independently. No population mean,
+        matrix decoder, or action value is computed by this method.
+        """
+
         response = self._request(
             {
                 "type": "step",
@@ -103,11 +111,35 @@ class NeuralBridgeClient:
                     for body_id, current in stimulate_body
                 ],
                 "read": list(read),
+                "read_body": [int(body_id) for body_id in read_body],
                 "plasticity": bool(plasticity),
                 "steps": int(steps),
             }
         )
-        return response.get("read", {})
+        groups = response.get("read", {})
+        bodies = {
+            int(item["body_id"]): bool(item["spike"])
+            for item in response.get("read_body", [])
+        }
+        return groups, bodies
+
+    def step(
+        self,
+        *,
+        stimulate: Mapping[str, float] | None = None,
+        stimulate_body: Sequence[tuple[int, float]] = (),
+        read: Sequence[str] = (),
+        plasticity: bool = True,
+        steps: int = 1,
+    ) -> dict[str, dict]:
+        groups, _ = self.step_with_body_readout(
+            stimulate=stimulate,
+            stimulate_body=stimulate_body,
+            read=read,
+            plasticity=plasticity,
+            steps=steps,
+        )
+        return groups
 
     def save_weights(self, path: Path) -> dict:
         response = self._request({"type": "save_weights", "path": str(path)})

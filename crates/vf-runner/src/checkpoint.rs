@@ -24,7 +24,10 @@ pub struct CheckpointManifest {
     pub eligibility_file: String,
 }
 
-const SCHEMA_VERSION: u32 = 1;
+// v2 changes the meaning of `modulation`: it is now derived from released
+// dopaminergic presynaptic neurons/connectivity only. Old v1 checkpoints may
+// contain externally signed +1/-1 modulator-role state and must not be resumed.
+const SCHEMA_VERSION: u32 = 2;
 
 pub fn save_checkpoint(
     directory: impl AsRef<Path>,
@@ -100,7 +103,7 @@ pub fn load_checkpoint(
 
     if manifest.schema_version != SCHEMA_VERSION {
         bail!(
-            "unsupported checkpoint schema {}; expected {}",
+            "unsupported checkpoint schema {}; expected {} (v1 used externally signed modulator roles and is intentionally incompatible)",
             manifest.schema_version,
             SCHEMA_VERSION
         );
@@ -203,7 +206,7 @@ mod tests {
             spikes: vec![1, 0, 1],
             refractory: vec![2, 0, 1],
             activity_trace: vec![0.4, 0.5, 0.6],
-            modulation: vec![0.0, 0.7, -0.8],
+            modulation: vec![0.0, 0.7, 0.8],
             weights: vec![1.1, 2.2],
             eligibility: vec![0.9, -0.4],
         };

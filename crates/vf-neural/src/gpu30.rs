@@ -67,9 +67,8 @@ pub struct GpuRuntime {
     adapter_name: String,
     neuron_count: usize,
     edge_count: usize,
-    meta_cpu: Vec<u32>,
     external_cpu: Vec<f32>,
-    meta_buffer: wgpu::Buffer,
+    _meta_buffer: wgpu::Buffer,
     external_buffer: wgpu::Buffer,
     neuron_state_buffer: wgpu::Buffer,
     synapse_state_buffer: wgpu::Buffer,
@@ -131,6 +130,8 @@ impl GpuRuntime {
         topology.extend_from_slice(&snapshot.edge_posts);
         topology.extend_from_slice(&snapshot.synapse_counts);
 
+        // Metadata contains only released neurotransmitter codes. No external
+        // reward/aversive role is packed into neuron metadata.
         let meta_cpu = snapshot
             .neurotransmitters
             .iter()
@@ -158,7 +159,7 @@ impl GpuRuntime {
             &device,
             "vf neuron metadata",
             bytemuck::cast_slice(&meta_cpu),
-            true,
+            false,
         );
         let neuron_state_buffer = create_storage_init(
             &device,
@@ -298,9 +299,8 @@ impl GpuRuntime {
             adapter_name: format!("{} ({:?})", adapter_info.name, adapter_info.backend),
             neuron_count: n,
             edge_count: m,
-            meta_cpu,
             external_cpu,
-            meta_buffer,
+            _meta_buffer: meta_buffer,
             external_buffer,
             neuron_state_buffer,
             synapse_state_buffer,
@@ -317,27 +317,6 @@ impl GpuRuntime {
 
     pub fn adapter_name(&self) -> &str {
         &self.adapter_name
-    }
-
-    pub fn set_modulator_role(&mut self, neuron: usize, role: i8) -> Result<()> {
-        if neuron >= self.neuron_count {
-            bail!("modulator neuron index {neuron} is out of range");
-        }
-        let encoded_role = match role {
-            -1 => 2u32,
-            0 => 0u32,
-            1 => 1u32,
-            _ => bail!("modulator role must be -1, 0, or 1"),
-        };
-        let nt = self.meta_cpu[neuron] & 0xff;
-        let packed = nt | (encoded_role << 8);
-        self.meta_cpu[neuron] = packed;
-        self.queue.write_buffer(
-            &self.meta_buffer,
-            (neuron * std::mem::size_of::<u32>()) as u64,
-            bytemuck::bytes_of(&packed),
-        );
-        Ok(())
     }
 
     pub fn step(&mut self, stimuli: &[Stimulus], plasticity_enabled: bool) -> Result<()> {

@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Build stable MaleCNS groups used at the first brain/body boundary.
+"""Build stable MaleCNS groups used at experimental boundaries.
 
-The selected cell types come from released MaleCNS annotations. Functional
-interpretation is kept explicit: DNg02 is used as a flight-amplitude descending
-readout; PAM08/PPL1 remain experimental neuromodulatory groups; T4/T5 c/d
-populations are used as the first vertical-motion sensory interface.
+The selected cell types come from released MaleCNS annotations. Group names are
+only experiment-side handles for applying current to explicit neurons or for
+legacy diagnostics. They do not assign positive/negative numerical valence to
+neurons and they are not an action decoder.
+
+The target motor boundary is moving from the legacy DNg02 population diagnostic
+to individual released wing motor neurons. T4/T5 groups are also retained only
+for historical/smoke-test compatibility; the current Flyppy sensory path enters
+at released R1-R6 photoreceptors instead.
 """
 
 from __future__ import annotations
@@ -63,15 +68,10 @@ def add_group(
     resolved: dict[str, list[dict[str, object]]],
     name: str,
     records: list[dict[str, object]],
-    *,
-    modulator_role: int = 0,
 ) -> None:
     if not records:
         raise RuntimeError(f"group {name} resolved to zero neurons")
-    groups[name] = {
-        "body_ids": body_ids(records),
-        "modulator_role": modulator_role,
-    }
+    groups[name] = {"body_ids": body_ids(records)}
     resolved[name] = records
 
 
@@ -128,18 +128,16 @@ def main() -> int:
         resolved,
         "reward_dan",
         row_records(annotations, pam08_mask),
-        modulator_role=1,
     )
     add_group(
         groups,
         resolved,
         "aversive_dan",
         row_records(annotations, ppl1_mask),
-        modulator_role=-1,
     )
 
-    # T4/T5 c and d are the vertical-motion channels. We keep ON (T4) and OFF
-    # (T5) pathways separate and preserve the two optic-lobe hemispheres.
+    # Legacy diagnostic groups only. The target sensory boundary stimulates
+    # individual R1-R6 body IDs and leaves motion selectivity to the CNS.
     for visual_type in VERTICAL_MOTION_TYPES:
         type_mask = searchable.str.contains(
             rf"\b{visual_type}(?:_|\b)", case=False, regex=True
@@ -157,18 +155,19 @@ def main() -> int:
         "groups": groups,
         "provenance": {
             "flight_thrust": (
-                "DNg02 population; used as bilateral flight-amplitude descending readout"
+                "DNg02 population; legacy diagnostic only. Target motor output uses "
+                "individual released wing motor-neuron body IDs instead of a population average."
             ),
             "reward_dan": (
-                "PAM08 annotation candidates; experimental valence assignment"
+                "PAM08 dopaminergic annotation candidates. This group is only a set of "
+                "explicit neurons to stimulate; no +1 valence is assigned in the runtime."
             ),
             "aversive_dan": (
-                "PPL1 annotation candidates; experimental valence assignment"
+                "PPL1 dopaminergic annotation candidates. This group is only a set of "
+                "explicit neurons to stimulate; no -1 valence is assigned in the runtime."
             ),
             "vertical_motion": (
-                "T4c/T5c are upward-motion channels and T4d/T5d are "
-                "downward-motion channels; population-level input is provisional "
-                "until an individual MaleCNS retinotopic mapping is available"
+                "legacy T4/T5 diagnostic groups; not used by current R1-R6 Flyppy sensory input"
             ),
         },
         "resolved": resolved,

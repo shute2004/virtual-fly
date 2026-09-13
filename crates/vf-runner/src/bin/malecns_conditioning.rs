@@ -181,7 +181,12 @@ fn main() -> Result<()> {
         },
         synapses: stats,
         learned_weights_file: weights_path.display().to_string(),
-        interpretation: "Experience-dependent synaptic state change in the released MaleCNS graph under cue/DAN pairing. This is real MaleCNS associative-conditioning simulation, but not yet Flyppy body learning.".to_owned(),
+        interpretation: (
+            "Experience-dependent synaptic state change in the released MaleCNS graph under "
+            "cue/DAN current pairing. Reward and aversive DANs are not assigned external +1/-1 "
+            "signs; their effects differ through the released dopaminergic circuits they occupy."
+        )
+        .to_owned(),
     };
     let result_path = args.output.join("result.json");
     fs::write(&result_path, serde_json::to_vec_pretty(&result)?)?;
@@ -258,12 +263,6 @@ fn run_cpu(
     aversive_dan: &[usize],
 ) -> Result<(Vec<f32>, Vec<f32>, String)> {
     let mut runtime = CpuRuntime::new(snapshot.clone(), NeuralParams::default());
-    for &neuron in reward_dan {
-        runtime.set_modulator_role(neuron, 1)?;
-    }
-    for &neuron in aversive_dan {
-        runtime.set_modulator_role(neuron, -1)?;
-    }
     let before = runtime.weights().to_vec();
 
     let reward_cue_stimuli = group_stimuli(reward_cue, args.cue_current);
@@ -317,12 +316,6 @@ fn run_gpu(
     use vf_neural::gpu::GpuRuntime;
 
     let mut runtime = GpuRuntime::new(snapshot, NeuralParams::default())?;
-    for &neuron in reward_dan {
-        runtime.set_modulator_role(neuron, 1)?;
-    }
-    for &neuron in aversive_dan {
-        runtime.set_modulator_role(neuron, -1)?;
-    }
     let before = runtime.readback()?.weights;
 
     let reward_cue_stimuli = group_stimuli(reward_cue, args.cue_current);

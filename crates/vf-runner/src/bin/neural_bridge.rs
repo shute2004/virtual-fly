@@ -40,14 +40,11 @@ struct GroupConfigFile {
 #[derive(Debug, Deserialize)]
 struct GroupConfig {
     body_ids: Vec<u64>,
-    #[serde(default)]
-    modulator_role: i8,
 }
 
 #[derive(Debug)]
 struct Group {
     indices: Vec<usize>,
-    modulator_role: i8,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +62,8 @@ enum Request {
         steps: usize,
         #[serde(default)]
         read: Vec<String>,
+        #[serde(default)]
+        read_body: Vec<u64>,
     },
     SaveWeights {
         path: PathBuf,
@@ -100,7 +99,15 @@ struct ReadyResponse<'a> {
 struct GroupReadout {
     spikes: usize,
     neurons: usize,
+    /// Diagnostic population statistic retained only for legacy probes. The
+    /// target motor boundary uses individual body-ID readout instead.
     spike_fraction: f32,
+}
+
+#[derive(Debug, Serialize)]
+struct BodyReadout {
+    body_id: u64,
+    spike: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -108,6 +115,7 @@ struct StepResponse {
     ok: bool,
     step: u64,
     read: HashMap<String, GroupReadout>,
+    read_body: Vec<BodyReadout>,
 }
 
 #[derive(Debug, Serialize)]
@@ -146,13 +154,6 @@ enum Runtime {
 }
 
 impl Runtime {
-    fn set_modulator_role(&mut self, neuron: usize, role: i8) -> Result<()> {
-        match self {
-            Runtime::Cpu(runtime) => runtime.set_modulator_role(neuron, role),
-            Runtime::Gpu(runtime) => runtime.set_modulator_role(neuron, role),
-        }
-    }
-
     fn step(&mut self, stimuli: &[Stimulus], plasticity: bool) -> Result<()> {
         match self {
             Runtime::Cpu(runtime) => {
@@ -216,9 +217,6 @@ fn resolve_groups(
 
     let mut groups = HashMap::with_capacity(config.groups.len());
     for (name, group) in config.groups {
-        if !(-1..=1).contains(&group.modulator_role) {
-            bail!("group {name}: modulator_role must be -1, 0, or 1");
-        }
         let mut indices = Vec::with_capacity(group.body_ids.len());
         for body_id in group.body_ids {
             let index = snapshot.index_of_body_id(body_id).with_context(|| {
@@ -231,13 +229,7 @@ fn resolve_groups(
         if indices.is_empty() {
             bail!("group {name} resolved to zero neurons");
         }
-        groups.insert(
-            name,
-            Group {
-                indices,
-                modulator_role: group.modulator_role,
-            },
-        );
+        groups.insert(name, Group { indices });
     }
     Ok(groups)
 }
@@ -311,6 +303,24 @@ fn read_groups(
     Ok(result)
 }
 
+fn read_bodies(
+    snapshot: &ConnectomeSnapshot,
+    body_ids: &[u64],
+    spikes: &[u32],
+) -> Result<Vec<BodyReadout>> {
+    let mut result = Vec::with_capacity(body_ids.len());
+    for &body_id in body_ids {
+        let index = snapshot
+            .index_of_body_id(body_id)
+            .with_context(|| format!("read body ID {body_id} is not present in snapshot"))?;
+        result.push(BodyReadout {
+            body_id,
+            spike: spikes[index] != 0,
+        });
+    }
+    Ok(result)
+}
+
 fn write_weights(path: &PathBuf, weights: &[f32]) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -352,13 +362,6 @@ fn main() -> Result<()> {
             NeuralParams::default(),
         )?),
     };
-    for group in groups.values() {
-        if group.modulator_role != 0 {
-            for &neuron in &group.indices {
-                runtime.set_modulator_role(neuron, group.modulator_role)?;
-            }
-        }
-    }
 
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
@@ -480,6 +483,7 @@ fn main() -> Result<()> {
                 plasticity,
                 steps,
                 read,
+                read_body,
             } => {
                 if steps == 0 {
                     bail!("step request requires steps >= 1");
@@ -490,18 +494,35 @@ fn main() -> Result<()> {
                     runtime.step(&stimuli, plasticity)?;
                     step_counter += 1;
                 }
-                let readout = if read.is_empty() {
+
+                let needs_spikes = !read.is_empty() || !read_body.is_empty();
+                let spikes = if needs_spikes {
+                    Some(runtime.spikes()?)
+                } else {
+                    None
+                };
+                let group_readout = if read.is_empty() {
                     HashMap::new()
                 } else {
-                    let spikes = runtime.spikes()?;
-                    read_groups(&groups, &read, &spikes)?
+                    read_groups(&groups, &read, spikes.as_deref().expect("spikes requested"))?
                 };
+                let body_readout = if read_body.is_empty() {
+                    Vec::new()
+                } else {
+                    read_bodies(
+                        &snapshot,
+                        &read_body,
+                        spikes.as_deref().expect("spikes requested"),
+                    )?
+                };
+
                 write_json(
                     &mut stdout,
                     &StepResponse {
                         ok: true,
                         step: step_counter,
-                        read: readout,
+                        read: group_readout,
+                        read_body: body_readout,
                     },
                 )?;
                 Ok(true)
