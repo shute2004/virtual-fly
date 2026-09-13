@@ -12,6 +12,7 @@
 - 外部から与えるのは、可能な限り生物が受け取る形に対応した神経刺激と神経修飾刺激に限定する。
 - 行動は外部プログラムが決定せず、神経活動から運動系を経由して仮想身体に生じさせる。
 - 実測情報、文献から採用したモデル、便宜的な仮定を明確に区別する。
+- 既知の生物学的・物理的な局所過程を、同じ結果を返す外部の特徴抽出・集約アルゴリズムで置換しない。
 - 生物学的忠実度は段階的に上げる。最初から「完全再現」を前提にしない。
 
 ## 現在の実装
@@ -23,9 +24,11 @@
 ```text
 Flyppy physical world
       ↓
-FlyGym compound-eye ommatidia
+FlyBody raw eye cameras
       ↓
-T4/T5 vertical-motion input approximation
+MaleCNS optic-lobe hex columns: local light sampling
+      ↓
+current into corresponding R1-R6 photoreceptor body IDs
       ↓
 MaleCNS runtime + local plasticity
       ↓
@@ -38,7 +41,9 @@ Flyppy physical world
 
 ゲート通過時は `PAM08` 候補群、衝突時は `PPL1` 候補群を刺激します。ゲームのゲート座標をCNSへ直接入力したり、外部プログラムから個々のシナプス重みを指定したりはしません。
 
-現在の主な近似は、FlyGymの複眼各ommatidiumとMaleCNS各視覚ニューロンの個別対応がまだ確定していないため、縦方向の視覚運動をT4c/T4d・T5c/T5d集団へ与えるpopulation-levelの暫定入力層を置いている点です。
+視覚入力では、MaleCNS公式annotationの `assignedOlHex1` / `assignedOlHex2` をretinotopic座標として使い、対応する実際の `R1-R6` body IDへ局所受光量に応じた電流を流します。R1-R6自身にcolumn座標がない場合は、column座標を持つL1への実際のMaleCNS接続からR1-R6を逆引きします。外部でT4/T5運動応答、edge、障害物位置、gap位置などを計算してCNSへ与える処理はありません。
+
+この境界で `observed` なのはMaleCNSのbody ID、接続、optic-lobe hex座標です。FlyBody眼カメラ上へhex latticeを投影する幾何変換と、局所受光量から外部電流へのscaleは現時点では `calibrated` な感覚変換境界です。空間情報を平均・poolingして意味情報へ変換する処理は行いません。
 
 ### FlyBody飛翔物理
 
@@ -46,7 +51,7 @@ FlyGym 2.1.0の実験的FlyBody統合では、元FlyBodyに含まれる左右win
 
 Flyppyの各episodeはFlyBody公式飛翔条件を参考に47.5度のbody pitchから開始し、+X方向へ既定 `300 mm/s` の初速度を一度だけ与えます。その後の前進速度を外部から維持・補正する処理はありません。CNSから得たDNg02活動によるwing制御とMuJoCo物理だけで運動を継続します。
 
-`bash scripts/dev/embodiment.sh` では、復元したflight geometry・parameterがcompile後のMuJoCoモデルへ実際に入っていることに加え、同一初速度でwing fluidあり/なしを比較するflight envelopeも検証します。
+`bash scripts/dev/embodiment.sh` では、retinotopic R1-R6視覚入力、復元したflight geometry・parameterがcompile後のMuJoCoモデルへ実際に入っていることに加え、同一初速度でwing fluidあり/なしを比較するflight envelopeも検証します。
 
 ## 初回セットアップ
 
@@ -75,7 +80,7 @@ bash scripts/dev/embodiment.sh
 bash scripts/dev/train_flyppy.sh
 ```
 
-デフォルトは表示なしです。GPU backend、複眼入力、FlyBody物理、局所可塑性、報酬・嫌悪刺激を使って学習を進めます。
+デフォルトは表示なしです。GPU backend、retinotopic R1-R6入力、FlyBody物理、局所可塑性、報酬・嫌悪刺激を使って学習を進めます。
 
 主な生成物:
 
@@ -92,6 +97,12 @@ artifacts/experiments/flyppy-v0/
     ├── modulation.f32le
     ├── weights.f32le
     └── eligibility.f32le
+```
+
+加えて、retinotopic入力の解決結果を以下へ保存します。
+
+```text
+artifacts/malecns-v1.0/retinotopic-vision-v1.json
 ```
 
 checkpointはシナプス重みだけでなく、膜電位・spike・refractory・activity trace・neuromodulation・eligibilityまで含みます。既定では8 episodeごとと最終episodeに保存します。
@@ -158,7 +169,7 @@ artifacts/experiments/flyppy-v0/synapse-snapshots.jsonl
 bash scripts/dev/view_neural.sh
 ```
 
-localhost上のブラウザビューアが開き、`trajectory.jsonl` と `synapse-snapshots.jsonl` を1秒ごとに再取得して学習中でも追従します。表示するのはT4/T5入力、左右DNg02発火率、PAM08/PPL1刺激、強化・弱化した上位シナプスです。
+localhost上のブラウザビューアはtrajectoryとsynapse snapshotを表示する開発用表示層です。表示用の集約値はCNSへの入力には使いません。
 
 シナプスの3Dノード位置は現時点ではbody IDから決定論的に生成した模式配置であり、実際の解剖学的位置ではありません。MaleCNSの実形態・実シナプス座標を接続できた段階で表示層を置換します。
 
