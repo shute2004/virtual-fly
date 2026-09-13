@@ -65,6 +65,8 @@ def select(
     dopamine_only: bool,
 ) -> list[dict[str, object]]:
     regex = re.compile(pattern, re.IGNORECASE)
+    # Pandas/Arrow may expose a read-only NumPy view here. Do not mutate it in
+    # place: combine masks functionally so this works across pandas backends.
     mask = text.str.contains(regex, regex=True, na=False).to_numpy(dtype=bool, copy=True)
     if dopamine_only:
         mask = mask & (frame["nt_code"].to_numpy() == DOPAMINE_CODE)
