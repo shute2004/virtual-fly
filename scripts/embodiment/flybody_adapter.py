@@ -45,6 +45,14 @@ from flygym.flybody.anatomy_flybody import (
 )
 from flygym.utils.math import Rotation3D
 
+from flybody_flight_physics import (
+    FLIGHT_PHYSICS_TIMESTEP_S,
+    add_flight_position_actuators,
+    add_flight_wing_aerodynamics,
+    apply_flight_air_parameters,
+    apply_flight_wing_joint_parameters,
+)
+
 
 @dataclass(frozen=True)
 class WingDrive:
@@ -67,6 +75,7 @@ class FlyBodyWingAdapter:
         max_scale: float = 1.45,
         enable_vision: bool = False,
         enable_observer_camera: bool = False,
+        enable_wing_aerodynamics: bool = True,
         world: BaseWorld | None = None,
     ) -> None:
         if wingbeat_hz <= 0:
@@ -84,6 +93,7 @@ class FlyBodyWingAdapter:
         self.min_scale = float(min_scale)
         self.max_scale = float(max_scale)
         self.vision_enabled = bool(enable_vision)
+        self.wing_aerodynamics_enabled = bool(enable_wing_aerodynamics)
         self.observer_camera_name: str | None = None
         observer_camera_key = "training_view"
 
@@ -93,12 +103,16 @@ class FlyBodyWingAdapter:
             axis_order=FlyBodyAxisOrder.YAW_ROLL_PITCH,
         )
         self.fly.add_joints(skeleton, KinematicPosePreset.FLYBODY_NEUTRAL)
+        apply_flight_wing_joint_parameters(self.fly)
+
         actuated_dofs = skeleton.get_actuated_dofs_from_preset(
             FlyBodyActuatedDOFPreset.ALL
         )
-        self.fly.add_actuators(actuated_dofs, ActuatorType.POSITION)
+        add_flight_position_actuators(self.fly, actuated_dofs)
         self.fly.add_tendons()
         self.fly.add_tendon_actuators()
+        if self.wing_aerodynamics_enabled:
+            add_flight_wing_aerodynamics(self.fly)
         if self.vision_enabled:
             self.fly.add_vision(draw_sensor_markers=False)
         if enable_observer_camera:
@@ -130,6 +144,13 @@ class FlyBodyWingAdapter:
             if add_obstacle_contacts is not None:
                 add_obstacle_contacts(self.fly)
 
+        # BaseWorld.add_fly() copies FlyBody's global options into the parent world.
+        # FlyGym 2.1's generated globals retain source density/viscosity even though
+        # the parsed model uses mm. Override them only when the restored wing-fluid
+        # model is active so MuJoCo sees the same physical air after unit conversion.
+        if self.wing_aerodynamics_enabled:
+            apply_flight_air_parameters(active_world)
+
         if enable_observer_camera:
             # MjSpec.attach() prefixes element names with the fly namespace.
             # Resolve the actual compiled name after attachment instead of assuming
@@ -139,7 +160,7 @@ class FlyBodyWingAdapter:
             ].name
 
         self.world = active_world
-        self.sim = Simulation(active_world)
+        self.sim = Simulation(active_world, timestep=FLIGHT_PHYSICS_TIMESTEP_S)
         self.sim.reset()
         self.timestep = float(self.sim.mj_model.opt.timestep)
         self._time = 0.0
