@@ -33,6 +33,7 @@ run "MaleCNS embodiment group discovery" uv run python scripts/data/make_embodim
 run "MaleCNS visual mapping metadata probe" uv run python scripts/dev/vision_mapping_probe.py --snapshot "$SNAPSHOT"
 run "Rust compile check" cargo check --workspace
 run "Flyppy course geometry" uv run python scripts/embodiment/flyppy_course.py
+run "Compound-eye vertical motion encoder" uv run python scripts/embodiment/visual_motion_encoder.py
 run "FlyBody wing actuation" uv run python scripts/embodiment/flybody_wing_smoke.py
 run "Flyppy compound-eye rendering" uv run python scripts/embodiment/flyppy_vision_smoke.py
 run "MaleCNS to FlyBody motor bridge" uv run python scripts/embodiment/cns_flybody_smoke.py --snapshot "$SNAPSHOT" --groups "$GROUPS"
