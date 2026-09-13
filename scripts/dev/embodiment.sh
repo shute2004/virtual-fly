@@ -29,6 +29,7 @@ printf 'repository: %s\n' "$ROOT"
 printf 'snapshot:   %s\n' "$SNAPSHOT"
 
 run "Embodiment Python dependencies" uv sync
+run "Python syntax preflight" uv run python -m compileall -q scripts/embodiment scripts/data scripts/analysis
 run "MaleCNS embodiment group discovery" uv run python scripts/data/make_embodiment_groups.py --snapshot "$SNAPSHOT" --output "$GROUPS"
 run "Rust compile check" cargo check --workspace
 run "Rust unit tests" cargo test --workspace
