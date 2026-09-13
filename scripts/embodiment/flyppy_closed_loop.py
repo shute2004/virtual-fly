@@ -62,6 +62,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-control-steps", type=int, default=1800)
     parser.add_argument("--physics-steps", type=int, default=10)
+    parser.add_argument(
+        "--initial-forward-speed-mm-s",
+        type=float,
+        default=300.0,
+        help=(
+            "one-shot +x velocity applied only at episode reset; 300 mm/s is the "
+            "midpoint of the original FlyBody vision-flight 20-40 cm/s range"
+        ),
+    )
     parser.add_argument("--gate-count", type=int, default=6)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--reward-current", type=float, default=2.0)
@@ -174,6 +183,8 @@ def main() -> int:
         raise SystemExit("episodes must be >= 1")
     if args.max_control_steps < 1 or args.physics_steps < 1:
         raise SystemExit("control/physics steps must be >= 1")
+    if not np.isfinite(args.initial_forward_speed_mm_s) or args.initial_forward_speed_mm_s <= 0:
+        raise SystemExit("initial-forward-speed-mm-s must be finite and > 0")
     if args.gate_count < 1 or args.trajectory_stride < 1:
         raise SystemExit("gate-count and trajectory-stride must be >= 1")
     if args.checkpoint_every < 1:
@@ -194,6 +205,7 @@ def main() -> int:
         tethered=False,
         world=world,
         spawn_position_mm=(0.0, 0.0, 5.0),
+        initial_linear_velocity_mm_s=(args.initial_forward_speed_mm_s, 0.0, 0.0),
         enable_vision=True,
         enable_observer_camera=visualization_enabled,
     )
@@ -271,6 +283,7 @@ def main() -> int:
                     max_x = float("-inf")
                     min_z = float("inf")
                     max_z = float("-inf")
+                    final_velocity = body.root_linear_velocity_mm_s()
                     step_count = 0
 
                     # Prime FlyGym's eye renderer and the temporal motion encoder.
@@ -300,6 +313,7 @@ def main() -> int:
                             visualizer.sync()
 
                         position = body.thorax_position_mm()
+                        final_velocity = body.root_linear_velocity_mm_s()
                         x_mm = float(position[0])
                         z_mm = float(position[2])
                         max_x = max(max_x, x_mm)
@@ -347,6 +361,9 @@ def main() -> int:
                                         "x_mm": x_mm,
                                         "y_mm": float(position[1]),
                                         "z_mm": z_mm,
+                                        "vx_mm_s": float(final_velocity[0]),
+                                        "vy_mm_s": float(final_velocity[1]),
+                                        "vz_mm_s": float(final_velocity[2]),
                                         "next_gate": course.next_gate_index,
                                         "motor_left": left,
                                         "motor_right": right,
@@ -412,19 +429,23 @@ def main() -> int:
                         "max_x_mm": max_x,
                         "min_z_mm": min_z,
                         "max_z_mm": max_z,
+                        "final_vx_mm_s": float(final_velocity[0]),
+                        "final_vy_mm_s": float(final_velocity[1]),
+                        "final_vz_mm_s": float(final_velocity[2]),
                         "video": video_path,
                         "synapse_snapshot": synapse_snapshot is not None,
                         "checkpoint_saved": checkpoint_saved_this_episode,
                     }
                     episode_results.append(result)
                     print(
-                        "episode={} steps={} passed={} collision={} finished={} max_x={:.3f}".format(
+                        "episode={} steps={} passed={} collision={} finished={} max_x={:.3f} final_vx={:.3f}".format(
                             episode,
                             step_count,
                             episode_passed,
                             collision,
                             finished,
                             max_x,
+                            final_velocity[0],
                         )
                     )
                     trajectory_file.flush()
@@ -435,7 +456,7 @@ def main() -> int:
     second_half = passed_by_episode[len(passed_by_episode) // 2 :]
     checkpoint_weight_file = checkpoint_dir / "weights.f32le"
     summary = {
-        "schema_version": 2,
+        "schema_version": 3,
         "experiment": "flyppy_closed_loop_v0",
         "backend": ready.get("backend"),
         "neurons": ready.get("neurons"),
@@ -445,6 +466,11 @@ def main() -> int:
         "episode_end": start_episode + args.episodes - 1,
         "gate_count": args.gate_count,
         "physics_steps_per_control": args.physics_steps,
+        "initial_forward_speed_mm_s": args.initial_forward_speed_mm_s,
+        "initial_forward_speed_scope": (
+            "one-shot episode initial condition only; no external forward-velocity "
+            "controller or per-step translational forcing is applied"
+        ),
         "total_passed_gates_this_run": total_passed,
         "total_collisions_this_run": total_collisions,
         "mean_passed_first_half": float(np.mean(first_half)) if first_half else 0.0,
@@ -477,13 +503,19 @@ def main() -> int:
             "motion encoder -> MaleCNS T4c/T4d/T5c/T5d populations"
         ),
         "motor_interface": "MaleCNS DNg02 populations -> FlyBody wing amplitude",
+        "body_physics": (
+            "FlyGym 2.1 FlyBody with source FlyBody flight wing gains, damping, "
+            "stiffness, 50-us timestep, restored per-wing MuJoCo ellipsoid-fluid "
+            "geometries, and unit-corrected air density/viscosity"
+        ),
         "teaching_signal": (
             "gate pass -> PAM08 candidate stimulation; collision -> PPL1 candidate stimulation"
         ),
         "important_limit": (
             "This run is a real closed loop over the released MaleCNS connectome, but "
-            "the individual-cell retinal mapping and wing kinematics are still provisional "
-            "biophysical approximations and require calibration before biological claims."
+            "the individual-cell retinal mapping, DNg02-to-wing transfer gains, and "
+            "analytic wing kinematics remain provisional biophysical approximations "
+            "and require calibration before biological claims."
         ),
     }
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
