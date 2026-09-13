@@ -25,6 +25,7 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 
 run "Python dependencies" uv sync
 run "MaleCNS v1.0 download and preprocessing" uv run python scripts/data/prepare_malecns.py --download --output "$SNAPSHOT"
+run "MaleCNS modulatory candidate discovery" uv run python scripts/data/find_modulatory_neurons.py --snapshot "$SNAPSHOT" --output "$SNAPSHOT/modulatory-candidates.json"
 run "Rust format check" cargo fmt --all -- --check
 run "Rust compile check" cargo check --workspace
 run "Rust tests" cargo test --workspace
