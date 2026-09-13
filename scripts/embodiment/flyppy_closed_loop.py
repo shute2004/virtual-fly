@@ -53,7 +53,12 @@ def parse_args() -> argparse.Namespace:
         default=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"),
     )
     parser.add_argument("--backend", choices=("cpu", "gpu"), default="gpu")
-    parser.add_argument("--episodes", type=int, default=8)
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=8,
+        help="number of episodes to run in this invocation",
+    )
     parser.add_argument("--max-control-steps", type=int, default=1800)
     parser.add_argument("--physics-steps", type=int, default=10)
     parser.add_argument("--gate-count", type=int, default=6)
@@ -66,6 +71,25 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=Path("artifacts/experiments/flyppy-v0"),
+    )
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=Path,
+        default=None,
+        help="restore full CNS dynamic/plasticity state before running new episodes",
+    )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        default=None,
+        help="full CNS checkpoint directory (default: OUTPUT_DIR/checkpoint)",
+    )
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=1,
+        metavar="EPISODES",
+        help="save full CNS state every N episodes; final episode is always saved",
     )
     parser.add_argument(
         "--render",
@@ -126,6 +150,23 @@ def deliver_reinforcement(
     )
 
 
+def infer_next_episode(trajectory_path: Path) -> int:
+    if not trajectory_path.exists():
+        return 0
+    highest = -1
+    with trajectory_path.open("r", encoding="utf-8") as file:
+        for line in file:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            highest = max(highest, int(record.get("episode", -1)))
+    return highest + 1
+
+
 def main() -> int:
     args = parse_args()
     if args.episodes < 1:
@@ -134,12 +175,16 @@ def main() -> int:
         raise SystemExit("control/physics steps must be >= 1")
     if args.gate_count < 1 or args.trajectory_stride < 1:
         raise SystemExit("gate-count and trajectory-stride must be >= 1")
+    if args.checkpoint_every < 1:
+        raise SystemExit("checkpoint-every must be >= 1")
     if args.playback_speed <= 0.0 or args.video_fps <= 0:
         raise SystemExit("playback-speed and video-fps must be positive")
     if args.synapse_top_n < 1 or args.synapse_trace_every < 1:
         raise SystemExit("synapse-top-n and synapse-trace-every must be >= 1")
     if args.synapse_min_delta < 0.0:
         raise SystemExit("synapse-min-delta must be >= 0")
+    if args.resume_checkpoint is not None and not args.resume_checkpoint.exists():
+        raise SystemExit(f"resume checkpoint not found: {args.resume_checkpoint}")
 
     visualization_enabled = args.render or args.record_video is not None
     course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
@@ -158,8 +203,15 @@ def main() -> int:
     summary_path = args.output_dir / "summary.json"
     learned_weights_path = args.output_dir / "learned_weights.f32le"
     synapse_trace_path = args.output_dir / "synapse-snapshots.jsonl"
-    if args.synapse_trace:
+    checkpoint_dir = args.checkpoint_dir or (args.output_dir / "checkpoint")
+    resuming = args.resume_checkpoint is not None
+    start_episode = infer_next_episode(trajectory_path) if resuming else 0
+
+    if not resuming:
+        trajectory_path.unlink(missing_ok=True)
         synapse_trace_path.unlink(missing_ok=True)
+
+    if args.synapse_trace:
         synapse_monitor: SynapseMonitor | None = SynapseMonitor(
             snapshot=args.snapshot,
             output=synapse_trace_path,
@@ -174,7 +226,9 @@ def main() -> int:
     episode_results: list[dict[str, object]] = []
     total_passed = 0
     total_collisions = 0
-    checkpoint_info: dict[str, object] = {}
+    weight_checkpoint_info: dict[str, object] = {}
+    state_checkpoint_info: dict[str, object] = {}
+    resume_info: dict[str, object] | None = None
     started = time.perf_counter()
 
     observer_camera = body.observer_camera_name or "training_view"
@@ -186,7 +240,8 @@ def main() -> int:
         playback_speed=args.playback_speed,
         output_fps=args.video_fps,
     ) as visualizer:
-        with trajectory_path.open("w", encoding="utf-8") as trajectory_file:
+        trajectory_mode = "a" if resuming else "w"
+        with trajectory_path.open(trajectory_mode, encoding="utf-8") as trajectory_file:
             with NeuralBridgeClient(
                 snapshot=args.snapshot,
                 groups=args.groups,
@@ -194,8 +249,16 @@ def main() -> int:
             ) as brain:
                 brain.ping()
                 ready = dict(brain.ready)
+                if args.resume_checkpoint is not None:
+                    resume_info = brain.load_checkpoint(args.resume_checkpoint)
+                    print(
+                        "resumed_checkpoint={} neural_step={}".format(
+                            resume_info.get("path"), resume_info.get("step")
+                        )
+                    )
 
-                for episode in range(args.episodes):
+                for local_episode in range(args.episodes):
+                    episode = start_episode + local_episode
                     course.reset()
                     body.reset()
                     vision.reset()
@@ -308,8 +371,8 @@ def main() -> int:
 
                     synapse_snapshot = None
                     if synapse_monitor is not None and (
-                        (episode + 1) % args.synapse_trace_every == 0
-                        or episode + 1 == args.episodes
+                        (local_episode + 1) % args.synapse_trace_every == 0
+                        or local_episode + 1 == args.episodes
                     ):
                         print(f"capturing synapse snapshot after episode {episode} ...")
                         synapse_snapshot = synapse_monitor.capture(
@@ -324,6 +387,19 @@ def main() -> int:
                             )
                         )
 
+                    if (
+                        (local_episode + 1) % args.checkpoint_every == 0
+                        or local_episode + 1 == args.episodes
+                    ):
+                        print(f"saving full CNS checkpoint after episode {episode} ...")
+                        state_checkpoint_info = brain.save_checkpoint(checkpoint_dir)
+                        print(
+                            "checkpoint={} neural_step={}".format(
+                                state_checkpoint_info.get("path"),
+                                state_checkpoint_info.get("step"),
+                            )
+                        )
+
                     result = {
                         "episode": episode,
                         "control_steps": step_count,
@@ -335,6 +411,8 @@ def main() -> int:
                         "max_z_mm": max_z,
                         "video": video_path,
                         "synapse_snapshot": synapse_snapshot is not None,
+                        "checkpoint_saved": bool(state_checkpoint_info)
+                        and state_checkpoint_info.get("path") == str(checkpoint_dir),
                     }
                     episode_results.append(result)
                     print(
@@ -350,10 +428,11 @@ def main() -> int:
                     trajectory_file.flush()
 
                 print("saving learned synaptic weights ...")
-                checkpoint_info = brain.save_weights(learned_weights_path)
+                weight_checkpoint_info = brain.save_weights(learned_weights_path)
                 print(
                     "learned_weights={} count={}".format(
-                        checkpoint_info.get("path"), checkpoint_info.get("weights")
+                        weight_checkpoint_info.get("path"),
+                        weight_checkpoint_info.get("weights"),
                     )
                 )
 
@@ -362,25 +441,34 @@ def main() -> int:
     first_half = passed_by_episode[: max(1, len(passed_by_episode) // 2)]
     second_half = passed_by_episode[len(passed_by_episode) // 2 :]
     summary = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment": "flyppy_closed_loop_v0",
         "backend": ready.get("backend"),
         "neurons": ready.get("neurons"),
         "edges": ready.get("edges"),
-        "episodes": args.episodes,
+        "episodes_this_run": args.episodes,
+        "episode_start": start_episode,
+        "episode_end": start_episode + args.episodes - 1,
         "gate_count": args.gate_count,
         "physics_steps_per_control": args.physics_steps,
-        "total_passed_gates": total_passed,
-        "total_collisions": total_collisions,
+        "total_passed_gates_this_run": total_passed,
+        "total_collisions_this_run": total_collisions,
         "mean_passed_first_half": float(np.mean(first_half)) if first_half else 0.0,
         "mean_passed_second_half": float(np.mean(second_half)) if second_half else 0.0,
         "elapsed_seconds": elapsed,
-        "learned_weights_file": str(learned_weights_path),
-        "checkpoint_weight_count": checkpoint_info.get("weights"),
+        "resumed_from": str(args.resume_checkpoint) if args.resume_checkpoint else None,
+        "resume_neural_step": resume_info.get("step") if resume_info else None,
+        "full_cns_checkpoint": str(checkpoint_dir),
+        "checkpoint_neural_step": state_checkpoint_info.get("step"),
         "checkpoint_scope": (
-            "Synaptic weights only in v0. Membrane, activity trace, modulation, "
-            "eligibility, and body state are not yet serialized."
+            "CNS membrane potentials, spikes, refractory counters, activity traces, "
+            "neuromodulation state, synaptic weights, and eligibility traces. Topology, "
+            "neurotransmitter annotations, numerical parameters, and modulator roles are "
+            "reconstructed from the same snapshot/configuration. Body/environment state "
+            "is intentionally reset at the episode boundary."
         ),
+        "learned_weights_file": str(learned_weights_path),
+        "learned_weight_count": weight_checkpoint_info.get("weights"),
         "visualization": {
             "live_body_3d": bool(args.render),
             "record_dir": str(args.record_video) if args.record_video else None,
@@ -408,6 +496,7 @@ def main() -> int:
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(f"summary={summary_path}")
     print(f"trajectory={trajectory_path}")
+    print(f"checkpoint={checkpoint_dir}")
     if args.synapse_trace:
         print(f"synapse_trace={synapse_trace_path}")
     print(f"elapsed={elapsed:.3f}s")
