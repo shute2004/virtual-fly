@@ -26,6 +26,7 @@ from flygym.compose import (
     TetheredWorld,
 )
 from flygym.compose.fly import FlyBody
+from flygym.compose.world.base_world import BaseWorld
 from flygym.flybody.anatomy_flybody import (
     FlyBodyActuatedDOFPreset,
     FlyBodyAxisOrder,
@@ -52,16 +53,21 @@ class FlyBodyWingAdapter:
         dng02_gain: float = 0.35,
         min_scale: float = 0.65,
         max_scale: float = 1.45,
+        enable_vision: bool = False,
+        world: BaseWorld | None = None,
     ) -> None:
         if wingbeat_hz <= 0:
             raise ValueError("wingbeat_hz must be positive")
         if not 0 < min_scale <= max_scale:
             raise ValueError("invalid wing amplitude scale limits")
+        if tethered and world is not None:
+            raise ValueError("custom world is only supported for free-body simulations")
 
         self.wingbeat_hz = float(wingbeat_hz)
         self.dng02_gain = float(dng02_gain)
         self.min_scale = float(min_scale)
         self.max_scale = float(max_scale)
+        self.vision_enabled = bool(enable_vision)
 
         self.fly = FlyBody(name="virtual_fly")
         skeleton = FlyBodySkeleton(
@@ -75,25 +81,31 @@ class FlyBodyWingAdapter:
         self.fly.add_actuators(actuated_dofs, ActuatorType.POSITION)
         self.fly.add_tendons()
         self.fly.add_tendon_actuators()
+        if self.vision_enabled:
+            self.fly.add_vision(draw_sensor_markers=False)
 
         if tethered:
-            world = TetheredWorld()
-            world.add_fly(
+            active_world = TetheredWorld()
+            active_world.add_fly(
                 self.fly,
                 (0.0, 0.0, 0.0),
                 Rotation3D("quat", (1.0, 0.0, 0.0, 0.0)),
             )
         else:
-            world = FlatGroundWorld()
-            world.add_fly(
+            active_world = world if world is not None else FlatGroundWorld()
+            active_world.add_fly(
                 self.fly,
                 spawn_position_mm,
                 Rotation3D("quat", (1.0, 0.0, 0.0, 0.0)),
                 bodysegs_with_ground_contact=FlyBodyContactBodiesPreset.LEGS_THORAX_ABDOMEN_HEAD,
                 add_ground_contact_sensors=True,
             )
+            add_obstacle_contacts = getattr(active_world, "add_obstacle_contacts", None)
+            if add_obstacle_contacts is not None:
+                add_obstacle_contacts(self.fly)
 
-        self.sim = Simulation(world)
+        self.world = active_world
+        self.sim = Simulation(active_world)
         self.sim.reset()
         self.timestep = float(self.sim.mj_model.opt.timestep)
         self._time = 0.0
@@ -143,8 +155,6 @@ class FlyBodyWingAdapter:
 
     @staticmethod
     def _wing_pattern(phase: float, amplitude_scale: float) -> dict[str, float]:
-        # Prototype pattern in FlyBody's yaw/roll/pitch convention. Scale only
-        # the oscillatory component so the nominal offsets remain unchanged.
         return {
             "yaw": 0.3 + amplitude_scale * 1.1 * math.sin(phase - math.pi / 2.0),
             "roll": -0.1 + amplitude_scale * 0.25 * math.sin(1.5 * phase),
@@ -164,9 +174,7 @@ class FlyBodyWingAdapter:
                 pattern = self._wing_pattern(phase, scale)
                 for axis, angle in pattern.items():
                     target[self._wing_indices[(side, axis)]] = angle
-            self.sim.set_actuator_inputs(
-                self.fly.name, ActuatorType.POSITION, target
-            )
+            self.sim.set_actuator_inputs(self.fly.name, ActuatorType.POSITION, target)
             self.sim.step()
             self._time += self.timestep
 
@@ -175,6 +183,11 @@ class FlyBodyWingAdapter:
             self.sim.get_body_positions(self.fly.name)[self._thorax_index],
             dtype=np.float64,
         ).copy()
+
+    def ommatidia_readouts(self) -> np.ndarray:
+        if not self.vision_enabled:
+            raise RuntimeError("vision was not enabled for this FlyBody instance")
+        return np.asarray(self.sim.get_ommatidia_readouts(self.fly.name), dtype=np.float32)
 
     def wing_joint_angles_rad(self) -> dict[str, float]:
         all_angles = np.asarray(self.sim.get_joint_angles(self.fly.name), dtype=np.float64)
