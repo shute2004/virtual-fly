@@ -15,6 +15,31 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   exit 2
 }
 
+# The current Flyppy runner still reduces bilateral DNg02 population activity to
+# spike fractions and then computes wing amplitudes outside the nervous system.
+# That adapter remains useful for isolated physics smoke tests, but it is not an
+# acceptable learning boundary for the target virtual-fly experiment. Refuse to
+# run training by default until individual released wing motor neurons are wired
+# through a peripheral motor/muscle model.
+if [ "${VF_ALLOW_PROVISIONAL_DNG02_MOTOR:-0}" != "1" ]; then
+  cat >&2 <<'EOF'
+Flyppy learning is intentionally disabled at the current biological boundary.
+
+Reason: the existing runner still averages DNg02 population spikes into an
+external wing-amplitude command. virtual-fly must instead let the MaleCNS
+premotor network reach individual released wing motor neurons and connect those
+neurons to the peripheral muscle/body model without an external action decoder.
+
+Run:
+  bash scripts/dev/audit_biological_boundaries.sh
+
+The provisional DNg02 adapter can still be exercised explicitly for legacy
+physics diagnostics by setting VF_ALLOW_PROVISIONAL_DNG02_MOTOR=1, but results
+from that mode must not be treated as target-faithful learning experiments.
+EOF
+  exit 2
+fi
+
 uv sync
 uv run python scripts/data/make_embodiment_groups.py \
   --snapshot "$SNAPSHOT" \
