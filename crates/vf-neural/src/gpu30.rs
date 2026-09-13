@@ -386,11 +386,7 @@ impl GpuRuntime {
     }
 
     pub fn readback(&self) -> Result<GpuReadback> {
-        let current_spikes = if self.current_is_b {
-            &self.spikes_b
-        } else {
-            &self.spikes_a
-        };
+        let current_spikes = self.current_spike_buffer();
         let spikes = self.read_buffer::<u32>(current_spikes, self.neuron_count)?;
         let neurons = self.read_buffer::<NeuronStateGpu>(&self.neuron_state_buffer, self.neuron_count)?;
         let synapses = self.read_buffer::<SynapseStateGpu>(&self.synapse_state_buffer, self.edge_count)?;
@@ -401,6 +397,21 @@ impl GpuRuntime {
             modulation: neurons.iter().map(|state| state.modulation).collect(),
             weights: synapses.iter().map(|state| state.weight).collect(),
         })
+    }
+
+    /// Read only the current spike vector, avoiding the ~edge-count-sized weight
+    /// transfer performed by `readback()`. Closed-loop body control should use
+    /// this path unless it explicitly needs synaptic state for analysis.
+    pub fn read_spikes(&self) -> Result<Vec<u32>> {
+        self.read_buffer::<u32>(self.current_spike_buffer(), self.neuron_count)
+    }
+
+    fn current_spike_buffer(&self) -> &wgpu::Buffer {
+        if self.current_is_b {
+            &self.spikes_b
+        } else {
+            &self.spikes_a
+        }
     }
 
     fn read_buffer<T: Pod + Copy>(&self, source: &wgpu::Buffer, count: usize) -> Result<Vec<T>> {
