@@ -120,20 +120,6 @@ def partition_wing_dofs(jointdofs: Iterable) -> tuple[list, list]:
     return non_wing, wing
 
 
-def apply_flight_wing_joint_parameters(fly: FlyBody) -> None:
-    """Apply the original FlyBody flight-task stiffness/damping to wing joints."""
-
-    wing_count = 0
-    for dof, joint in fly.jointdof_to_mjcfjoint.items():
-        if not dof.child.is_wing():
-            continue
-        joint.stiffness = FLIGHT_WING_STIFFNESS
-        joint.damping = FLIGHT_WING_DAMPING
-        wing_count += 1
-    if wing_count != 6:
-        raise RuntimeError(f"expected 6 FlyBody wing DOFs, found {wing_count}")
-
-
 def restore_flight_wing_inertia(fly: FlyBody) -> None:
     """Restore source wing inertial boxes instead of membrane-mesh mass transfer."""
 
@@ -172,6 +158,25 @@ def restore_flight_wing_inertia(fly: FlyBody) -> None:
             group=3,
             rgba=(0.0, 0.0, 0.0, 0.0),
         )
+
+
+def apply_flight_wing_joint_parameters(fly: FlyBody) -> None:
+    """Apply source flight wing joint mechanics and restore wing inertia."""
+
+    wing_count = 0
+    for dof, joint in fly.jointdof_to_mjcfjoint.items():
+        if not dof.child.is_wing():
+            continue
+        joint.stiffness = FLIGHT_WING_STIFFNESS
+        joint.damping = FLIGHT_WING_DAMPING
+        wing_count += 1
+    if wing_count != 6:
+        raise RuntimeError(f"expected 6 FlyBody wing DOFs, found {wing_count}")
+
+    # Apply this regardless of whether explicit fluid geoms are enabled. The
+    # no-fluid flight-envelope control must differ only by wing aerodynamics, not
+    # by wing mass/inertia distribution.
+    restore_flight_wing_inertia(fly)
 
 
 def add_flight_wing_aerodynamics(fly: FlyBody) -> None:
