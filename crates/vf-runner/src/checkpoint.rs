@@ -1,4 +1,8 @@
-use std::{fs, io::Write, path::{Path, PathBuf}};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -181,4 +185,41 @@ fn read_u32(path: PathBuf) -> Result<Vec<u32>> {
         .chunks_exact(4)
         .map(|chunk| u32::from_le_bytes(chunk.try_into().expect("chunk size")))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_state_round_trip() {
+        let root = std::env::temp_dir().join(format!(
+            "virtual-fly-checkpoint-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let state = NeuralState {
+            membrane: vec![0.1, -0.2, 0.3],
+            spikes: vec![1, 0, 1],
+            refractory: vec![2, 0, 1],
+            activity_trace: vec![0.4, 0.5, 0.6],
+            modulation: vec![0.0, 0.7, -0.8],
+            weights: vec![1.1, 2.2],
+            eligibility: vec![0.9, -0.4],
+        };
+
+        let saved = save_checkpoint(&root, "synthetic:test", 42, &state).unwrap();
+        assert_eq!(saved.step, 42);
+        let (loaded_manifest, loaded) =
+            load_checkpoint(&root, "synthetic:test", 3, 2).unwrap();
+        assert_eq!(loaded_manifest.step, 42);
+        assert_eq!(loaded.membrane, state.membrane);
+        assert_eq!(loaded.spikes, state.spikes);
+        assert_eq!(loaded.refractory, state.refractory);
+        assert_eq!(loaded.activity_trace, state.activity_trace);
+        assert_eq!(loaded.modulation, state.modulation);
+        assert_eq!(loaded.weights, state.weights);
+        assert_eq!(loaded.eligibility, state.eligibility);
+        fs::remove_dir_all(&root).unwrap();
+    }
 }
