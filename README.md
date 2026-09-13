@@ -67,10 +67,36 @@ bash scripts/dev/train_flyppy.sh
 
 ```text
 artifacts/experiments/flyppy-v0/
-  trajectory.jsonl
-  summary.json
-  learned_weights.f32le
+├── trajectory.jsonl
+├── summary.json
+└── checkpoint/
+    ├── manifest.json
+    ├── membrane.f32le
+    ├── spikes.u32le
+    ├── refractory.u32le
+    ├── activity-trace.f32le
+    ├── modulation.f32le
+    ├── weights.f32le
+    └── eligibility.f32le
 ```
+
+checkpointはシナプス重みだけでなく、膜電位・spike・refractory・activity trace・neuromodulation・eligibilityまで含みます。既定では8 episodeごとと最終episodeに保存します。
+
+長く回す例:
+
+```bash
+bash scripts/dev/train_flyppy.sh --episodes 100
+```
+
+保存済みCNSからさらに続ける場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh \
+  --resume-checkpoint artifacts/experiments/flyppy-v0/checkpoint \
+  --episodes 100
+```
+
+同じ実験ディレクトリへresumeするとtrajectoryは追記されます。身体・コースはepisode境界から再開し、CNS内部状態はcheckpointから継続します。
 
 ### 3Dで身体を見る
 
@@ -102,13 +128,17 @@ bash scripts/dev/train_flyppy.sh --synapse-trace --synapse-top-n 128
 artifacts/experiments/flyppy-v0/synapse-snapshots.jsonl
 ```
 
-神経ビューアは以下で開けます。
+### 神経活動・シナプス変化を3Dで見る
+
+別ターミナルで以下を実行します。
 
 ```bash
 bash scripts/dev/view_neural.sh
 ```
 
-ブラウザ上で `trajectory.jsonl` と `synapse-snapshots.jsonl` を選択すると、T4/T5・DNg02・PAM08・PPL1の活動と、強化・弱化した上位シナプスを3D模式図として再生できます。現段階のシナプス位置は解剖学的3D座標ではなく模式配置です。将来、MaleCNSの実際のニューロン形態・シナプス座標を接続した段階で解剖学的位置へ置き換えます。
+localhost上のブラウザビューアが開き、`trajectory.jsonl` と `synapse-snapshots.jsonl` を1秒ごとに再取得して学習中でも追従します。表示するのはT4/T5入力、左右DNg02発火率、PAM08/PPL1刺激、強化・弱化した上位シナプスです。
+
+シナプスの3Dノード位置は現時点ではbody IDから決定論的に生成した模式配置であり、実際の解剖学的位置ではありません。MaleCNSの実形態・実シナプス座標を接続できた段階で表示層を置換します。
 
 ## 想定構成
 
@@ -127,6 +157,7 @@ bash scripts/dev/view_neural.sh
 - [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md) — データ来歴・再現性
 - [`docs/roadmap.md`](docs/roadmap.md) — 開発ロードマップ
 - [`docs/references.md`](docs/references.md) — 基礎資料・外部資産
+- [`docs/embodiment-v0.md`](docs/embodiment-v0.md) — 現在の身体・閉ループ・可視化・checkpoint実装
 - [`AGENTS.md`](AGENTS.md) — 開発エージェント向けプロジェクト規約
 
 ## ライセンス
