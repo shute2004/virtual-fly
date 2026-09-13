@@ -34,6 +34,7 @@ from flybody_adapter import FlyBodyWingAdapter, WingDrive
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from neural_bridge_client import NeuralBridgeClient
+from training_visualizer import TrainingVisualizer
 from visual_motion_encoder import VerticalMotionEncoder
 
 
@@ -65,6 +66,25 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("artifacts/experiments/flyppy-v0"),
     )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="show a live 3D tracking-camera view; off by default",
+    )
+    parser.add_argument(
+        "--record-video",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="save one 3D MP4 per episode into DIR; off by default",
+    )
+    parser.add_argument(
+        "--playback-speed",
+        type=float,
+        default=0.2,
+        help="3D playback speed relative to simulated time (default: 0.2x)",
+    )
+    parser.add_argument("--video-fps", type=int, default=30)
     return parser.parse_args()
 
 
@@ -96,7 +116,10 @@ def main() -> int:
         raise SystemExit("control/physics steps must be >= 1")
     if args.gate_count < 1 or args.trajectory_stride < 1:
         raise SystemExit("gate-count and trajectory-stride must be >= 1")
+    if args.playback_speed <= 0.0 or args.video_fps <= 0:
+        raise SystemExit("playback-speed and video-fps must be positive")
 
+    visualization_enabled = args.render or args.record_video is not None
     course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
     world = FlyppyWorld(course)
     body = FlyBodyWingAdapter(
@@ -104,6 +127,7 @@ def main() -> int:
         world=world,
         spawn_position_mm=(0.0, 0.0, 5.0),
         enable_vision=True,
+        enable_observer_camera=visualization_enabled,
     )
     vision = VerticalMotionEncoder()
 
@@ -116,128 +140,151 @@ def main() -> int:
     total_collisions = 0
     started = time.perf_counter()
 
-    with trajectory_path.open("w", encoding="utf-8") as trajectory_file:
-        with NeuralBridgeClient(
-            snapshot=args.snapshot,
-            groups=args.groups,
-            backend=args.backend,
-        ) as brain:
-            brain.ping()
-            ready = dict(brain.ready)
+    observer_camera = body.observer_camera_name or "training_view"
+    with TrainingVisualizer(
+        sim=body.sim,
+        camera_name=observer_camera,
+        live=args.render,
+        record_dir=args.record_video,
+        playback_speed=args.playback_speed,
+        output_fps=args.video_fps,
+    ) as visualizer:
+        with trajectory_path.open("w", encoding="utf-8") as trajectory_file:
+            with NeuralBridgeClient(
+                snapshot=args.snapshot,
+                groups=args.groups,
+                backend=args.backend,
+            ) as brain:
+                brain.ping()
+                ready = dict(brain.ready)
 
-            for episode in range(args.episodes):
-                course.reset()
-                body.reset()
-                vision.reset()
-                episode_passed = 0
-                collision = False
-                finished = False
-                max_x = float("-inf")
-                min_z = float("inf")
-                max_z = float("-inf")
-                step_count = 0
+                for episode in range(args.episodes):
+                    course.reset()
+                    body.reset()
+                    vision.reset()
+                    if visualizer.enabled:
+                        visualizer.begin_episode(episode)
+                    episode_passed = 0
+                    collision = False
+                    finished = False
+                    max_x = float("-inf")
+                    min_z = float("inf")
+                    max_z = float("-inf")
+                    step_count = 0
 
-                # Prime FlyGym's eye renderer and the temporal motion encoder.
-                vision.encode(body.ommatidia_readouts())
+                    # Prime FlyGym's eye renderer and the temporal motion encoder.
+                    vision.encode(body.ommatidia_readouts())
 
-                for control_step in range(args.max_control_steps):
-                    sensory = positive_stimuli(
-                        vision.encode(body.ommatidia_readouts()).as_stimuli()
-                    )
-                    readout = brain.step(
-                        stimulate=sensory,
-                        read=MOTOR_GROUPS,
-                        plasticity=True,
-                    )
-                    left = float(readout["flight_thrust_left"]["spike_fraction"])
-                    right = float(readout["flight_thrust_right"]["spike_fraction"])
-
-                    body.step(
-                        WingDrive(left=left, right=right),
-                        physics_steps=args.physics_steps,
-                    )
-                    position = body.thorax_position_mm()
-                    x_mm = float(position[0])
-                    z_mm = float(position[2])
-                    max_x = max(max_x, x_mm)
-                    min_z = min(min_z, z_mm)
-                    max_z = max(max_z, z_mm)
-                    step_count = control_step + 1
-
-                    event = course.update(x_mm, z_mm)
-                    if event.passed_gate:
-                        episode_passed += 1
-                        total_passed += 1
-                        deliver_reinforcement(
-                            brain,
-                            "reward_dan",
-                            args.reward_current,
-                            args.reinforcement_steps,
+                    for control_step in range(args.max_control_steps):
+                        sensory = positive_stimuli(
+                            vision.encode(body.ommatidia_readouts()).as_stimuli()
                         )
-                    if event.collision:
-                        collision = True
-                        total_collisions += 1
-                        deliver_reinforcement(
-                            brain,
-                            "aversive_dan",
-                            args.aversive_current,
-                            args.reinforcement_steps,
+                        readout = brain.step(
+                            stimulate=sensory,
+                            read=MOTOR_GROUPS,
+                            plasticity=True,
                         )
-                    if event.finished:
-                        finished = True
+                        left = float(
+                            readout["flight_thrust_left"]["spike_fraction"]
+                        )
+                        right = float(
+                            readout["flight_thrust_right"]["spike_fraction"]
+                        )
 
-                    if (
-                        control_step % args.trajectory_stride == 0
-                        or event.passed_gate
-                        or event.collision
-                        or event.finished
-                    ):
-                        trajectory_file.write(
-                            json.dumps(
-                                {
-                                    "episode": episode,
-                                    "control_step": control_step,
-                                    "x_mm": x_mm,
-                                    "y_mm": float(position[1]),
-                                    "z_mm": z_mm,
-                                    "next_gate": course.next_gate_index,
-                                    "motor_left": left,
-                                    "motor_right": right,
-                                    "visual_stimuli": sensory,
-                                    "passed_gate": event.passed_gate,
-                                    "collision": event.collision,
-                                    "finished": event.finished,
-                                },
-                                separators=(",", ":"),
+                        body.step(
+                            WingDrive(left=left, right=right),
+                            physics_steps=args.physics_steps,
+                        )
+                        if visualizer.enabled:
+                            visualizer.sync()
+
+                        position = body.thorax_position_mm()
+                        x_mm = float(position[0])
+                        z_mm = float(position[2])
+                        max_x = max(max_x, x_mm)
+                        min_z = min(min_z, z_mm)
+                        max_z = max(max_z, z_mm)
+                        step_count = control_step + 1
+
+                        event = course.update(x_mm, z_mm)
+                        if event.passed_gate:
+                            episode_passed += 1
+                            total_passed += 1
+                            deliver_reinforcement(
+                                brain,
+                                "reward_dan",
+                                args.reward_current,
+                                args.reinforcement_steps,
                             )
-                            + "\n"
+                        if event.collision:
+                            collision = True
+                            total_collisions += 1
+                            deliver_reinforcement(
+                                brain,
+                                "aversive_dan",
+                                args.aversive_current,
+                                args.reinforcement_steps,
+                            )
+                        if event.finished:
+                            finished = True
+
+                        if (
+                            control_step % args.trajectory_stride == 0
+                            or event.passed_gate
+                            or event.collision
+                            or event.finished
+                        ):
+                            trajectory_file.write(
+                                json.dumps(
+                                    {
+                                        "episode": episode,
+                                        "control_step": control_step,
+                                        "x_mm": x_mm,
+                                        "y_mm": float(position[1]),
+                                        "z_mm": z_mm,
+                                        "next_gate": course.next_gate_index,
+                                        "motor_left": left,
+                                        "motor_right": right,
+                                        "visual_stimuli": sensory,
+                                        "passed_gate": event.passed_gate,
+                                        "collision": event.collision,
+                                        "finished": event.finished,
+                                    },
+                                    separators=(",", ":"),
+                                )
+                                + "\n"
+                            )
+
+                        if collision or finished:
+                            break
+
+                    video_path = None
+                    if visualizer.enabled:
+                        saved = visualizer.end_episode(save=True)
+                        video_path = str(saved) if saved is not None else None
+                    result = {
+                        "episode": episode,
+                        "control_steps": step_count,
+                        "passed_gates": episode_passed,
+                        "collision": collision,
+                        "finished": finished,
+                        "max_x_mm": max_x,
+                        "min_z_mm": min_z,
+                        "max_z_mm": max_z,
+                        "video": video_path,
+                    }
+                    episode_results.append(result)
+                    print(
+                        "episode={} steps={} passed={} collision={} finished={} max_x={:.3f}".format(
+                            episode,
+                            step_count,
+                            episode_passed,
+                            collision,
+                            finished,
+                            max_x,
                         )
-
-                    if collision or finished:
-                        break
-
-                result = {
-                    "episode": episode,
-                    "control_steps": step_count,
-                    "passed_gates": episode_passed,
-                    "collision": collision,
-                    "finished": finished,
-                    "max_x_mm": max_x,
-                    "min_z_mm": min_z,
-                    "max_z_mm": max_z,
-                }
-                episode_results.append(result)
-                print(
-                    "episode={} steps={} passed={} collision={} finished={} max_x={:.3f}".format(
-                        episode,
-                        step_count,
-                        episode_passed,
-                        collision,
-                        finished,
-                        max_x,
                     )
-                )
-                trajectory_file.flush()
+                    trajectory_file.flush()
 
     elapsed = time.perf_counter() - started
     passed_by_episode = [int(item["passed_gates"]) for item in episode_results]
@@ -257,6 +304,12 @@ def main() -> int:
         "mean_passed_first_half": float(np.mean(first_half)) if first_half else 0.0,
         "mean_passed_second_half": float(np.mean(second_half)) if second_half else 0.0,
         "elapsed_seconds": elapsed,
+        "visualization": {
+            "live": bool(args.render),
+            "record_dir": str(args.record_video) if args.record_video else None,
+            "playback_speed": args.playback_speed,
+            "fps": args.video_fps,
+        },
         "episode_results": episode_results,
         "sensory_interface": (
             "FlyGym ommatidia -> provisional population-level Reichardt-like vertical "
