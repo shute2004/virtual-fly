@@ -5,9 +5,6 @@ use clap::{Parser, Subcommand, ValueEnum};
 use rayon::prelude::*;
 use vf_neural::{ConnectomeSnapshot, CpuRuntime, EdgeInput, NeuralParams, Stimulus, nt};
 
-#[cfg(feature = "gpu")]
-compile_error!("vf-runner does not define a gpu feature; GPU support comes from vf-neural defaults");
-
 #[derive(Debug, Parser)]
 #[command(name = "vf-runner", about = "virtual-fly bootstrap experiment runner")]
 struct Cli {
