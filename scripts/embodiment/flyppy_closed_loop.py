@@ -4,21 +4,19 @@
 Information flow is deliberately constrained:
 
     physical Flyppy world
-      -> FlyGym compound-eye ommatidia
-      -> population-level T4/T5 vertical-motion encoder
+      -> FlyBody eye cameras
+      -> local MaleCNS optic-column light sampling
+      -> current into actual R1-R6 photoreceptor body IDs
       -> persistent MaleCNS runtime with local plasticity
       -> bilateral DNg02 population readout
       -> FlyBody wing-amplitude adapter
       -> physical world
 
-Gate coordinates are never injected into the CNS. Passing a gate stimulates the
-configured reward DAN population; collision stimulates the configured aversive
-DAN population. Those outcome events are the only task-specific teaching signal.
-
-The T4/T5 input is currently a documented population-level approximation because
-an individual MaleCNS retinotopic ommatidium mapping is not yet available in the
-local snapshot. Everything downstream of that seam uses the released MaleCNS
-connectome.
+The sensory boundary does not calculate motion, edges, gate position, or any other
+visual feature. Spatial and temporal visual processing is left to the MaleCNS
+network. Gate coordinates are never injected into the CNS. Passing a gate
+stimulates the configured reward DAN population; collision stimulates the
+configured aversive DAN population.
 """
 
 from __future__ import annotations
@@ -34,10 +32,10 @@ import numpy as np
 from flybody_adapter import FlyBodyWingAdapter, WingDrive
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
+from malecns_retina import MaleCNSRetina
 from neural_bridge_client import NeuralBridgeClient
 from synapse_monitor import SynapseMonitor, SynapseMonitorConfig
 from training_visualizer import TrainingVisualizer
-from visual_motion_encoder import VerticalMotionEncoder
 
 
 MOTOR_GROUPS = ("flight_thrust_left", "flight_thrust_right")
@@ -52,6 +50,11 @@ def parse_args() -> argparse.Namespace:
         "--groups",
         type=Path,
         default=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"),
+    )
+    parser.add_argument(
+        "--retinotopic-map",
+        type=Path,
+        default=Path("artifacts/malecns-v1.0/retinotopic-vision-v1.json"),
     )
     parser.add_argument("--backend", choices=("cpu", "gpu"), default="gpu")
     parser.add_argument(
@@ -69,6 +72,15 @@ def parse_args() -> argparse.Namespace:
         help=(
             "one-shot +x velocity applied only at episode reset; 300 mm/s is the "
             "midpoint of the original FlyBody vision-flight 20-40 cm/s range"
+        ),
+    )
+    parser.add_argument(
+        "--photoreceptor-current-gain",
+        type=float,
+        default=2.0,
+        help=(
+            "calibrated local irradiance-to-current scale for R1-R6; this changes "
+            "transduction strength only and does not compute visual features"
         ),
     )
     parser.add_argument("--gate-count", type=int, default=6)
@@ -140,10 +152,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def positive_stimuli(stimuli: dict[str, float], epsilon: float = 1e-6) -> dict[str, float]:
-    return {name: value for name, value in stimuli.items() if value > epsilon}
-
-
 def deliver_reinforcement(
     brain: NeuralBridgeClient,
     group: str,
@@ -185,6 +193,8 @@ def main() -> int:
         raise SystemExit("control/physics steps must be >= 1")
     if not np.isfinite(args.initial_forward_speed_mm_s) or args.initial_forward_speed_mm_s <= 0:
         raise SystemExit("initial-forward-speed-mm-s must be finite and > 0")
+    if not np.isfinite(args.photoreceptor_current_gain) or args.photoreceptor_current_gain <= 0:
+        raise SystemExit("photoreceptor-current-gain must be finite and > 0")
     if args.gate_count < 1 or args.trajectory_stride < 1:
         raise SystemExit("gate-count and trajectory-stride must be >= 1")
     if args.checkpoint_every < 1:
@@ -195,6 +205,8 @@ def main() -> int:
         raise SystemExit("synapse-top-n and synapse-trace-every must be >= 1")
     if args.synapse_min_delta < 0.0:
         raise SystemExit("synapse-min-delta must be >= 0")
+    if not args.retinotopic_map.exists():
+        raise SystemExit(f"retinotopic vision map not found: {args.retinotopic_map}")
     if args.resume_checkpoint is not None and not args.resume_checkpoint.exists():
         raise SystemExit(f"resume checkpoint not found: {args.resume_checkpoint}")
 
@@ -209,7 +221,10 @@ def main() -> int:
         enable_vision=True,
         enable_observer_camera=visualization_enabled,
     )
-    vision = VerticalMotionEncoder()
+    vision = MaleCNSRetina(
+        args.retinotopic_map,
+        current_gain=args.photoreceptor_current_gain,
+    )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     trajectory_path = args.output_dir / "trajectory.jsonl"
@@ -274,7 +289,6 @@ def main() -> int:
                     episode = start_episode + local_episode
                     course.reset()
                     body.reset()
-                    vision.reset()
                     if visualizer.enabled:
                         visualizer.begin_episode(episode)
                     episode_passed = 0
@@ -286,24 +300,15 @@ def main() -> int:
                     final_velocity = body.root_linear_velocity_mm_s()
                     step_count = 0
 
-                    # Prime FlyGym's eye renderer and the temporal motion encoder.
-                    vision.encode(body.ommatidia_readouts())
-
                     for control_step in range(args.max_control_steps):
-                        sensory = positive_stimuli(
-                            vision.encode(body.ommatidia_readouts()).as_stimuli()
-                        )
+                        retinal = vision.encode(body.sim, body.fly)
                         readout = brain.step(
-                            stimulate=sensory,
+                            stimulate_body=retinal.body_currents,
                             read=MOTOR_GROUPS,
                             plasticity=True,
                         )
-                        left = float(
-                            readout["flight_thrust_left"]["spike_fraction"]
-                        )
-                        right = float(
-                            readout["flight_thrust_right"]["spike_fraction"]
-                        )
+                        left = float(readout["flight_thrust_left"]["spike_fraction"])
+                        right = float(readout["flight_thrust_right"]["spike_fraction"])
 
                         body.step(
                             WingDrive(left=left, right=right),
@@ -367,7 +372,12 @@ def main() -> int:
                                         "next_gate": course.next_gate_index,
                                         "motor_left": left,
                                         "motor_right": right,
-                                        "visual_stimuli": sensory,
+                                        "retinal_input": {
+                                            "active_columns": retinal.active_columns,
+                                            "active_photoreceptors": retinal.active_photoreceptors,
+                                            "mean_current": retinal.mean_current,
+                                            "max_current": retinal.max_current,
+                                        },
                                         "reward_stimulated": reward_stimulated,
                                         "aversive_stimulated": aversive_stimulated,
                                         "passed_gate": event.passed_gate,
@@ -456,7 +466,7 @@ def main() -> int:
     second_half = passed_by_episode[len(passed_by_episode) // 2 :]
     checkpoint_weight_file = checkpoint_dir / "weights.f32le"
     summary = {
-        "schema_version": 3,
+        "schema_version": 4,
         "experiment": "flyppy_closed_loop_v0",
         "backend": ready.get("backend"),
         "neurons": ready.get("neurons"),
@@ -499,9 +509,11 @@ def main() -> int:
         },
         "episode_results": episode_results,
         "sensory_interface": (
-            "FlyGym ommatidia -> provisional population-level Reichardt-like vertical "
-            "motion encoder -> MaleCNS T4c/T4d/T5c/T5d populations"
+            "FlyBody raw eye cameras -> MaleCNS assignedOlHex retinotopic local samples -> "
+            "per-body-ID R1-R6 current; no external motion/edge/obstacle feature extraction"
         ),
+        "retinotopic_map": str(args.retinotopic_map),
+        "photoreceptor_current_gain": args.photoreceptor_current_gain,
         "motor_interface": "MaleCNS DNg02 populations -> FlyBody wing amplitude",
         "body_physics": (
             "FlyGym 2.1 FlyBody with source FlyBody flight wing gains, damping, "
@@ -512,10 +524,10 @@ def main() -> int:
             "gate pass -> PAM08 candidate stimulation; collision -> PPL1 candidate stimulation"
         ),
         "important_limit": (
-            "This run is a real closed loop over the released MaleCNS connectome, but "
-            "the individual-cell retinal mapping, DNg02-to-wing transfer gains, and "
-            "analytic wing kinematics remain provisional biophysical approximations "
-            "and require calibration before biological claims."
+            "Optic-column/body-ID retinotopy comes from MaleCNS data, while the geometric "
+            "projection of those columns onto FlyBody's eye camera and the local "
+            "irradiance-to-current scale remain calibrated sensory-transduction seams. "
+            "The CNS itself performs downstream visual processing."
         ),
     }
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
