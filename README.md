@@ -16,21 +16,31 @@
 
 ## 現在の実装
 
-現在の開発ブランチ `feat/bootstrap-neural-runtime` では、MaleCNS v1.0の166,700ニューロンと約2,558万のニューロン間接続を読み込み、CPU並列またはGPU computeで時間発展させる神経ランタイムを実装しています。
+`feat/bootstrap-neural-runtime` では、MaleCNS v1.0 の166,700ニューロンと約2,558万のニューロン間接続を読み込み、CPU並列またはGPU computeで時間発展させる神経ランタイムを実装しています。最初の実データ学習として、`DA1_lPN` / `DL3_lPN` と `PAM08` / `PPL1` を用いた嗅覚連合学習を実装しています。
 
-加えて、最初の実データ学習実験として嗅覚連合学習を実装しています。
+`feat/flybody-flyppy-loop` では、その神経ランタイムを FlyBody / FlyGym / MuJoCo と接続し、最初の閉ループ Flyppy 実験まで進めています。
 
-- 手掛かりA: `DA1_lPN`
-- 手掛かりB: `DL3_lPN`
-- 報酬側DAN候補: `PAM08`
-- 嫌悪側DAN候補: `PPL1` 系
-- 読み出し候補: `MBON` 群
+```text
+Flyppy physical world
+      ↓
+FlyGym compound-eye ommatidia
+      ↓
+T4/T5 vertical-motion input approximation
+      ↓
+MaleCNS runtime + local plasticity
+      ↓
+DNg02 bilateral readout
+      ↓
+FlyBody wing actuation
+      ↓
+Flyppy physical world
+```
 
-これらはMaleCNSの公開注釈からbody IDを抽出して使用します。外部プログラムが個々のシナプス重みを指定することはなく、cueとDAN活動の時間的組合せに応じて局所可塑性則がシナプス状態を更新します。学習後の重みは `learned_weights.f32le` として保存します。
+ゲート通過時は `PAM08` 候補群、衝突時は `PPL1` 候補群を刺激します。ゲームのゲート座標をCNSへ直接入力したり、外部プログラムから個々のシナプス重みを指定したりはしません。
 
-この嗅覚条件付けは、**実MaleCNSグラフ上で可塑性が経験依存に動くことを検証するための最初の学習実験**です。Flyppyの身体・視覚閉ループは次の実装段階です。
+現在の主な近似は、FlyGymの複眼各ommatidiumとMaleCNS各視覚ニューロンの個別対応がまだ確定していないため、縦方向の視覚運動をT4c/T4d・T5c/T5d集団へ与える人口レベルの暫定入力層を置いている点です。
 
-## 実行
+## 初回セットアップ
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
@@ -41,49 +51,71 @@ bash scripts/dev/bootstrap.sh
 
 MaleCNSの元データがすでに存在する場合は再ダウンロードしません。
 
+## Flyppy閉ループ学習
+
+閉ループ実装ブランチへ切り替え、学習を実行します。
+
+```bash
+git switch feat/flybody-flyppy-loop
+git pull
+bash scripts/dev/train_flyppy.sh
+```
+
+デフォルトは表示なしです。GPU backend、複眼入力、FlyBody物理、局所可塑性、報酬・嫌悪刺激を使って学習を進めます。
+
 主な生成物:
 
 ```text
-artifacts/malecns-v1.0/
-  manifest.json
-  conditioning-v0.json
-
-artifacts/experiments/conditioning-v0/
+artifacts/experiments/flyppy-v0/
+  trajectory.jsonl
+  summary.json
   learned_weights.f32le
-  result.json
 ```
 
-学習回数は環境変数で変更できます。
+### 3Dで身体を見る
+
+学習中のFlyBodyを3D表示したい場合だけ `--render` を付けます。
 
 ```bash
-VF_TRAIN_CYCLES=100 bash scripts/dev/bootstrap.sh
+bash scripts/dev/train_flyppy.sh --render
 ```
 
-## 最終的なFlyppy実験
+動画として保存する場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh --record-video artifacts/videos/flyppy
+```
+
+通常の学習速度を優先するときは、どちらも付けません。
+
+### シナプス変化を記録する
+
+神経可視化用に、エピソード単位でシナプス変化を抽出したい場合だけ `--synapse-trace` を付けます。全約2,558万重みを毎step読み戻すことはせず、低頻度で重みを取得して変化量の大きい接続だけ残します。
+
+```bash
+bash scripts/dev/train_flyppy.sh --synapse-trace --synapse-top-n 128
+```
+
+追加生成物:
 
 ```text
-3D environment
-      ↓
-compound-eye / sensory transduction
-      ↓
-adult male fly CNS
-      ↓
-neural activity + plasticity
-      ↓
-motor system
-      ↓
-virtual fly body
-      ↓
-3D environment
+artifacts/experiments/flyppy-v0/synapse-snapshots.jsonl
 ```
 
-成功時には報酬に関与する神経回路へ、失敗時には嫌悪学習に関与する回路へ刺激を与えます。外部プログラムは「どのシナプスをどう更新するか」を指定しません。
+神経ビューアは以下で開けます。
+
+```bash
+bash scripts/dev/view_neural.sh
+```
+
+ブラウザ上で `trajectory.jsonl` と `synapse-snapshots.jsonl` を選択すると、T4/T5・DNg02・PAM08・PPL1の活動と、強化・弱化した上位シナプスを3D模式図として再生できます。現段階のシナプス位置は解剖学的3D座標ではなく模式配置です。将来、MaleCNSの実際のニューロン形態・シナプス座標を接続した段階で解剖学的位置へ置き換えます。
 
 ## 想定構成
 
 - **神経系コア**: Rust。大規模疎グラフ、神経状態、可塑性、チェックポイントを担当する。
 - **科学実験・統合層**: Python。データ前処理、MuJoCo / FlyGym / FlyBody との接続、実験設定、解析を担当する。
-- **身体・物理**: FlyBody / FlyGym / MuJoCo を第一候補とする。
+- **身体・物理**: FlyBody / FlyGym / MuJoCo。
+- **可視化**: 通常はheadless。必要時だけ身体3D、動画、神経活動・シナプス変化の表示を有効化する。
 - **将来のWeb実行**: Rust コアを WASM / WebGPU へ展開し、明示的に参加した閲覧者のPCで仮想ハエを動かして実験データを収集する。
 
 ## ドキュメント
