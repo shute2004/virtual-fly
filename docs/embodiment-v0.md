@@ -7,7 +7,10 @@
 実装済み:
 
 - FlyGym 2.1.0 / FlyBodyによる身体・MuJoCo物理。
+- FlyGym 2.1.0のFlyBody変換で省略されている左右wing fluid geometryの復元。
+- 元FlyBody飛翔タスクに合わせたwing actuator gain、wing stiffness / damping、50 µs physics timestep、空気密度・粘性の単位補正。
 - FlyBodyの左右wing DoF駆動。
+- FlyBody公式飛翔条件に基づく47.5度body pitchと、episode開始時だけ与える一回限りの前進初速度。
 - JSONL stdin/stdoutで常駐するRust MaleCNS bridge。
 - MaleCNS注釈からのbilateral DNg02 / PAM08 / PPL1抽出。
 - MaleCNS注釈からのT4c / T4d / T5c / T5d左右集団抽出。
@@ -55,13 +58,37 @@ FlyGymからは各複眼のommatidium単位の入力を取得する。
 
 これは暫定層であり、任意のneuron-order mappingを生物学的対応として扱わない。個体レベルのretinotopic対応が得られた場合は `scripts/embodiment/visual_motion_encoder.py` を置換する。
 
-## 4. 運動出力の現状
+## 4. 運動出力と飛翔物理
 
 DNg02は最初の粗い飛翔出力として使用する。DNg02集団活動はwing stroke amplitude / thrust regulationと関連するため、左右DNg02活動を左右wing-beat amplitudeへ写す。
 
-現在のanalytic wing beatは、完全なmotor-neuron -> flight-muscleモデルではない。下位の飛翔運動生成機構を暫定的にまとめたadapterである。
+現在のanalytic wing beatは、完全なmotor-neuron -> flight-muscleモデルではない。下位の飛翔運動生成機構を暫定的にまとめたadapterである。adapterはFlyppyの障害物位置や報酬状態を見ない。
 
-adapterはFlyppyの障害物位置や報酬状態を見ない。
+FlyGym 2.1.0の実験的FlyBody統合では、元FlyBody XMLにある `wing_left_fluid` / `wing_right_fluid` geometryが変換時に省略されている。そのままでは元FlyBody飛翔タスクと同じ空力条件にならないため、`scripts/embodiment/flybody_flight_physics.py` で以下を復元する。
+
+```text
+physics timestep     5e-5 s
+body pitch           47.5 deg
+wing position gain   source 18 -> FlyGym mm系 1800
+wing stiffness       source 0.01 -> 1.0
+wing damping         source 0.007769230 -> 0.776923
+fluid coefficients   [1.0, 0.5, 1.5, 1.7, 1.0]
+air density          source 0.00128 -> FlyGym mm系 1.28e-6
+air viscosity        source 0.000185 -> FlyGym mm系 1.85e-5
+```
+
+元FlyBodyはcm、FlyGym版はmmを使うため、長さはx10、torque-like量はx100、densityはx1e-3、viscosityはx1e-1として変換する。
+
+Flyppyではepisode開始時にのみ +X 方向の初速度を与える。既定値は `300 mm/s` で、元FlyBody vision-flight taskが使う20–40 cm/sの中央である。これは継続的な外部policyではなく飛翔開始条件であり、その後の並進速度を外部から維持・補正しない。
+
+```text
+episode reset
+  -> 47.5 deg flight pose
+  -> vx = 300 mm/s を一度だけ設定
+  -> 以後はMuJoCo物理 + CNS由来wing controlのみ
+```
+
+`flybody_flight_envelope.py` は同一初速度でwing fluidあり/なしの対照を取り、初速だけで前進したケースを空力成立と誤認しないようにする。既定では0.12秒の間に最初の8 mmゲート距離へ到達し、thoraxが設定最低高度以上を維持し、終了時も前進速度が正であるbilateral operating pointが存在することを要求する。
 
 ## 5. 学習とcheckpoint
 
@@ -108,16 +135,24 @@ connectome topology、neurotransmitter annotation、数値モデルparameter、P
 
 ## 6. 実行
 
-接続確認:
+接続・物理確認:
 
 ```bash
 bash scripts/dev/embodiment.sh
 ```
 
+この確認には、復元したflight fluid geometry・空気parameter・wing gain/stiffness/dampingのcompile後検証、free-flightでのDNg02駆動差、同一初速での空力あり/なし対照を含むflight envelope検証が含まれる。これが通らない状態ではFlyppy学習を開始しない。
+
 通常のヘッドレス学習:
 
 ```bash
 bash scripts/dev/train_flyppy.sh
+```
+
+初速度を変更する場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh --initial-forward-speed-mm-s 250
 ```
 
 長く回す例:
@@ -204,6 +239,7 @@ bash scripts/dev/view_neural.sh
 
 - 個々のommatidiumとMaleCNS視覚ニューロンのretinotopic対応。
 - flight motor neuron / flight muscle単位の詳細neuromuscular model。
+- 元FlyBody飛翔taskとの差を、leg retraction・wing phase initializationを含めてさらに縮める。
 - checkpointのsnapshot/configuration fingerprint固定と世代管理。
 - 視覚・運動・可塑性parameterの生理学的校正。
 - 学習前後比較、対照群、複数seedでの統計評価。
