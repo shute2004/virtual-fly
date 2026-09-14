@@ -32,7 +32,7 @@ except Exception:
     print(0)' "$VIEWER_GRAPH")"
 fi
 if [ "$VIEWER_SCHEMA" != "$EXPECTED_VIEWER_GRAPH_SCHEMA" ]; then
-  printf 'preparing brain-shaped neural viewer graph...\n'
+  printf 'preparing schematic CNS viewer graph...\n'
   uv run python scripts/data/prepare_neural_viewer_graph.py \
     --snapshot "$SNAPSHOT" \
     --groups "$GROUPS" \
@@ -40,10 +40,18 @@ if [ "$VIEWER_SCHEMA" != "$EXPECTED_VIEWER_GRAPH_SCHEMA" ]; then
     --output "$VIEWER_GRAPH"
 fi
 
+python3 -m py_compile \
+  scripts/embodiment/live_viewer_server.py \
+  scripts/embodiment/live_body_viewer.py
+
 URL="http://127.0.0.1:${PORT}/visualization/live-neural-viewer.html?experiment=${EXPERIMENT}"
 LOG="/tmp/virtual-fly-live-viewer-${PORT}.log"
 
-python3 -m http.server "$PORT" --bind 127.0.0.1 >"$LOG" 2>&1 &
+python3 scripts/embodiment/live_viewer_server.py \
+  --port "$PORT" \
+  --bind 127.0.0.1 \
+  --root "$ROOT" \
+  --experiment "$EXPERIMENT" >"$LOG" 2>&1 &
 SERVER_PID=$!
 BODY_PID=""
 
@@ -90,10 +98,10 @@ case "$(uname -s)" in
 esac
 
 printf 'learning_viewer=%s\n' "$URL"
-printf 'FlyBody=embedded live MuJoCo render\n'
-printf 'MaleCNS=brain-shaped schematic layout with released connections/activity\n'
+printf 'FlyBody=main interactive MuJoCo render (drag orbit / wheel zoom)\n'
+printf 'MaleCNS=inset schematic 3D observer\n'
 printf 'telemetry=%s/live\n' "$EXPERIMENT"
-printf 'Set VF_NATIVE_BODY_WINDOW=1 before this command if you also want a native MuJoCo window.\n'
+printf 'Set VF_NATIVE_BODY_WINDOW=1 if you also want the native MuJoCo viewer.\n'
 printf 'Ctrl-C here stops observers only; training is independent.\n'
 
 wait "$SERVER_PID"
