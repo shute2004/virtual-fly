@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import math
 
+import mujoco as mj
 import numpy as np
 
 from flygym.compose import ActuatorType
@@ -38,9 +39,6 @@ from flybody_flight_physics import FLIGHT_WING_POSITION_KP
 from wing_muscle_periphery import PeripheralSnapshot
 
 
-# Calibrated virtual moment effects, expressed as a fraction of the nominal yaw
-# stroke waveform. Sign constraints follow known basalar antagonism and the
-# reported stroke-amplitude effect of i1. These are not measured moment arms.
 STEERING_STROKE_EFFECT = {
     "b1": +0.18,
     "b2": +0.24,
@@ -48,9 +46,6 @@ STEERING_STROKE_EFFECT = {
     "i1": -0.12,
 }
 
-# Fixed bootstrap seam. Keep this independent of CNS/Flyppy outcomes. The
-# body-only free-flight envelope preflight verifies that these values admit
-# physically viable operating points before neural learning starts.
 BOOTSTRAP_POWER_GAIN = 1.0
 BOOTSTRAP_STEERING_GAIN = 1.0
 BOOTSTRAP_SWAP_DLM_DVM_PHASE = False
@@ -87,14 +82,30 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
             for axis in ("yaw", "roll", "pitch")
         }
 
-    def _neutralize_position_actuators(self) -> None:
-        """Set each idealized position actuator to its current joint position.
+    def set_root_position_mm(
+        self, position: np.ndarray | tuple[float, float, float]
+    ) -> None:
+        """Reposition the free body at an episode boundary without changing policy.
 
-        This removes the legacy DNg02/analytic position command while preserving
-        the compiled FlyBody actuator layout. Wing motion for this step then comes
-        from qfrc_applied virtual-muscle torque plus passive joint/aero mechanics.
+        This exists for task curriculum only. It writes the free-joint translation
+        before an episode starts; no per-step body position or velocity control is
+        applied during flight.
         """
 
+        if self.tethered:
+            raise RuntimeError("tethered FlyBody has no free root position")
+        vector = np.asarray(position, dtype=np.float64)
+        if vector.shape != (3,) or not np.all(np.isfinite(vector)):
+            raise ValueError("root position must contain 3 finite values")
+        joint_types = np.asarray(self.sim.mj_model.jnt_type)
+        free_ids = np.flatnonzero(joint_types == int(mj.mjtJoint.mjJNT_FREE))
+        if len(free_ids) != 1:
+            raise RuntimeError(f"expected one root freejoint, found {len(free_ids)}")
+        qpos_address = int(self.sim.mj_model.jnt_qposadr[int(free_ids[0])])
+        self.sim.mj_data.qpos[qpos_address : qpos_address + 3] = vector
+        mj.mj_forward(self.sim.mj_model, self.sim.mj_data)
+
+    def _neutralize_position_actuators(self) -> None:
         target = self._neutral_target.copy()
         for side in ("left", "right"):
             for axis in ("yaw", "roll", "pitch"):
@@ -107,15 +118,11 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
     def _steering_stroke_offset(
         self, state: PeripheralSnapshot, side: str, phase: float
     ) -> tuple[float, float]:
-        """Return yaw angle/velocity offsets from explicitly mapped steering units."""
-
         scale = 0.0
         for muscle, effect in STEERING_STROKE_EFFECT.items():
             scale += effect * state.muscle(side, muscle)
         scale *= self.steering_gain
 
-        # Same mechanical stroke coordinate as FlyBody's published prototype
-        # wingbeat, but used only as a virtual moment-arm waveform.
         stroke = 1.1 * math.sin(phase - math.pi / 2.0)
         omega = 2.0 * math.pi * self.wingbeat_hz
         stroke_velocity = 1.1 * math.cos(phase - math.pi / 2.0) * omega
@@ -124,10 +131,6 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
     def _power_activation(
         self, state: PeripheralSnapshot, side: str, phase: float
     ) -> float:
-        # DLM and DVM are antagonistic asynchronous power-muscle groups. The
-        # mapping to this abstract hinge oscillator is a bootstrap coordinate
-        # convention, not a measured neural phase. It is intentionally fixed
-        # during learning and is never chosen from prior task performance.
         positive_half_cycle = math.sin(phase) >= 0.0
         if self.swap_dlm_dvm_phase:
             activation = (
