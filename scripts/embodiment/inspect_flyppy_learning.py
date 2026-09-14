@@ -21,8 +21,6 @@ from pathlib import Path
 import numpy as np
 
 
-# Keep this aligned with flyppy_closed_loop.py. v0 is retained only as an old
-# experiment artifact and must not silently be inspected after v1 training.
 DEFAULT_EXPERIMENT = Path("artifacts/experiments/flyppy-v1")
 
 
@@ -69,6 +67,11 @@ def summarize_trajectory(path: Path) -> dict[str, object]:
     max_retinal_current = 0.0
     reward_events = 0
     aversive_events = 0
+    retinal_after_startup: list[int] = []
+    first_record_seen: set[int] = set()
+    collision_reason: str | None = None
+    collision_x_mm: float | None = None
+    collision_z_mm: float | None = None
 
     if not path.exists():
         return {"present": False}
@@ -80,7 +83,8 @@ def summarize_trajectory(path: Path) -> dict[str, object]:
                 continue
             record = json.loads(line)
             records += 1
-            episodes.add(int(record.get("episode", -1)))
+            episode = int(record.get("episode", -1))
+            episodes.add(episode)
             motor = record.get("motor_periphery", {}) or {}
             spikes = int(motor.get("spikes", 0))
             active_units = int(motor.get("active_motor_units", 0))
@@ -88,16 +92,28 @@ def summarize_trajectory(path: Path) -> dict[str, object]:
             max_motor_spikes = max(max_motor_spikes, spikes)
             max_active_motor_units = max(max_active_motor_units, active_units)
             retinal = record.get("retinal_input", {}) or {}
-            max_active_photoreceptors = max(
-                max_active_photoreceptors,
-                int(retinal.get("active_photoreceptors", 0)),
-            )
+            active_photo = int(retinal.get("active_photoreceptors", 0))
+            max_active_photoreceptors = max(max_active_photoreceptors, active_photo)
             max_retinal_current = max(
                 max_retinal_current,
                 float(retinal.get("max_current", 0.0)),
             )
+            if episode in first_record_seen:
+                retinal_after_startup.append(active_photo)
+            else:
+                first_record_seen.add(episode)
+
             reward_events += int(bool(record.get("reward_stimulated", False)))
             aversive_events += int(bool(record.get("aversive_stimulated", False)))
+            if bool(record.get("collision", False)):
+                collision_x_mm = float(record.get("x_mm", 0.0))
+                collision_z_mm = float(record.get("z_mm", 0.0))
+                if collision_z_mm <= 0.65:
+                    collision_reason = "floor"
+                elif collision_z_mm >= 9.35:
+                    collision_reason = "ceiling"
+                else:
+                    collision_reason = "gate_or_other"
 
     return {
         "present": True,
@@ -107,9 +123,15 @@ def summarize_trajectory(path: Path) -> dict[str, object]:
         "max_motor_spikes_per_sample": max_motor_spikes,
         "max_active_motor_units": max_active_motor_units,
         "max_active_photoreceptors": max_active_photoreceptors,
+        "mean_active_photoreceptors_after_startup": (
+            float(np.mean(retinal_after_startup)) if retinal_after_startup else 0.0
+        ),
         "max_retinal_current": max_retinal_current,
         "reward_events": reward_events,
         "aversive_events": aversive_events,
+        "collision_reason": collision_reason,
+        "collision_x_mm": collision_x_mm,
+        "collision_z_mm": collision_z_mm,
     }
 
 
@@ -253,19 +275,28 @@ def main() -> int:
         print(
             "trajectory episodes={} records={} sampled_motor_spikes={} "
             "max_motor_spikes_per_sample={} max_active_motor_units={} "
-            "max_active_photoreceptors={} max_retinal_current={:.6g} "
-            "reward_events={} aversive_events={}".format(
+            "max_active_photoreceptors={} mean_active_photoreceptors_after_startup={:.3f} "
+            "max_retinal_current={:.6g} reward_events={} aversive_events={}".format(
                 trajectory["episodes"],
                 trajectory["records"],
                 trajectory["sampled_motor_spikes"],
                 trajectory["max_motor_spikes_per_sample"],
                 trajectory["max_active_motor_units"],
                 trajectory["max_active_photoreceptors"],
+                trajectory["mean_active_photoreceptors_after_startup"],
                 trajectory["max_retinal_current"],
                 trajectory["reward_events"],
                 trajectory["aversive_events"],
             )
         )
+        if trajectory.get("collision_reason") is not None:
+            print(
+                "collision reason={} x_mm={:.3f} z_mm={:.3f}".format(
+                    trajectory["collision_reason"],
+                    trajectory["collision_x_mm"],
+                    trajectory["collision_z_mm"],
+                )
+            )
 
     if modulation_nonzero == 0:
         diagnosis = "NO_DOPAMINE_MODULATION"
