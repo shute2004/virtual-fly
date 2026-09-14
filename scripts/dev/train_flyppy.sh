@@ -86,11 +86,7 @@ fi
 
 CALIBRATION_SCHEMA=0
 if [ -f "$NEURAL_CALIBRATION" ]; then
-  CALIBRATION_SCHEMA="$(uv run python -c 'import json,sys
-try:
-    print(int(json.load(open(sys.argv[1])).get("schema_version", 0)))
-except Exception:
-    print(0)' "$NEURAL_CALIBRATION")"
+  CALIBRATION_SCHEMA="$(uv run python -c 'import json,sys; print(int(json.load(open(sys.argv[1])).get("schema_version", 0)))' "$NEURAL_CALIBRATION" 2>/dev/null || echo 0)"
 fi
 
 if [ "$CALIBRATION_SCHEMA" != "$EXPECTED_NEURAL_CALIBRATION_SCHEMA" ] || [ "$FULL_PREFLIGHT" = "1" ]; then
@@ -123,8 +119,9 @@ fi
 
 printf '\n== Flyppy persistent curriculum learning ==\n'
 printf 'live_viewer=separate-process command="bash scripts/dev/view_learning.sh"\n'
-# Normal runs keep one GPU/MuJoCo runtime for all episodes. Checkpointing is
-# intentionally sparse because a full CNS checkpoint includes ~25.6M synapses.
+# MaleCNS viewer telemetry remains sparse because selected-neuron readback is
+# observer-only overhead. FlyBody pose telemetry is emitted every control step
+# so the detached renderer can interpolate to a smooth 30 fps stream.
 uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
@@ -132,6 +129,7 @@ uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --wing-motor-map "$WING_MOTOR_MAP" \
   --viewer-graph "$VIEWER_GRAPH" \
   --telemetry-stride 10 \
+  --body-telemetry-stride 1 \
   --checkpoint-every 32 \
   "${FLYPPY_ARGS[@]}"
 
