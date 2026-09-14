@@ -9,6 +9,7 @@ GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
+EXPECTED_NEURAL_CALIBRATION_SCHEMA=2
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -58,9 +59,19 @@ if [ ! -f "$RETINOTOPIC_MAP" ]; then
     --download
 fi
 
-# Reuse the previously measured stable synapse scale during ordinary training.
-# Recalibrate only when the artifact is absent, or explicitly under full preflight.
-if [ ! -f "$NEURAL_CALIBRATION" ] || [ "$FULL_PREFLIGHT" = "1" ]; then
+CALIBRATION_SCHEMA=0
+if [ -f "$NEURAL_CALIBRATION" ]; then
+  CALIBRATION_SCHEMA="$(uv run python -c 'import json,sys
+try:
+    print(int(json.load(open(sys.argv[1])).get("schema_version", 0)))
+except Exception:
+    print(0)' "$NEURAL_CALIBRATION")"
+fi
+
+# Reuse the measured stable synapse scale during ordinary training. Recalibrate
+# once when the semantic schema changes; after that, ordinary runs go straight
+# to learning.
+if [ "$CALIBRATION_SCHEMA" != "$EXPECTED_NEURAL_CALIBRATION_SCHEMA" ] || [ "$FULL_PREFLIGHT" = "1" ]; then
   printf '\n== Whole-CNS pulse stability calibration ==\n'
   cargo check -q -p vf-runner --bin neural_bridge --bin neural_stability_probe
   uv run python scripts/embodiment/calibrate_neural_runtime.py \
