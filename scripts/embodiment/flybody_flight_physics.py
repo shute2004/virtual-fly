@@ -55,7 +55,6 @@ SOURCE_WING_INERTIAL_MASS = 8.0e-6
 SOURCE_FLUID_COEFS = (1.0, 0.5, 1.5, 1.7, 1.0)
 SOURCE_AIR_DENSITY = 0.00128
 SOURCE_AIR_VISCOSITY = 0.000185
-SOURCE_WING_CTRL_RANGE = (-1.0, 1.0)
 
 FLIGHT_PHYSICS_TIMESTEP_S = SOURCE_FLIGHT_PHYSICS_TIMESTEP_S
 FLIGHT_BODY_PITCH_DEG = SOURCE_BODY_PITCH_DEG
@@ -216,19 +215,24 @@ def apply_flight_air_parameters(world: BaseWorld) -> None:
 
 
 def add_flight_position_actuators(fly: FlyBody, jointdofs: Iterable) -> None:
-    """Add the six wing position actuators with source FlyBody force semantics.
+    """Add the six wing position actuators with source-equivalent torque authority.
 
-    In the source FlyBody model the wing ``general`` actuators are control-limited
-    to [-1, 1] but are not force-limited.  The source flight task feeds
-    ``target_angle - current_angle`` into those actuators after setting every wing
-    gain to 18.  In FlyGym's millimetre convention this is equivalent to a position
-    actuator with ``kp=1800`` and the same [-1, 1] error/control clipping.
+    The source FlyBody uses ``general`` wing actuators with gain 18.  Its flight
+    task explicitly feeds ``target_angle - current_angle`` into those actuators,
+    so, after cm->mm torque conversion, the local linear behavior is equivalent to
+    a position actuator with ``kp=1800``.
 
-    FlyGym's generic ``add_actuators`` helper defaults to ``forcelimited=True`` and
-    ``forcerange=(-30, 30)``.  Leaving that default in place clips the converted
-    wing torque far below the source model and destroys high-frequency tracking.
-    Therefore flight wings explicitly disable force limiting here while preserving
-    the source control range.
+    Crucially, the source wing actuators are *not* force-limited.  FlyGym's generic
+    ``add_actuators`` helper defaults to ``forcelimited=True`` and a narrow
+    ``forcerange=(-30, 30)``; retaining that default severely clips the 218 Hz wing
+    tracking torque.  We therefore disable force limiting here.
+
+    The source ``ctrlrange=(-1, 1)`` applies to its error signal, not to an absolute
+    target angle.  Applying that range directly to a MuJoCo POSITION actuator would
+    incorrectly clip the target wing angle itself, so no POSITION ctrlrange is set.
+    Normal calibrated tracking errors are expected to remain below 1 rad; if exact
+    source error clipping becomes necessary it must be implemented at the adapter
+    error-signal level rather than here.
     """
 
     wing = wing_dofs(jointdofs)
@@ -239,6 +243,4 @@ def add_flight_position_actuators(fly: FlyBody, jointdofs: Iterable) -> None:
         ActuatorType.POSITION,
         kp=FLIGHT_WING_POSITION_KP,
         forcelimited=False,
-        ctrllimited=True,
-        ctrlrange=SOURCE_WING_CTRL_RANGE,
     )
