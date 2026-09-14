@@ -14,6 +14,36 @@ pub struct Stimulus {
     pub current: f32,
 }
 
+/// Compact event code used by the bootstrap neural runtime.
+///
+/// MaleCNS contains both spiking and strongly graded neurons. In particular,
+/// Drosophila R1-R6 photoreceptors and lamina monopolar cells communicate with
+/// graded changes around an ongoing baseline. A one-sided 0/1 spike code cannot
+/// carry an inhibitory light response through that circuit from a quiescent
+/// numerical origin, so the runtime stores the sign of an activity *deviation*.
+/// Positive motor-neuron events remain the only events exposed as muscle spikes.
+pub const ACTIVITY_SILENT: u8 = 0;
+pub const ACTIVITY_DEPOLARIZING: u8 = 1;
+pub const ACTIVITY_HYPERPOLARIZING: u8 = 2;
+
+#[inline]
+pub fn activity_sign_u8(event: u8) -> f32 {
+    match event {
+        ACTIVITY_DEPOLARIZING => 1.0,
+        ACTIVITY_HYPERPOLARIZING => -1.0,
+        _ => 0.0,
+    }
+}
+
+#[inline]
+pub fn activity_sign_u32(event: u32) -> f32 {
+    match event {
+        1 => 1.0,
+        2 => -1.0,
+        _ => 0.0,
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct NeuralParams {
     /// Per-step membrane retention. This is a numerical model parameter, not an observed MaleCNS value.
