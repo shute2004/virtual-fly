@@ -3,16 +3,15 @@
 
 The calibration uses one physical FlyBody compound-eye light-on sample only to
 identify actual R1-R6 body currents. For every candidate fast-synapse scale, the
-Rust probe applies that pulse once and then removes *all* external input. A usable
+Rust probe applies that pulse once and then removes all external input. A usable
 bootstrap regime must satisfy both:
 
-1. activity propagates after the directly stimulated R1-R6 step; and
+1. activity reaches at least one neuron that was not directly stimulated; and
 2. recurrent activity returns exactly to silence in the final four zero-input
    steps, because this bootstrap model contains no intrinsic baseline/noise source.
 
 No Flyppy gate, reward, motor output, collision, or task score enters selection.
-The selected scale is the middle of the contiguous stable candidate range rather
-than its largest edge, giving margin from the self-sustaining transition.
+The selected scale is the center candidate of the widest contiguous stable range.
 """
 
 from __future__ import annotations
@@ -51,9 +50,13 @@ def parse_args() -> argparse.Namespace:
             0.0005,
             0.001,
             0.002,
+            0.003,
             0.004,
+            0.005,
             0.006,
+            0.007,
             0.008,
+            0.010,
             0.012,
             0.016,
             0.020,
@@ -69,8 +72,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if args.zero_input_steps < 4:
-        raise SystemExit("zero-input-steps must be >= 4")
+    if args.zero_input_steps < 6:
+        raise SystemExit("zero-input-steps must be >= 6")
     if not args.scales or any(
         not math.isfinite(value) or value <= 0.0 for value in args.scales
     ):
@@ -91,6 +94,7 @@ def main() -> int:
         raise RuntimeError("physical light-on sample produced no R1-R6 current")
 
     repo_root = Path(__file__).resolve().parents[2]
+    tested_scales = sorted(set(float(value) for value in args.scales))
     with tempfile.TemporaryDirectory(prefix="virtual-fly-neural-stability-") as temp:
         stimuli_path = Path(temp) / "stimuli.json"
         stimuli_path.write_text(
@@ -121,7 +125,7 @@ def main() -> int:
             "--zero-input-steps",
             str(args.zero_input_steps),
             "--synapse-scales",
-            ",".join(f"{value:.9g}" for value in sorted(set(args.scales))),
+            ",".join(f"{value:.9g}" for value in tested_scales),
         ]
         completed = subprocess.run(
             command,
@@ -142,8 +146,11 @@ def main() -> int:
         print("neural_stability_candidates:")
         for item in results:
             print(
-                "  scale={:.6g} propagated={} zero_tail={} peak={} final={}".format(
+                "  scale={:.6g} direct={} downstream_peak={} propagated={} "
+                "zero_tail={} peak={} final={}".format(
                     float(item["synapse_scale"]),
+                    int(item["initial_direct_events"]),
+                    int(item["peak_downstream_events"]),
                     item["propagated_after_input"],
                     item["zero_tail"],
                     item["peak_total_events"],
@@ -151,12 +158,13 @@ def main() -> int:
                 )
             )
         raise RuntimeError(
-            "no tested fast-synapse scale both propagated the retinal pulse and "
-            "returned to zero-input silence; the bootstrap neuron dynamics need "
-            "structural revision rather than another Flyppy/body calibration"
+            "no tested fast-synapse scale both propagated the retinal pulse into "
+            "non-stimulated MaleCNS neurons and returned to zero-input silence; "
+            "the bootstrap neuron dynamics need structural revision rather than "
+            "another Flyppy/body calibration"
         )
 
-    # Split stable candidates into contiguous runs in the tested scale ordering.
+    # Split stable candidates into contiguous runs in the tested-scale ordering.
     stable_scales = {float(item["synapse_scale"]) for item in stable}
     runs: list[list[dict[str, object]]] = []
     current: list[dict[str, object]] = []
@@ -169,16 +177,23 @@ def main() -> int:
     if current:
         runs.append(current)
     widest = max(runs, key=lambda run: (len(run), float(run[-1]["synapse_scale"])))
-    selected = widest[len(widest) // 2]
 
+    # For an even-sized run choose the lower of the two central candidates. This
+    # gives margin from the high-gain self-sustaining transition without selecting
+    # the lower propagation boundary itself when >=3 stable samples are present.
+    selected = widest[(len(widest) - 1) // 2]
     selected_scale = float(selected["synapse_scale"])
+
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "selection_basis": (
             "one physical R1-R6 light-on pulse followed by zero external input; "
-            "requires downstream propagation and four final silent steps; no task score"
+            "requires activity in non-stimulated neurons and four final silent "
+            "steps; no Flyppy task score"
         ),
         "stimulated_r1_r6": drive.active_photoreceptors,
+        "initial_direct_events": int(selected["initial_direct_events"]),
+        "selected_peak_downstream_events": int(selected["peak_downstream_events"]),
         "neuron_count": int(probe["neuron_count"]),
         "edge_count": int(probe["edge_count"]),
         "zero_input_steps": int(probe["zero_input_steps"]),
@@ -199,8 +214,11 @@ def main() -> int:
     )
     for item in results:
         print(
-            "scale={:.6g} propagated={} zero_tail={} peak_events={} final_events={}".format(
+            "scale={:.6g} direct={} downstream_peak={} propagated={} zero_tail={} "
+            "peak_events={} final_events={}".format(
                 float(item["synapse_scale"]),
+                int(item["initial_direct_events"]),
+                int(item["peak_downstream_events"]),
                 item["propagated_after_input"],
                 item["zero_tail"],
                 item["peak_total_events"],
@@ -208,6 +226,7 @@ def main() -> int:
             )
         )
     print(f"stable_scales={result['stable_scales']}")
+    print(f"selected_stable_run={result['selected_stable_run']}")
     print(f"selected_synapse_scale={selected_scale:.9g}")
     print(f"calibration={args.output}")
     print("neural_runtime_stability=PASS")
