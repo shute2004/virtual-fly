@@ -85,7 +85,7 @@ def run_pitch(
         raise RuntimeError("aero A/B mass mismatch")
 
     passive_delta: list[np.ndarray] = []
-    direct_fluid: list[np.ndarray] = []
+    fluid_delta: list[np.ndarray] = []
     for i in range(phase_samples):
         phase = 2.0 * math.pi * i / phase_samples
         set_state(
@@ -112,18 +112,23 @@ def run_pitch(
             np.asarray(on_data.qfrc_passive[on_dof : on_dof + 3], dtype=np.float64)
             - np.asarray(off_data.qfrc_passive[off_dof : off_dof + 3], dtype=np.float64)
         )
-        direct_fluid.append(
-            np.asarray(on_data.qfrc_fluid[on_dof : on_dof + 3], dtype=np.float64).copy()
+        # qfrc_fluid is non-zero in the source/off model as well because the world
+        # already has non-zero density/viscosity and MuJoCo can apply the ordinary
+        # inertia-based fluid model.  The isolated contribution of the explicitly
+        # enabled wing ellipsoid geoms is therefore aero-on minus aero-off here too.
+        fluid_delta.append(
+            np.asarray(on_data.qfrc_fluid[on_dof : on_dof + 3], dtype=np.float64)
+            - np.asarray(off_data.qfrc_fluid[off_dof : off_dof + 3], dtype=np.float64)
         )
 
     passive = np.asarray(passive_delta, dtype=np.float64)
-    fluid = np.asarray(direct_fluid, dtype=np.float64)
+    fluid = np.asarray(fluid_delta, dtype=np.float64)
     mean_passive = np.mean(passive, axis=0)
     mean_fluid = np.mean(fluid, axis=0)
     if not np.allclose(mean_passive, mean_fluid, rtol=1e-8, atol=1e-10):
         raise RuntimeError(
-            "aero-on/off qfrc_passive delta disagrees with qfrc_fluid: "
-            f"passive={mean_passive.tolist()} fluid={mean_fluid.tolist()}"
+            "aero-on/off qfrc_passive delta disagrees with aero-on/off qfrc_fluid delta: "
+            f"passive={mean_passive.tolist()} fluid_delta={mean_fluid.tolist()}"
         )
 
     weight = mass * SOURCE_GRAVITY_CM_S2
@@ -194,7 +199,7 @@ def main() -> int:
         diagnosis = "AERO_FORCE_MAGNITUDE_ITSELF_UNDER_WEIGHT"
 
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "mujoco_version": getattr(mj, "__version__", "unknown"),
         "pattern": str(args.pattern),
         "phase_samples": int(args.phase_samples),
@@ -202,6 +207,10 @@ def main() -> int:
         "best_vertical_case": best_vertical,
         "best_magnitude_case": best_magnitude,
         "diagnosis": diagnosis,
+        "force_definition": (
+            "aero-on minus aero-off qfrc_fluid; the off/source model may already "
+            "carry ordinary inertia-based fluid force because density/viscosity are non-zero"
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
