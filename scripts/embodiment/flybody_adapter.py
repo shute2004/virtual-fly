@@ -1,23 +1,13 @@
 #!/usr/bin/env python3
-"""Biologically motivated, deliberately thin CNS -> FlyBody motor adapter.
+"""Legacy bilateral DNg02 -> wing-amplitude adapter.
 
-The adapter does not decide whether the fly should climb, descend, or avoid an
-obstacle. It only maps bilateral DNg02 population activity to modulation of a
-nominal wing-beat pattern.
+This module is retained only for old smoke tests and historical experiments.
+The current Flyppy learning path does **not** use DNg02 population averages; it
+uses individual released wing motor-neuron spikes -> ``WingMusclePeriphery`` ->
+``FlyBodyMuscleAdapter``.
 
-Experiments report two useful constraints on this mapping:
-
-- increasing DNg02 population activity raises mean wingbeat amplitude;
-- unilateral DNg02 activity correlates positively with contralateral wingbeat
-  amplitude and negatively with ipsilateral wingbeat amplitude.
-
-The adapter therefore separates a bilateral mean-amplitude term from a
-left-right differential term. The exact gains remain calibration parameters,
-not measured MaleCNS constants.
-
-The nominal analytic wing beat is a prototype pattern adapted from the public
-FlyBody test pattern. Its exact kinematics are likewise a calibration parameter,
-not a claim about measured D. melanogaster wing motion.
+Shared FlyBody/MuJoCo construction lives in ``flybody_runtime.py`` so current
+code no longer inherits from this legacy motor decoder.
 """
 
 from __future__ import annotations
@@ -25,275 +15,40 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-import mujoco as mj
-import numpy as np
+from flygym.compose import ActuatorType
 
-from flygym import Simulation
-from flygym.compose import (
-    ActuatorType,
-    FlatGroundWorld,
-    KinematicPosePreset,
-    TetheredWorld,
-)
-from flygym.compose.fly import FlyBody
-from flygym.compose.world.base_world import BaseWorld
-from flygym.flybody.anatomy_flybody import (
-    FlyBodyAxisOrder,
-    FlyBodyContactBodiesPreset,
-    FlyBodyJointPreset,
-    FlyBodySkeleton,
-)
-from flygym.utils.math import Rotation3D
-
-from flybody_flight_physics import (
-    FLIGHT_BODY_PITCH_DEG,
-    FLIGHT_PHYSICS_TIMESTEP_S,
-    add_flight_position_actuators,
-    add_flight_wing_aerodynamics,
-    apply_flight_air_parameters,
-    apply_flight_wing_joint_parameters,
-)
+from flybody_runtime import FlyBodyRuntime
 
 
 @dataclass(frozen=True)
 class WingDrive:
-    """Normalized left/right DNg02 population activity."""
+    """Normalized left/right DNg02 population activity for legacy experiments."""
 
     left: float
     right: float
 
 
-class FlyBodyWingAdapter:
+class FlyBodyWingAdapter(FlyBodyRuntime):
+    """Legacy adapter mapping bilateral DNg02 activity to wing amplitude."""
+
     def __init__(
         self,
         *,
-        tethered: bool = True,
-        spawn_position_mm: tuple[float, float, float] = (0.0, 0.0, 4.0),
-        flight_body_pitch_deg: float = FLIGHT_BODY_PITCH_DEG,
-        initial_linear_velocity_mm_s: tuple[float, float, float] = (0.0, 0.0, 0.0),
-        initial_wing_phase: float = 0.0,
-        wingbeat_hz: float = 218.0,
         dng02_mean_gain: float = 0.30,
         dng02_steering_gain: float = 0.50,
         min_scale: float = 0.65,
         max_scale: float = 1.45,
-        enable_vision: bool = False,
-        enable_observer_camera: bool = False,
-        enable_wing_aerodynamics: bool = True,
-        world: BaseWorld | None = None,
+        **kwargs,
     ) -> None:
-        if wingbeat_hz <= 0:
-            raise ValueError("wingbeat_hz must be positive")
         if dng02_mean_gain < 0 or dng02_steering_gain < 0:
             raise ValueError("DNg02 gains must be non-negative")
         if not 0 < min_scale <= max_scale:
             raise ValueError("invalid wing amplitude scale limits")
-        if not math.isfinite(flight_body_pitch_deg):
-            raise ValueError("flight_body_pitch_deg must be finite")
-        if not math.isfinite(initial_wing_phase):
-            raise ValueError("initial_wing_phase must be finite")
-        if tethered and world is not None:
-            raise ValueError("custom world is only supported for free-body simulations")
-
-        initial_velocity = np.asarray(initial_linear_velocity_mm_s, dtype=np.float64)
-        if initial_velocity.shape != (3,) or not np.all(np.isfinite(initial_velocity)):
-            raise ValueError("initial_linear_velocity_mm_s must contain 3 finite values")
-        if tethered and not np.allclose(initial_velocity, 0.0):
-            raise ValueError("initial linear velocity is only valid for free-body simulations")
-
-        self.tethered = bool(tethered)
-        self.flight_body_pitch_deg = float(flight_body_pitch_deg)
-        self.initial_linear_velocity_mm_s = initial_velocity.copy()
-        self.initial_wing_phase = float(initial_wing_phase) % (2.0 * math.pi)
-        self.wingbeat_hz = float(wingbeat_hz)
         self.dng02_mean_gain = float(dng02_mean_gain)
         self.dng02_steering_gain = float(dng02_steering_gain)
         self.min_scale = float(min_scale)
         self.max_scale = float(max_scale)
-        self.vision_enabled = bool(enable_vision)
-        self.wing_aerodynamics_enabled = bool(enable_wing_aerodynamics)
-        self.observer_camera_name: str | None = None
-        observer_camera_key = "training_view"
-
-        self.fly = FlyBody(name="virtual_fly")
-        skeleton = FlyBodySkeleton(
-            joint_preset=FlyBodyJointPreset.ALL_BIOLOGICAL,
-            axis_order=FlyBodyAxisOrder.YAW_ROLL_PITCH,
-        )
-        self.fly.add_joints(skeleton, KinematicPosePreset.FLYBODY_NEUTRAL)
-        apply_flight_wing_joint_parameters(self.fly)
-
-        # Enumerate the biological skeleton, then let the flight compatibility
-        # layer select exactly the six wing DOFs. Do not use FlyGym's ALL
-        # actuated-DOF preset here: it includes non-flight joints such as halteres.
-        add_flight_position_actuators(self.fly, list(skeleton.iter_jointdofs()))
-        self.fly.add_tendons()
-        self.fly.add_tendon_actuators()
-        if self.wing_aerodynamics_enabled:
-            add_flight_wing_aerodynamics(self.fly)
-        if self.vision_enabled:
-            self.fly.add_vision(draw_sensor_markers=False)
-        if enable_observer_camera:
-            self.fly.add_tracking_camera(
-                name=observer_camera_key,
-                mode="track",
-                pos_offset=(-3.5, -14.0, 7.0),
-                rotation=Rotation3D("xyaxes", (1, 0, 0, 0, 0.45, 0.89)),
-                fovy=45.0,
-            )
-
-        if self.tethered:
-            active_world = TetheredWorld()
-            active_world.add_fly(
-                self.fly,
-                (0.0, 0.0, 0.0),
-                Rotation3D("quat", (1.0, 0.0, 0.0, 0.0)),
-            )
-        else:
-            active_world = world if world is not None else FlatGroundWorld()
-            pitch = math.radians(self.flight_body_pitch_deg)
-            spawn_rotation = Rotation3D(
-                "quat",
-                (math.cos(pitch / 2.0), 0.0, math.sin(pitch / 2.0), 0.0),
-            )
-            active_world.add_fly(
-                self.fly,
-                spawn_position_mm,
-                spawn_rotation,
-                bodysegs_with_ground_contact=FlyBodyContactBodiesPreset.LEGS_THORAX_ABDOMEN_HEAD,
-                add_ground_contact_sensors=True,
-            )
-            add_obstacle_contacts = getattr(active_world, "add_obstacle_contacts", None)
-            if add_obstacle_contacts is not None:
-                add_obstacle_contacts(self.fly)
-
-        # BaseWorld.add_fly() copies FlyBody's globals into the parent world, but
-        # FlyGym's parsed model is in mm whereas the source air values are authored
-        # for cm. Correct the global air values regardless of whether the explicit
-        # wing-fluid geoms are enabled, so aero/no-aero controls share one unit system.
-        apply_flight_air_parameters(active_world)
-
-        if enable_observer_camera:
-            # MjSpec.attach() prefixes element names with the fly namespace.
-            # Resolve the actual compiled name after attachment instead of assuming
-            # the pre-attach key survives unchanged.
-            self.observer_camera_name = self.fly.cameraname_to_mjcfcamera[
-                observer_camera_key
-            ].name
-
-        self.world = active_world
-        self.sim = Simulation(active_world, timestep=FLIGHT_PHYSICS_TIMESTEP_S)
-        self.sim.reset()
-        self.timestep = float(self.sim.mj_model.opt.timestep)
-
-        self._all_dofs = list(self.fly.get_jointdofs_order())
-        self._actuated_dofs = list(
-            self.fly.get_actuated_jointdofs_order(ActuatorType.POSITION)
-        )
-        all_index = {self._dof_key(dof): i for i, dof in enumerate(self._all_dofs)}
-        joint_angles = np.asarray(self.sim.get_joint_angles(self.fly.name), dtype=np.float64)
-        self._neutral_target = np.asarray(
-            [joint_angles[all_index[self._dof_key(dof)]] for dof in self._actuated_dofs],
-            dtype=np.float64,
-        )
-
-        self._wing_indices: dict[tuple[str, str], int] = {}
-        for actuator_index, dof in enumerate(self._actuated_dofs):
-            if not dof.child.is_wing():
-                continue
-            side = "left" if dof.child.name.startswith("l_") else "right"
-            self._wing_indices[(side, dof.axis.value)] = actuator_index
-
-        expected = {
-            (side, axis)
-            for side in ("left", "right")
-            for axis in ("yaw", "roll", "pitch")
-        }
-        if set(self._wing_indices) != expected or len(self._actuated_dofs) != 6:
-            raise RuntimeError(
-                "flight adapter requires exactly six wing POSITION actuators; "
-                f"actuated={len(self._actuated_dofs)} wings={sorted(self._wing_indices)}"
-            )
-
-        body_order = self.fly.get_bodysegs_order()
-        self._thorax_index = next(
-            i for i, segment in enumerate(body_order) if segment.name == "c_thorax"
-        )
-        self._time = 0.0
-        self._initialize_episode_state()
-
-    @staticmethod
-    def _dof_key(dof) -> tuple[str, str, str]:
-        return dof.parent.name, dof.child.name, dof.axis.value
-
-    def _root_freejoint_dof_address(self) -> int:
-        joint_types = np.asarray(self.sim.mj_model.jnt_type)
-        free_ids = np.flatnonzero(joint_types == int(mj.mjtJoint.mjJNT_FREE))
-        if len(free_ids) != 1:
-            raise RuntimeError(f"expected one root freejoint, found {len(free_ids)}")
-        return int(self.sim.mj_model.jnt_dofadr[int(free_ids[0])])
-
-    def _wing_state_addresses(self, dof) -> tuple[int, int]:
-        joint_name = self.fly.jointdof_to_mjcfjoint[dof].name
-        joint_id = mj.mj_name2id(
-            self.sim.mj_model, mj.mjtObj.mjOBJ_JOINT, joint_name
-        )
-        if joint_id < 0:
-            raise RuntimeError(f"compiled FlyBody wing joint not found: {joint_name}")
-        return (
-            int(self.sim.mj_model.jnt_qposadr[joint_id]),
-            int(self.sim.mj_model.jnt_dofadr[joint_id]),
-        )
-
-    def set_root_linear_velocity_mm_s(
-        self, velocity: np.ndarray | tuple[float, float, float]
-    ) -> None:
-        if self.tethered:
-            raise RuntimeError("tethered FlyBody has no free root velocity")
-        vector = np.asarray(velocity, dtype=np.float64)
-        if vector.shape != (3,) or not np.all(np.isfinite(vector)):
-            raise ValueError("root linear velocity must contain 3 finite values")
-        dof_address = self._root_freejoint_dof_address()
-        self.sim.mj_data.qvel[dof_address : dof_address + 3] = vector
-        mj.mj_forward(self.sim.mj_model, self.sim.mj_data)
-
-    def root_linear_velocity_mm_s(self) -> np.ndarray:
-        if self.tethered:
-            raise RuntimeError("tethered FlyBody has no free root velocity")
-        dof_address = self._root_freejoint_dof_address()
-        return np.asarray(
-            self.sim.mj_data.qvel[dof_address : dof_address + 3], dtype=np.float64
-        ).copy()
-
-    def _initialize_episode_state(self) -> None:
-        """Place wings on the analytic cycle and apply the one-shot root velocity."""
-
-        phase = self.initial_wing_phase
-        target = self._neutral_target.copy()
-        pattern = self._wing_pattern(phase, 1.0)
-        velocity = self._wing_pattern_velocity(phase, 1.0)
-        for side in ("left", "right"):
-            for axis in ("yaw", "roll", "pitch"):
-                actuator_index = self._wing_indices[(side, axis)]
-                dof = self._actuated_dofs[actuator_index]
-                qpos_address, qvel_address = self._wing_state_addresses(dof)
-                self.sim.mj_data.qpos[qpos_address] = pattern[axis]
-                self.sim.mj_data.qvel[qvel_address] = velocity[axis]
-                target[actuator_index] = pattern[axis]
-
-        if not self.tethered:
-            root_dof = self._root_freejoint_dof_address()
-            self.sim.mj_data.qvel[root_dof : root_dof + 3] = (
-                self.initial_linear_velocity_mm_s
-            )
-
-        self.sim.set_actuator_inputs(self.fly.name, ActuatorType.POSITION, target)
-        self._time = phase / (2.0 * math.pi * self.wingbeat_hz)
-        mj.mj_forward(self.sim.mj_model, self.sim.mj_data)
-
-    def reset(self) -> None:
-        self.sim.reset()
-        self._initialize_episode_state()
+        super().__init__(**kwargs)
 
     @staticmethod
     def _bounded_activity(value: float) -> float:
@@ -306,13 +61,8 @@ class FlyBodyWingAdapter:
         right_activity = self._bounded_activity(drive.right)
         mean_activity = 0.5 * (left_activity + right_activity)
 
-        # Positive differential means the contralateral DNg02 population for
-        # that wing is more active. This implements the measured sign relation:
-        # contralateral positive, ipsilateral negative, while preserving a
-        # separate bilateral mean-amplitude increase.
         left_differential = right_activity - left_activity
         right_differential = left_activity - right_activity
-
         left_scale = (
             1.0
             + self.dng02_mean_gain * mean_activity
@@ -327,33 +77,6 @@ class FlyBodyWingAdapter:
             min(self.max_scale, max(self.min_scale, left_scale)),
             min(self.max_scale, max(self.min_scale, right_scale)),
         )
-
-    @staticmethod
-    def _wing_pattern(phase: float, amplitude_scale: float) -> dict[str, float]:
-        phase = phase % (2.0 * math.pi)
-        return {
-            "yaw": 0.3 + amplitude_scale * 1.1 * math.sin(phase - math.pi / 2.0),
-            "roll": -0.1 + amplitude_scale * 0.25 * math.sin(1.5 * phase),
-            "pitch": 0.8 + amplitude_scale * 1.35 * math.sin(phase),
-        }
-
-    def _wing_pattern_velocity(
-        self, phase: float, amplitude_scale: float
-    ) -> dict[str, float]:
-        phase = phase % (2.0 * math.pi)
-        omega = 2.0 * math.pi * self.wingbeat_hz
-        return {
-            "yaw": amplitude_scale
-            * 1.1
-            * math.cos(phase - math.pi / 2.0)
-            * omega,
-            "roll": amplitude_scale
-            * 0.25
-            * 1.5
-            * math.cos(1.5 * phase)
-            * omega,
-            "pitch": amplitude_scale * 1.35 * math.cos(phase) * omega,
-        }
 
     def step(self, drive: WingDrive, *, physics_steps: int = 1) -> None:
         if physics_steps < 1:
@@ -370,30 +93,3 @@ class FlyBodyWingAdapter:
             self.sim.set_actuator_inputs(self.fly.name, ActuatorType.POSITION, target)
             self.sim.step()
             self._time += self.timestep
-
-    def thorax_position_mm(self) -> np.ndarray:
-        return np.asarray(
-            self.sim.get_body_positions(self.fly.name)[self._thorax_index],
-            dtype=np.float64,
-        ).copy()
-
-    def ommatidia_readouts(self) -> np.ndarray:
-        if not self.vision_enabled:
-            raise RuntimeError("vision was not enabled for this FlyBody instance")
-        return np.asarray(
-            self.sim.get_ommatidia_readouts(self.fly.name), dtype=np.float32
-        )
-
-    def wing_joint_angles_rad(self) -> dict[str, float]:
-        all_angles = np.asarray(
-            self.sim.get_joint_angles(self.fly.name), dtype=np.float64
-        )
-        all_index = {self._dof_key(dof): i for i, dof in enumerate(self._all_dofs)}
-        result: dict[str, float] = {}
-        for side, axis in sorted(self._wing_indices):
-            actuator_idx = self._wing_indices[(side, axis)]
-            dof = self._actuated_dofs[actuator_idx]
-            result[f"{side}_{axis}"] = float(
-                all_angles[all_index[self._dof_key(dof)]]
-            )
-        return result
