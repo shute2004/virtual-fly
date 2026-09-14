@@ -16,6 +16,7 @@ from pathlib import Path
 import shutil
 import time
 
+from virtual_fly.physics import CANONICAL_FLY, FLYPPY_GEOMETRY
 from virtual_fly.training.curriculum import (
     AdaptiveCurriculumConfig,
     BoundaryBandConfig,
@@ -28,11 +29,13 @@ from virtual_fly.training.curriculum import (
 )
 
 from flybody_muscle_adapter import FlyBodyMuscleAdapter
+from flybody_neuromuscular_adapter import FlyBodyNeuromuscularAdapter
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from live_telemetry import LiveTelemetryPublisher
 from malecns_retina import MaleCNSRetina
 from neural_bridge_client import NeuralBridgeClient
+from whole_body_periphery import WholeBodyPeriphery
 from wing_muscle_periphery import WingMusclePeriphery
 
 
@@ -47,6 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--groups", type=Path, default=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"))
     parser.add_argument("--retinotopic-map", type=Path, default=Path("artifacts/malecns-v1.0/retinotopic-vision-v1.json"))
     parser.add_argument("--wing-motor-map", type=Path, default=Path("artifacts/malecns-v1.0/wing-motor-neurons-v0.json"))
+    parser.add_argument("--body-motor-map", type=Path, default=Path("artifacts/malecns-v1.0/body-motor-neurons-v0.json"))
     parser.add_argument("--backend", choices=("cpu", "gpu"), default="gpu")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--viewer-graph", type=Path, default=DEFAULT_VIEWER_GRAPH)
@@ -56,6 +60,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-control-steps", type=int, default=1800)
     parser.add_argument("--physics-steps", type=int, default=10)
     parser.add_argument("--trajectory-stride", type=int, default=10)
+    parser.add_argument(
+        "--environment-version",
+        choices=("v1", "v2"),
+        default="v1",
+        help="v1 preserves historical geometry; v2 uses the explicit canonical physical scale",
+    )
+    parser.add_argument(
+        "--motor-boundary",
+        choices=("wing-only", "whole-body"),
+        default="wing-only",
+        help="whole-body adds only anatomically grounded leg/hDVM motor outputs",
+    )
     parser.add_argument(
         "--telemetry-stride",
         type=int,
@@ -91,8 +107,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--curriculum-max-easy-speed-mm-s", type=float, default=500.0)
     parser.add_argument("--curriculum-failure-x-step-mm", type=float, default=0.5)
 
-    # Boundary band discovered by the gate-2 fixed-condition drills:
-    # hard endpoint failed 24/24, easy endpoint succeeded 24/24.
+    # Historical v1 gate-2 boundary band. v2 starts a new experiment and does
+    # not reuse these values unless explicitly requested.
     parser.add_argument("--boundary-hard-x-mm", type=float, default=10.500)
     parser.add_argument("--boundary-hard-z-mm", type=float, default=5.290)
     parser.add_argument("--boundary-hard-speed-mm-s", type=float, default=350.0)
@@ -212,13 +228,14 @@ def validate(args: argparse.Namespace, first_gate) -> None:
         raise SystemExit("trajectory/telemetry strides must be >= 1")
     if args.checkpoint_every < 1:
         raise SystemExit("checkpoint-every must be >= 1")
+    if args.motor_boundary == "whole-body" and not args.body_motor_map.exists():
+        raise SystemExit(f"whole-body motor map not found: {args.body_motor_map}")
     if args.curriculum_mode == "adaptive" and args.curriculum_start_x_mm >= first_gate.x_mm:
         raise SystemExit("curriculum-start-x-mm must be before the first gate")
     if args.curriculum_mode == "boundary-band":
         if args.boundary_hard_x_mm >= first_gate.x_mm or args.boundary_easy_x_mm >= first_gate.x_mm:
             raise SystemExit("boundary-band spawn x must be before the target gate")
         try:
-            # Construction plus first condition validates all boundary parameters.
             probe_state: dict[str, object] = {}
             current_boundary_condition(probe_state, boundary_config(args))
         except ValueError as exc:
@@ -243,7 +260,11 @@ def validate(args: argparse.Namespace, first_gate) -> None:
 
 def main() -> int:
     args = parse_args()
-    course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
+    course = FlyppyCourse(
+        seed=args.seed,
+        gate_count=args.gate_count,
+        environment_version=args.environment_version,
+    )
     first_gate = course.gates[0]
     validate(args, first_gate)
 
@@ -273,6 +294,8 @@ def main() -> int:
         checkpoint_exists=checkpoint_exists,
     )
     state["curriculum_mode"] = args.curriculum_mode
+    state["environment_version"] = args.environment_version
+    state["motor_boundary"] = args.motor_boundary
     adaptive = adaptive_config(args, first_gate)
     boundary = boundary_config(args)
 
@@ -282,15 +305,26 @@ def main() -> int:
     publisher = LiveTelemetryPublisher(output)
 
     world = FlyppyWorld(course)
-    body = FlyBodyMuscleAdapter(
-        tethered=False,
-        world=world,
-        spawn_position_mm=(0.0, 0.0, 5.0),
-        initial_linear_velocity_mm_s=(0.0, 0.0, 0.0),
-        enable_vision=True,
-        enable_observer_camera=False,
-    )
-    periphery = WingMusclePeriphery(args.wing_motor_map)
+    if args.motor_boundary == "whole-body":
+        body = FlyBodyNeuromuscularAdapter(
+            tethered=False,
+            world=world,
+            spawn_position_mm=(0.0, 0.0, FLYPPY_GEOMETRY.corridor_high_z_mm / 2.0),
+            initial_linear_velocity_mm_s=(0.0, 0.0, 0.0),
+            enable_vision=True,
+            enable_observer_camera=False,
+        )
+        periphery = WholeBodyPeriphery(args.wing_motor_map, args.body_motor_map)
+    else:
+        body = FlyBodyMuscleAdapter(
+            tethered=False,
+            world=world,
+            spawn_position_mm=(0.0, 0.0, 5.0),
+            initial_linear_velocity_mm_s=(0.0, 0.0, 0.0),
+            enable_vision=True,
+            enable_observer_camera=False,
+        )
+        periphery = WingMusclePeriphery(args.wing_motor_map)
     vision = MaleCNSRetina(args.retinotopic_map, current_gain=args.photoreceptor_current_gain)
     control_dt_s = body.timestep * args.physics_steps
 
@@ -300,10 +334,22 @@ def main() -> int:
         f"body_telemetry_stride={args.body_telemetry_stride}"
     )
     print(
-        "curriculum mode={} first_gate_x={:.3f} gate_center_z={:.3f} "
-        "target=(x={:.3f},z={:.3f},vx={:.1f})".format(
-            args.curriculum_mode,
+        "environment={} motor_boundary={} body_length_mm={:.3f} mass_mg={:.3f} "
+        "first_gate_x={:.3f} gate_gap_mm={:.3f} corridor_height_mm={:.3f}".format(
+            args.environment_version,
+            args.motor_boundary,
+            CANONICAL_FLY.body_length_mm,
+            CANONICAL_FLY.total_mass_mg,
             first_gate.x_mm,
+            2.0 * first_gate.half_gap_mm,
+            course.ceiling_z_mm - course.floor_z_mm,
+        )
+    )
+    if body.mass_normalization is not None:
+        print(f"mass_normalization={body.mass_normalization.as_dict()}")
+    print(
+        "curriculum mode={} gate_center_z={:.3f} target=(x={:.3f},z={:.3f},vx={:.1f})".format(
+            args.curriculum_mode,
             first_gate.center_z_mm,
             args.curriculum_target_x_mm,
             args.curriculum_target_z_mm,
@@ -350,6 +396,8 @@ def main() -> int:
 
                 live_curriculum = {
                     "mode": args.curriculum_mode,
+                    "environment_version": args.environment_version,
+                    "motor_boundary": args.motor_boundary,
                     "spawn_x_mm": spawn_x,
                     "spawn_z_mm": spawn_z,
                     "initial_speed_mm_s": speed,
@@ -416,7 +464,17 @@ def main() -> int:
                     max_z = max(max_z, z_mm)
                     step_count = control_step + 1
 
-                    event = course.update(x_mm, z_mm)
+                    physical_collision = (
+                        world.physical_collision_reason(body.sim)
+                        if args.environment_version == "v2"
+                        else None
+                    )
+                    event = course.update(
+                        x_mm,
+                        z_mm,
+                        physical_collision_reason=physical_collision,
+                        analytic_body_collision=args.environment_version == "v1",
+                    )
                     reward = False
                     aversive = False
                     if event.passed_gate:
@@ -459,6 +517,8 @@ def main() -> int:
                                     "collision": event.collision,
                                     "collision_reason": event.collision_reason,
                                     "finished": event.finished,
+                                    "environment_version": args.environment_version,
+                                    "motor_boundary": args.motor_boundary,
                                     "curriculum_mode": args.curriculum_mode,
                                     "boundary_ease_level": boundary_level,
                                 },
@@ -467,7 +527,11 @@ def main() -> int:
                         )
 
                     if neural_telemetry_sample or reward or aversive or finished:
-                        active_viewer = [body_id for body_id in viewer_ids if body_spikes.get(body_id, False)]
+                        active_viewer = [
+                            body_id
+                            for body_id in viewer_ids
+                            if body_spikes.get(body_id, False)
+                        ]
                         publisher.publish_neural(
                             episode=episode,
                             control_step=control_step,
@@ -506,7 +570,6 @@ def main() -> int:
                 batch_result = None
                 if args.curriculum_mode == "boundary-band":
                     batch_result = record_boundary_result(state, boundary, success=passed > 0)
-                    # Expose the next scheduled condition in persisted/live state.
                     current_boundary_condition(state, boundary)
                 else:
                     record_adaptive_result(state, adaptive, success=passed > 0)
@@ -525,19 +588,26 @@ def main() -> int:
                     "spawn_x_mm": spawn_x,
                     "spawn_z_mm": spawn_z,
                     "initial_speed_mm_s": speed,
+                    "environment_version": args.environment_version,
+                    "motor_boundary": args.motor_boundary,
                     "curriculum_mode": args.curriculum_mode,
                     "boundary_ease_level": boundary_level,
                 }
                 results.append(result)
                 print(
                     "episode={} steps={} passed={} collision={} finished={} max_x={:.3f} final_vx={:.3f}".format(
-                        episode, step_count, passed, collision, finished, max_x, float(final_velocity[0])
+                        episode,
+                        step_count,
+                        passed,
+                        collision,
+                        finished,
+                        max_x,
+                        float(final_velocity[0]),
                     )
                 )
                 if batch_result is not None:
                     print(
-                        "boundary_batch successes={}/{} rate={:.3f} adjustment={} "
-                        "hard={} easy={}".format(
+                        "boundary_batch successes={}/{} rate={:.3f} adjustment={} hard={} easy={}".format(
                             batch_result["successes"],
                             batch_result["attempts"],
                             batch_result["success_rate"],
@@ -547,8 +617,7 @@ def main() -> int:
                         )
                     )
                 print(
-                    "curriculum_result passed={} next_spawn=(x={:.3f},z={:.3f}) "
-                    "next_vx={:.1f} complete={}".format(
+                    "curriculum_result passed={} next_spawn=(x={:.3f},z={:.3f}) next_vx={:.1f} complete={}".format(
                         passed,
                         float(state["spawn_x_mm"]),
                         float(state["spawn_z_mm"]),
@@ -557,12 +626,17 @@ def main() -> int:
                     )
                 )
 
-                checkpoint_due = (local_episode + 1) % args.checkpoint_every == 0 or local_episode + 1 == args.episodes
+                checkpoint_due = (
+                    (local_episode + 1) % args.checkpoint_every == 0
+                    or local_episode + 1 == args.episodes
+                )
                 if checkpoint_due:
                     print(f"saving full CNS checkpoint after episode {episode} ...")
                     saved_state = brain.save_checkpoint(checkpoint)
                     save_json_atomic(state_path, state)
-                    print(f"checkpoint={saved_state.get('path')} neural_step={saved_state.get('step')}")
+                    print(
+                        f"checkpoint={saved_state.get('path')} neural_step={saved_state.get('step')}"
+                    )
 
                 publisher.publish_status(
                     running=True,
@@ -580,11 +654,39 @@ def main() -> int:
         control_step=results[-1]["control_steps"] if results else None,
         curriculum=state,
     )
+    physical_spec = {
+        "morphology": CANONICAL_FLY.morphology,
+        "body_length_mm": CANONICAL_FLY.body_length_mm,
+        "wing_length_mm": CANONICAL_FLY.wing_length_mm,
+        "total_mass_mg": CANONICAL_FLY.total_mass_mg,
+        "neural_sex": CANONICAL_FLY.neural_sex,
+        "morphology_sex": CANONICAL_FLY.morphology_sex,
+        "mass_normalization": (
+            body.mass_normalization.as_dict() if body.mass_normalization is not None else None
+        ),
+    }
+    environment_spec = {
+        "version": args.environment_version,
+        "corridor_low_z_mm": course.floor_z_mm,
+        "corridor_high_z_mm": course.ceiling_z_mm,
+        "lateral_half_width_mm": course.lateral_half_width_mm,
+        "first_gate_x_mm": first_gate.x_mm,
+        "gate_gap_height_mm": 2.0 * first_gate.half_gap_mm,
+        "gate_half_thickness_mm": first_gate.half_thickness_mm,
+    }
     summary = {
-        "schema_version": 8,
-        "experiment": "flyppy_persistent_curriculum_individual_wing_mn",
+        "schema_version": 9,
+        "experiment": (
+            "flyppy_v2_whole_body_physical_curriculum"
+            if args.environment_version == "v2" and args.motor_boundary == "whole-body"
+            else "flyppy_persistent_curriculum_individual_wing_mn"
+        ),
         "backend": backend_name,
         "persistent_runtime": True,
+        "environment_version": args.environment_version,
+        "motor_boundary": args.motor_boundary,
+        "physical_spec": physical_spec,
+        "environment_spec": environment_spec,
         "curriculum_mode": args.curriculum_mode,
         "episodes_this_run": args.episodes,
         "episode_start": start_episode,
