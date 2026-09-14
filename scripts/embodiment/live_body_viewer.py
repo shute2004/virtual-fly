@@ -108,16 +108,20 @@ def read_camera_state(path: Path, previous: dict[str, float]) -> dict[str, float
     }
 
 
-def infer_training_gate_index(experiment: Path) -> int:
-    """Mirror the trainer's selected course stage in the detached observer."""
+def infer_training_context(experiment: Path) -> tuple[int, str]:
+    """Mirror trainer stage and physical environment in the detached observer."""
 
     state_path = experiment / "curriculum-state.json"
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
         gate_index = int(state.get("training_gate_index", 0))
+        environment_version = str(state.get("environment_version", "v1"))
     except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
         gate_index = 0
-    return max(0, gate_index)
+        environment_version = "v1"
+    if environment_version not in {"v1", "v2"}:
+        environment_version = "v1"
+    return max(0, gate_index), environment_version
 
 
 def read_pose(path: Path) -> tuple[tuple[int, int], float, np.ndarray, np.ndarray] | None:
@@ -162,14 +166,19 @@ def main() -> int:
     if args.width < 160 or args.height < 120:
         raise SystemExit("render size is too small")
 
-    training_gate_index = infer_training_gate_index(args.experiment)
+    training_gate_index, environment_version = infer_training_context(args.experiment)
     os.environ["VF_COURSE_START_GATE"] = str(training_gate_index)
-    course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
+    course = FlyppyCourse(
+        seed=args.seed,
+        gate_count=args.gate_count,
+        environment_version=environment_version,
+    )
     world = FlyppyWorld(course)
+    spawn_z = (course.floor_z_mm + course.ceiling_z_mm) / 2.0
     body = FlyBodyMuscleAdapter(
         tethered=False,
         world=world,
-        spawn_position_mm=(0.0, 0.0, 5.0),
+        spawn_position_mm=(0.0, 0.0, spawn_z),
         initial_linear_velocity_mm_s=(0.0, 0.0, 0.0),
         enable_vision=False,
         enable_observer_camera=False,
@@ -216,6 +225,7 @@ def main() -> int:
     print(f"body_frame_output={frame_path}")
     print(f"body_camera_input={camera_path}")
     print(f"body_viewer_training_gate_index={training_gate_index}")
+    print(f"body_viewer_environment_version={environment_version}")
     print(f"body_viewer_render_hz={args.poll_hz:.1f} interpolation=MuJoCo-generalized-position")
     print("body_viewer=waiting-for-telemetry")
 
@@ -251,9 +261,6 @@ def main() -> int:
                         pose_b_time = source_time
                         transition_duration = period
                     else:
-                        # Start the next blend from what is currently visible,
-                        # not from the previous raw source pose. This avoids a
-                        # tiny backward snap when source and render rates differ.
                         pose_a_qpos = np.asarray(body.sim.mj_data.qpos, dtype=np.float64).copy()
                         pose_a_qvel = np.asarray(body.sim.mj_data.qvel, dtype=np.float64).copy()
                         pose_a_time = float(body.sim.mj_data.time)
@@ -264,9 +271,6 @@ def main() -> int:
                             source_interval = period
                         else:
                             source_interval = arrival - last_source_arrival
-                        # Reach the target slightly before the next expected
-                        # source sample. Clamp stalls so a paused trainer does
-                        # not create a seconds-long slow-motion blend.
                         transition_duration = max(period, min(0.25, source_interval * 0.90))
                     transition_started = arrival
                     last_source_arrival = arrival
@@ -280,9 +284,19 @@ def main() -> int:
                 camera_state = read_camera_state(camera_path, camera_state)
                 last_camera_mtime = camera_mtime
 
-            if pose_a_qpos is not None and pose_b_qpos is not None and pose_a_qvel is not None and pose_b_qvel is not None:
-                alpha = min(1.0, max(0.0, (now - transition_started) / max(transition_duration, 1e-6)))
-                render_qpos = interpolate_qpos(model, pose_a_qpos, pose_b_qpos, alpha, scratch_velocity)
+            if (
+                pose_a_qpos is not None
+                and pose_b_qpos is not None
+                and pose_a_qvel is not None
+                and pose_b_qvel is not None
+            ):
+                alpha = min(
+                    1.0,
+                    max(0.0, (now - transition_started) / max(transition_duration, 1e-6)),
+                )
+                render_qpos = interpolate_qpos(
+                    model, pose_a_qpos, pose_b_qpos, alpha, scratch_velocity
+                )
                 render_qvel = pose_a_qvel * (1.0 - alpha) + pose_b_qvel * alpha
                 render_time = pose_a_time * (1.0 - alpha) + pose_b_time * alpha
 
