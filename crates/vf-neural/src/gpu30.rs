@@ -80,6 +80,8 @@ pub struct GpuRuntime {
     plasticity_pipeline: wgpu::ComputePipeline,
     trace_pipeline: wgpu::ComputePipeline,
     reset_eligibility_pipeline: wgpu::ComputePipeline,
+    spike_gather_layout: wgpu::BindGroupLayout,
+    spike_gather_pipeline: wgpu::ComputePipeline,
     current_is_b: bool,
 }
 
@@ -250,7 +252,6 @@ impl GpuRuntime {
             label: Some("vf neural shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("neural.wgsl"))),
         });
-
         let create_pipeline = |entry_point: &'static str| {
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some(entry_point),
@@ -265,6 +266,33 @@ impl GpuRuntime {
         let plasticity_pipeline = create_pipeline("plasticity_step");
         let trace_pipeline = create_pipeline("trace_step");
         let reset_eligibility_pipeline = create_pipeline("reset_eligibility");
+
+        let spike_gather_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("vf spike gather layout"),
+            entries: &[
+                storage_layout(0, true),
+                storage_layout(1, true),
+                storage_layout(2, false),
+            ],
+        });
+        let spike_gather_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("vf spike gather pipeline layout"),
+                bind_group_layouts: &[Some(&spike_gather_layout)],
+                immediate_size: 0,
+            });
+        let spike_gather_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("vf spike gather shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("spike_gather.wgsl"))),
+        });
+        let spike_gather_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("gather_spikes"),
+            layout: Some(&spike_gather_pipeline_layout),
+            module: &spike_gather_shader,
+            entry_point: Some("gather_spikes"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
 
         let bind_group_ab = create_bind_group(
             &device,
@@ -312,6 +340,8 @@ impl GpuRuntime {
             plasticity_pipeline,
             trace_pipeline,
             reset_eligibility_pipeline,
+            spike_gather_layout,
+            spike_gather_pipeline,
             current_is_b: false,
         })
     }
@@ -374,9 +404,6 @@ impl GpuRuntime {
         Ok(())
     }
 
-    /// Reset trial-local dynamics while keeping learned synaptic weights resident
-    /// on the GPU. This avoids a full ~25.6M-edge GPU -> CPU -> GPU round trip at
-    /// every Flyppy episode boundary.
     pub fn reset_dynamics(&mut self) -> Result<()> {
         let zero_neurons = vec![NeuronStateGpu::zeroed(); self.neuron_count];
         let zero_spikes = vec![0u32; self.neuron_count];
@@ -459,16 +486,8 @@ impl GpuRuntime {
             0,
             bytemuck::cast_slice(&synapses),
         );
-        self.queue.write_buffer(
-            &self.spikes_a,
-            0,
-            bytemuck::cast_slice(&state.spikes),
-        );
-        self.queue.write_buffer(
-            &self.spikes_b,
-            0,
-            bytemuck::cast_slice(&state.spikes),
-        );
+        self.queue.write_buffer(&self.spikes_a, 0, bytemuck::cast_slice(&state.spikes));
+        self.queue.write_buffer(&self.spikes_b, 0, bytemuck::cast_slice(&state.spikes));
         self.external_cpu.fill(0.0);
         self.queue.write_buffer(
             &self.external_buffer,
@@ -493,42 +512,77 @@ impl GpuRuntime {
         self.read_buffer::<u32>(self.current_spike_buffer(), self.neuron_count)
     }
 
-    /// Read only explicitly requested neuron events. Closed-loop body control
-    /// normally asks for ~60 wing motor neurons instead of synchronously copying
-    /// all 166,700 activity codes from GPU to CPU every control step.
+    /// Gather arbitrary requested events on GPU, then read one compact contiguous
+    /// buffer. Normal Flyppy control requests only the ~60 wing motor neurons;
+    /// observer samples request the bounded viewer subgraph at a lower cadence.
     pub fn read_spikes_at(&self, indices: &[usize]) -> Result<Vec<u32>> {
         if indices.is_empty() {
             return Ok(Vec::new());
         }
-        for &index in indices {
-            if index >= self.neuron_count {
-                bail!("spike readback index {index} is out of range");
-            }
-        }
+        let indices_u32 = indices
+            .iter()
+            .map(|&index| {
+                if index >= self.neuron_count {
+                    bail!("spike readback index {index} is out of range");
+                }
+                Ok(index as u32)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let byte_size = (indices_u32.len() * std::mem::size_of::<u32>()) as u64;
 
-        let item_size = std::mem::size_of::<u32>() as u64;
-        let size = indices.len() as u64 * item_size;
+        let index_buffer = device_storage_init(
+            &self.device,
+            "vf spike gather indices",
+            bytemuck::cast_slice(&indices_u32),
+        );
+        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("vf spike gather output"),
+            size: byte_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
         let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vf selected spike staging"),
-            size,
+            size: byte_size,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let source = self.current_spike_buffer();
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vf spike gather bind group"),
+            layout: &self.spike_gather_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.current_spike_buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: index_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: output_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
+        let (x, y) = dispatch_grid(indices_u32.len() as u32, max_groups)?;
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vf selected spike readback encoder"),
+                label: Some("vf selected spike gather encoder"),
             });
-        for (output_index, &neuron_index) in indices.iter().enumerate() {
-            encoder.copy_buffer_to_buffer(
-                source,
-                neuron_index as u64 * item_size,
-                &staging,
-                output_index as u64 * item_size,
-                item_size,
-            );
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("vf selected spike gather"),
+                timestamp_writes: None,
+            });
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_pipeline(&self.spike_gather_pipeline);
+            pass.dispatch_workgroups(x, y, 1);
         }
+        encoder.copy_buffer_to_buffer(&output_buffer, 0, &staging, 0, byte_size);
         self.queue.submit([encoder.finish()]);
         self.map_staging::<u32>(&staging)
     }
@@ -647,6 +701,18 @@ fn create_storage_init(
         label: Some(label),
         contents,
         usage,
+    })
+}
+
+fn device_storage_init(
+    device: &wgpu::Device,
+    label: &'static str,
+    contents: &[u8],
+) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(label),
+        contents,
+        usage: wgpu::BufferUsages::STORAGE,
     })
 }
 
