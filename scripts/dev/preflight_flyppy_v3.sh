@@ -52,18 +52,10 @@ uv run python scripts/embodiment/flybody_v3_production_muscle_capability.py
 # Stable open-loop flight under a fixed symmetric muscle state is useful diagnostic
 # information but is not an upstream FlyBody requirement.  The source vision-flight
 # task applies policy action on top of the wing-beat generator, so closed-loop MaleCNS
-# control is allowed to provide attitude stabilization.  Keep this sweep non-blocking.
+# control is allowed to provide attitude stabilization.  Record this sweep without
+# turning instability into a training veto or producing a misleading traceback.
 printf '\n== Flyppy v3 symmetric open-loop flight diagnostic ==\n'
-set +e
-uv run python scripts/embodiment/flybody_v3_vertical_flight_capability.py
-OPEN_LOOP_STATUS=$?
-set -e
-if [[ "$OPEN_LOOP_STATUS" -eq 0 ]]; then
-  printf 'flybody_v3_open_loop_stability=PASS\n'
-else
-  printf 'flybody_v3_open_loop_stability=FAIL_NONBLOCKING status=%s\n' "$OPEN_LOOP_STATUS"
-  printf 'note=source FlyBody does not define fixed symmetric baseline-wingbeat free-flight stability as a prerequisite; MaleCNS closed-loop control is allowed to supply stabilization\n'
-fi
+uv run python scripts/embodiment/flybody_v3_vertical_flight_capability.py --nonblocking
 
 printf '\nflyppy_v3_preflight=PASS\n'
 printf 'physical_spec=%s/artifacts/embodiment/flybody-physical-spec-v3.json\n' "$ROOT"
