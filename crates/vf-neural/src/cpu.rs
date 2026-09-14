@@ -2,7 +2,10 @@ use anyhow::{Result, bail};
 use rayon::prelude::*;
 
 use crate::{
-    model::{NeuralParams, Stimulus, assumed_fast_sign, nt},
+    model::{
+        ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, NeuralParams, Stimulus,
+        activity_sign_u8, assumed_fast_sign, nt,
+    },
     snapshot::ConnectomeSnapshot,
     state::NeuralState,
 };
@@ -22,6 +25,13 @@ pub struct StepSummary {
 /// propagation -> neuron state -> local plasticity -> activity trace. There is
 /// no gradient, optimizer, target weight, externally supplied reward value, or
 /// externally supplied positive/negative valence sign.
+///
+/// `spikes` stores a compact activity-deviation event rather than claiming all
+/// MaleCNS neurons are literal binary spiking cells: 1 is a positive/depolarizing
+/// deviation, 2 a negative/hyperpolarizing deviation, and 0 is no event. This
+/// lets inhibitory graded circuits such as R1-R6 -> L1/L2 propagate around a
+/// quiescent numerical baseline. The embodiment boundary exposes only event 1
+/// as a motor-neuron spike.
 pub struct CpuRuntime {
     snapshot: ConnectomeSnapshot,
     params: NeuralParams,
@@ -131,18 +141,22 @@ impl CpuRuntime {
 
                 for edge in start..end {
                     let pre = snapshot.pre_indices[edge] as usize;
-                    if spikes_prev[pre] == 0 {
+                    let event_sign = activity_sign_u8(spikes_prev[pre]);
+                    if event_sign == 0.0 {
                         continue;
                     }
                     if snapshot.neurotransmitters[pre] == nt::DOPAMINE {
-                        // No reward/aversive sign is supplied here. PAM, PPL1,
-                        // and other dopamine neurons differ through their actual
-                        // released connectivity and their own neural activity.
-                        dopaminergic_input += snapshot.synapse_counts[edge] as f32
-                            * params.modulator_scale;
+                        // The present dopamine model represents released positive
+                        // dopaminergic events only. A negative activity deviation
+                        // means reduced release around an unmodelled baseline and
+                        // is therefore not invented as a signed punishment signal.
+                        if event_sign > 0.0 {
+                            dopaminergic_input += snapshot.synapse_counts[edge] as f32
+                                * params.modulator_scale;
+                        }
                     } else {
                         let sign = assumed_fast_sign(snapshot.neurotransmitters[pre]);
-                        fast_current += sign * weights[edge];
+                        fast_current += sign * weights[edge] * event_sign;
                     }
                 }
                 (fast_current, dopaminergic_input)
@@ -160,7 +174,13 @@ impl CpuRuntime {
 
                 let v = previous_membrane[i] * params.membrane_decay + propagated[i].0;
                 if v >= params.threshold {
-                    (params.reset, 1, params.refractory_steps)
+                    (params.reset, ACTIVITY_DEPOLARIZING, params.refractory_steps)
+                } else if v <= -params.threshold {
+                    (
+                        params.reset,
+                        ACTIVITY_HYPERPOLARIZING,
+                        params.refractory_steps,
+                    )
                 } else {
                     (v, 0, 0)
                 }
@@ -197,8 +217,9 @@ impl CpuRuntime {
                         return;
                     }
 
-                    let local = traces[pre] * spikes_after[post] as f32
-                        - traces[post] * spikes_before[pre] as f32;
+                    let post_event = activity_sign_u8(spikes_after[post]);
+                    let pre_event = activity_sign_u8(spikes_before[pre]);
+                    let local = traces[pre] * post_event - traces[post] * pre_event;
                     *eligibility = *eligibility * params.eligibility_decay + local;
                     *weight = (*weight
                         + params.learning_rate * modulation[post] * *eligibility)
@@ -210,10 +231,13 @@ impl CpuRuntime {
             .activity_trace
             .par_iter()
             .enumerate()
-            .map(|(i, trace)| trace * params.trace_decay + next_spikes[i] as f32)
+            .map(|(i, trace)| trace * params.trace_decay + activity_sign_u8(next_spikes[i]))
             .collect();
 
-        let spike_count = next_spikes.par_iter().map(|&s| s as usize).sum();
+        let spike_count = next_spikes
+            .par_iter()
+            .filter(|&&event| event == ACTIVITY_DEPOLARIZING)
+            .count();
         let mean_modulation = if n == 0 {
             0.0
         } else {
@@ -270,9 +294,37 @@ mod tests {
         params.synapse_scale = 0.06;
         let mut runtime = CpuRuntime::new(tiny_snapshot(), params);
         runtime.step(&[Stimulus { neuron: 0, current: 2.0 }], false).unwrap();
-        assert_eq!(runtime.spikes()[0], 1);
+        assert_eq!(runtime.spikes()[0], ACTIVITY_DEPOLARIZING);
         runtime.step(&[], false).unwrap();
-        assert_eq!(runtime.spikes()[1], 1);
+        assert_eq!(runtime.spikes()[1], ACTIVITY_DEPOLARIZING);
+    }
+
+    #[test]
+    fn inhibitory_graded_deviation_can_sign_invert_downstream() {
+        // Light-like positive activity in a histaminergic photoreceptor inhibits
+        // a glutamatergic L1-like cell. The negative L1-like deviation then
+        // reduces inhibitory glutamate release, yielding a positive downstream
+        // deviation. This is deviation-from-baseline coding, not a literal
+        // negative action potential.
+        let snapshot = ConnectomeSnapshot::from_edges(
+            3,
+            &[
+                EdgeInput { pre: 0, post: 1, synapse_count: 20 },
+                EdgeInput { pre: 1, post: 2, synapse_count: 20 },
+            ],
+            vec![nt::HISTAMINE, nt::GLUTAMATE, nt::ACETYLCHOLINE],
+        )
+        .unwrap();
+        let mut params = NeuralParams::default();
+        params.synapse_scale = 0.06;
+        let mut runtime = CpuRuntime::new(snapshot, params);
+
+        runtime.step(&[Stimulus { neuron: 0, current: 2.0 }], false).unwrap();
+        assert_eq!(runtime.spikes()[0], ACTIVITY_DEPOLARIZING);
+        runtime.step(&[], false).unwrap();
+        assert_eq!(runtime.spikes()[1], ACTIVITY_HYPERPOLARIZING);
+        runtime.step(&[], false).unwrap();
+        assert_eq!(runtime.spikes()[2], ACTIVITY_DEPOLARIZING);
     }
 
     #[test]
