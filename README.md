@@ -2,7 +2,7 @@
 
 成体オスのショウジョウバエ（*Drosophila melanogaster*）の中枢神経系コネクトームを初期状態として、PC上で神経活動・神経修飾・シナプス可塑性を時間発展させ、仮想身体と閉ループ接続する研究・実装プロジェクトです。
 
-最初の目標は、仮想ショウジョウバエを Flappy Bird 型の環境に置き、感覚入力を神経刺激へ、行動結果を報酬系・嫌悪系への神経刺激へ変換し、外部の学習アルゴリズムを使わずに神経系自身の可塑性だけで行動が変化するかを検証することです。
+最終目標は、仮想ショウジョウバエを Flappy Bird 型の環境に置き、感覚入力を神経刺激へ、行動結果を報酬系・嫌悪系への神経刺激へ変換し、外部の学習アルゴリズムを使わずに神経系自身の可塑性だけで行動が変化するかを検証することです。
 
 ## 重要な設計原則
 
@@ -12,35 +12,175 @@
 - 外部から与えるのは、可能な限り生物が受け取る形に対応した神経刺激と神経修飾刺激に限定する。
 - 行動は外部プログラムが決定せず、神経活動から運動系を経由して仮想身体に生じさせる。
 - 実測情報、文献から採用したモデル、便宜的な仮定を明確に区別する。
+- 既知の生物学的・物理的な局所過程を、同じ結果を返す外部の特徴抽出・集約アルゴリズムで置換しない。
 - 生物学的忠実度は段階的に上げる。最初から「完全再現」を前提にしない。
 
-## 最初の実験
+## 現在の実装
 
-`Flyppy`（仮称）という Flappy Bird 型環境を用います。
+`feat/bootstrap-neural-runtime` では、MaleCNS v1.0 の166,700ニューロンと約2,558万のニューロン間接続を読み込み、CPU並列またはGPU computeで時間発展させる神経ランタイムを実装しています。最初の実データ学習として、`DA1_lPN` / `DL3_lPN` と `PAM08` / `PPL1` を用いた嗅覚連合学習を実装しています。
+
+`feat/flybody-flyppy-loop` では、その神経ランタイムを FlyBody / FlyGym / MuJoCo と接続し、最初の閉ループ Flyppy 実験まで進めています。
 
 ```text
-3D environment
+Flyppy physical world
       ↓
-compound-eye / sensory transduction
+FlyBody raw eye cameras
       ↓
-adult male fly CNS
+MaleCNS optic-lobe hex columns: local light sampling
       ↓
-neural activity + plasticity
+current into corresponding released R1-R6 photoreceptor body IDs
       ↓
-motor system
+MaleCNS runtime + local plasticity
       ↓
-virtual fly body
+DNg02 bilateral readout
       ↓
-3D environment
+FlyBody wing actuation
+      ↓
+Flyppy physical world
 ```
 
-成功時には報酬に関与するドーパミン作動性回路へ、失敗時には嫌悪学習に関与する回路へ刺激を与えます。外部プログラムは「どのシナプスをどう更新するか」を指定しません。
+ゲート通過時は `PAM08` 候補群、衝突時は `PPL1` 候補群を刺激します。ゲームのゲート座標をCNSへ直接入力したり、外部プログラムから個々のシナプス重みを指定したりはしません。
+
+視覚入力ではofficial `type == "R1-R6"` の各photoreceptorについて、`assignedOlHex1` / `assignedOlHex2` を持つL1/L2/L3へのreleased contact数をcolumn単位で合算し、最大contact columnをそのR1-R6のretinotopic位置として推定します。左右眼はR1-R6自身の `rootSide` を使用します。外部でT4/T5運動応答、edge、障害物位置、gap位置などを計算してCNSへ与える処理はありません。
+
+この境界で `observed` なのはMaleCNSのbody ID、official R1-R6 type、rootSide、released connectivity、L1/L2/L3のoptic-lobe hex座標です。R1-R6のcolumn位置はこれら実測配線からの `inferred`、FlyBody眼カメラ上へhex latticeを投影する幾何変換と局所受光量から外部電流へのscaleは現時点では `calibrated` な感覚変換境界です。空間情報を平均・poolingして意味情報へ変換する処理は行いません。
+
+また、一次資料上R1-R6はlaminaが撮像体積に完全には含まれないため本来数より過小に再構築されています。virtual-flyは欠損細胞を人工的に補完せず、released MaleCNSに存在するR1-R6だけを使用します。
+
+### FlyBody飛翔物理
+
+FlyGym 2.1.0の実験的FlyBody統合では、元FlyBodyに含まれる左右wingのMuJoCo fluid geometryが変換時に省略されています。Flyppyではこれを復元し、元FlyBody飛翔タスクに合わせてwing gain、stiffness / damping、50 µs physics timestep、空気密度・粘性の単位系も補正しています。
+
+Flyppyの各episodeはFlyBody公式飛翔条件を参考に47.5度のbody pitchから開始し、+X方向へ既定 `300 mm/s` の初速度を一度だけ与えます。その後の前進速度を外部から維持・補正する処理はありません。CNSから得たDNg02活動によるwing制御とMuJoCo物理だけで運動を継続します。
+
+`bash scripts/dev/embodiment.sh` では、retinotopic R1-R6視覚入力、復元したflight geometry・parameterがcompile後のMuJoCoモデルへ実際に入っていることに加え、同一初速度でwing fluidあり/なしを比較するflight envelopeも検証します。
+
+## 初回セットアップ
+
+```bash
+git clone https://github.com/shute2004/virtual-fly.git
+cd virtual-fly
+git switch feat/bootstrap-neural-runtime
+bash scripts/dev/bootstrap.sh
+```
+
+MaleCNSの元データがすでに存在する場合は再ダウンロードしません。
+
+## Flyppy閉ループ学習
+
+閉ループ実装ブランチへ切り替え、まず身体・神経接続の検証を実行します。
+
+```bash
+git switch feat/flybody-flyppy-loop
+git pull
+bash scripts/dev/embodiment.sh
+```
+
+これが通った後に学習を実行します。
+
+```bash
+bash scripts/dev/train_flyppy.sh
+```
+
+デフォルトは表示なしです。GPU backend、retinotopic R1-R6入力、FlyBody物理、局所可塑性、報酬・嫌悪刺激を使って学習を進めます。
+
+主な生成物:
+
+```text
+artifacts/experiments/flyppy-v0/
+├── trajectory.jsonl
+├── summary.json
+└── checkpoint/
+    ├── manifest.json
+    ├── membrane.f32le
+    ├── spikes.u32le
+    ├── refractory.u32le
+    ├── activity-trace.f32le
+    ├── modulation.f32le
+    ├── weights.f32le
+    └── eligibility.f32le
+```
+
+加えて、retinotopic入力の解決結果を以下へ保存します。
+
+```text
+artifacts/malecns-v1.0/retinotopic-vision-v1.json
+```
+
+checkpointはシナプス重みだけでなく、膜電位・spike・refractory・activity trace・neuromodulation・eligibilityまで含みます。既定では8 episodeごとと最終episodeに保存します。
+
+長く回す例:
+
+```bash
+bash scripts/dev/train_flyppy.sh --episodes 100
+```
+
+飛翔開始速度を変更する場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh --initial-forward-speed-mm-s 250
+```
+
+これはepisode開始時の初期条件だけを変更し、継続的な前進制御は追加しません。
+
+保存済みCNSからさらに続ける場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh \
+  --resume-checkpoint artifacts/experiments/flyppy-v0/checkpoint \
+  --episodes 100
+```
+
+同じ実験ディレクトリへresumeするとtrajectoryは追記されます。身体・コースはepisode境界から再開し、CNS内部状態はcheckpointから継続します。
+
+### 3Dで身体を見る
+
+学習中のFlyBodyを3D表示したい場合だけ `--render` を付けます。
+
+```bash
+bash scripts/dev/train_flyppy.sh --render
+```
+
+動画として保存する場合:
+
+```bash
+bash scripts/dev/train_flyppy.sh --record-video artifacts/videos/flyppy
+```
+
+通常の学習速度を優先するときは、どちらも付けません。
+
+### シナプス変化を記録する
+
+神経可視化用に、エピソード単位でシナプス変化を抽出したい場合だけ `--synapse-trace` を付けます。全約2,558万重みを毎step読み戻すことはせず、低頻度で重みを取得して変化量の大きい接続だけ残します。
+
+```bash
+bash scripts/dev/train_flyppy.sh --synapse-trace --synapse-top-n 128
+```
+
+追加生成物:
+
+```text
+artifacts/experiments/flyppy-v0/synapse-snapshots.jsonl
+```
+
+### 神経活動・シナプス変化を3Dで見る
+
+別ターミナルで以下を実行します。
+
+```bash
+bash scripts/dev/view_neural.sh
+```
+
+localhost上のブラウザビューアはtrajectoryとsynapse snapshotを表示する開発用表示層です。表示用の集約値はCNSへの入力には使いません。
+
+シナプスの3Dノード位置は現時点ではbody IDから決定論的に生成した模式配置であり、実際の解剖学的位置ではありません。MaleCNSの実形態・実シナプス座標を接続できた段階で表示層を置換します。
 
 ## 想定構成
 
-- **神経系コア**: Rust を中心に設計。大規模疎グラフ、神経状態、可塑性、チェックポイントを担当する。
+- **神経系コア**: Rust。大規模疎グラフ、神経状態、可塑性、チェックポイントを担当する。
 - **科学実験・統合層**: Python。データ前処理、MuJoCo / FlyGym / FlyBody との接続、実験設定、解析を担当する。
-- **身体・物理**: FlyBody / FlyGym / MuJoCo を第一候補とする。
+- **身体・物理**: FlyBody / FlyGym / MuJoCo。FlyGym 2.1.0で省略されたflight-only physicsは互換層で補う。
+- **可視化**: 通常はheadless。必要時だけ身体3D、動画、神経活動・シナプス変化の表示を有効化する。
 - **将来のWeb実行**: Rust コアを WASM / WebGPU へ展開し、明示的に参加した閲覧者のPCで仮想ハエを動かして実験データを収集する。
 
 ## ドキュメント
@@ -52,11 +192,8 @@ virtual fly body
 - [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md) — データ来歴・再現性
 - [`docs/roadmap.md`](docs/roadmap.md) — 開発ロードマップ
 - [`docs/references.md`](docs/references.md) — 基礎資料・外部資産
+- [`docs/embodiment-v0.md`](docs/embodiment-v0.md) — 現在の身体・閉ループ・可視化・checkpoint実装
 - [`AGENTS.md`](AGENTS.md) — 開発エージェント向けプロジェクト規約
-
-## 現在地
-
-現在は **設計・実現可能性検証段階** です。まずは、成体オス中枢神経系データの取得形式、利用条件、運動系・感覚系の対応情報、FlyBody/FlyGymとの接続点を確定し、最小の閉ループ実験を成立させます。
 
 ## ライセンス
 

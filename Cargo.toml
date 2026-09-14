@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "crates/vf-neural",
+    "crates/vf-runner",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.87"
+license = "UNLICENSED"
+repository = "https://github.com/shute2004/virtual-fly"
+
+[workspace.dependencies]
+anyhow = "1.0"
+bytemuck = { version = "1.23", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
+pollster = "0.4"
+rayon = "1.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+wgpu = "30.0.1"
