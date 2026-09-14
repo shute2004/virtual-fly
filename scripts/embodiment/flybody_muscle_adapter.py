@@ -19,15 +19,12 @@ still maintain independent neuromuscular states but exert no guessed torque yet.
 All numerical gains and the mapping between DLM/DVM activation and the virtual
 hinge phase are explicitly bootstrap body-interface assumptions rather than
 biological measurements.
-
-Crucially, these defaults are not selected from prior Flyppy trajectories. An
-untrained CNS is allowed to produce unstable flight and collide; the body layer
-must not absorb neural mistakes by retuning itself to previous task outcomes.
 """
 
 from __future__ import annotations
 
 import math
+import os
 
 import mujoco as mj
 import numpy as np
@@ -65,6 +62,19 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
         max_abs_torque: float = 2500.0,
         **kwargs,
     ) -> None:
+        # Curriculum may change only the episode-reset starting altitude. This is
+        # deliberately an environment initial condition, not a per-step body
+        # controller. Normal/final training leaves the requested spawn untouched.
+        curriculum_spawn_z = os.environ.get("VF_CURRICULUM_SPAWN_Z")
+        if curriculum_spawn_z is not None:
+            z = float(curriculum_spawn_z)
+            if not math.isfinite(z):
+                raise ValueError("VF_CURRICULUM_SPAWN_Z must be finite")
+            spawn = tuple(kwargs.get("spawn_position_mm", (0.0, 0.0, 4.0)))
+            if len(spawn) != 3:
+                raise ValueError("spawn_position_mm must have three coordinates")
+            kwargs["spawn_position_mm"] = (float(spawn[0]), float(spawn[1]), z)
+
         super().__init__(*args, **kwargs)
         if virtual_power_kp <= 0.0 or virtual_power_kd < 0.0:
             raise ValueError("virtual muscle gains are invalid")
@@ -85,13 +95,6 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
     def set_root_position_mm(
         self, position: np.ndarray | tuple[float, float, float]
     ) -> None:
-        """Reposition the free body at an episode boundary without changing policy.
-
-        This exists for task curriculum only. It writes the free-joint translation
-        before an episode starts; no per-step body position or velocity control is
-        applied during flight.
-        """
-
         if self.tethered:
             raise RuntimeError("tethered FlyBody has no free root position")
         vector = np.asarray(position, dtype=np.float64)
