@@ -11,6 +11,7 @@ WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPECTED_NEURAL_CALIBRATION_SCHEMA=2
+EXPECTED_VIEWER_GRAPH_SCHEMA=2
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -36,9 +37,11 @@ unset VF_CURRICULUM_SPAWN_Z || true
 
 uv sync >/dev/null
 
+# This compiles the GPU runtime, bridge protocol and WGSL include path before a
+# long training launch. Runtime shader validation still happens when GPU starts.
 cargo check -q -p vf-runner --bin neural_bridge
 uv run python -m py_compile \
-  scripts/embodiment/train_flyppy_curriculum.py \
+  scripts/embodiment/train_flyppy_persistent.py \
   scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_body_viewer.py \
   scripts/data/prepare_neural_viewer_graph.py
@@ -65,10 +68,15 @@ if [ ! -f "$RETINOTOPIC_MAP" ]; then
     --download
 fi
 
-# Static visualization metadata is generated once and then cached. No renderer,
-# browser, or viewer process is part of training; this only fixes which released
-# body IDs/connections may be observed if a viewer attaches later.
-if [ ! -f "$VIEWER_GRAPH" ]; then
+VIEWER_SCHEMA=0
+if [ -f "$VIEWER_GRAPH" ]; then
+  VIEWER_SCHEMA="$(uv run python -c 'import json,sys
+try:
+    print(int(json.load(open(sys.argv[1])).get("schema_version", 0)))
+except Exception:
+    print(0)' "$VIEWER_GRAPH")"
+fi
+if [ "$VIEWER_SCHEMA" != "$EXPECTED_VIEWER_GRAPH_SCHEMA" ]; then
   printf '\n== Prepare cached neural observer graph ==\n'
   uv run python scripts/data/prepare_neural_viewer_graph.py \
     --snapshot "$SNAPSHOT" \
@@ -115,8 +123,8 @@ if [ "$FULL_PREFLIGHT" = "1" ]; then
 fi
 
 printf '\n== Flyppy persistent curriculum learning ==\n'
-printf 'live_viewer=separate-process command="bash scripts/dev/view_flyppy.sh"\n'
-exec uv run python scripts/embodiment/train_flyppy_curriculum.py \
+printf 'live_viewer=separate-process command="bash scripts/dev/view_learning.sh"\n'
+exec uv run python scripts/embodiment/train_flyppy_persistent.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
