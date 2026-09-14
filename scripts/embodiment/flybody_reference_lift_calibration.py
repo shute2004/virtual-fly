@@ -10,8 +10,9 @@ and compares three control seams:
 * ``position_source_rate``: the same POSITION shortcut, but targets are generated
   and held at FlyBody's 0.2 ms flight-control cadence.
 * ``source_force_rate``: POSITION actuators are disabled and the upstream FlyBody
-  force law is applied directly to the six wing generalized coordinates:
-  ``gain * clip(target_angle - current_angle, -1, 1)``.
+  force command is reproduced directly.  Every 0.2 ms the controller computes
+  ``gain * clip(target_angle - current_angle, -1, 1)`` once, then holds that force
+  unchanged across the four 50 us physics steps in the control interval.
 
 The source-style cases use the upstream WPG resampling cadence and therefore isolate
 whether the remaining mismatch lives in FlyGym actuator translation or deeper in
@@ -210,9 +211,10 @@ def disable_position_wing_actuators(body) -> None:
         body.sim.mj_model.actuator_biasprm[actuator_id, :] = 0.0
 
 
-def source_force_step(body, target_angles: np.ndarray) -> float:
-    body.sim.mj_data.qfrc_applied[:] = 0.0
-    peak = 0.0
+def source_force_command(body, target_angles: np.ndarray) -> dict[int, float]:
+    """Compute the upstream force command once at a control-step boundary."""
+
+    command: dict[int, float] = {}
     for side in ("left", "right"):
         for axis_index, axis in enumerate(AXES):
             actuator_index = body._wing_indices[(side, axis)]
@@ -223,9 +225,18 @@ def source_force_step(body, target_angles: np.ndarray) -> float:
                 SOURCE_WING_ERROR_CLIP_RAD,
                 max(-SOURCE_WING_ERROR_CLIP_RAD, error),
             )
-            torque = FLIGHT_WING_POSITION_KP * clipped_error
-            body.sim.mj_data.qfrc_applied[qvel_address] += torque
-            peak = max(peak, abs(torque))
+            command[qvel_address] = FLIGHT_WING_POSITION_KP * clipped_error
+    return command
+
+
+def apply_held_source_force(body, command: dict[int, float]) -> float:
+    """Apply one already-computed source force command for one physics step."""
+
+    body.sim.mj_data.qfrc_applied[:] = 0.0
+    peak = 0.0
+    for qvel_address, torque in command.items():
+        body.sim.mj_data.qfrc_applied[qvel_address] += torque
+        peak = max(peak, abs(torque))
     body.sim.step()
     body.sim.mj_data.qfrc_applied[:] = 0.0
     body._time += body.timestep
@@ -260,6 +271,7 @@ def run_clamped_case(
     controller: SourceStyleWingbeatController | None = None
     control_stride = 1
     held_target: np.ndarray | None = None
+    held_source_force: dict[int, float] = {}
     if drive_mode in {"position_source_rate", "source_force_rate"}:
         controller = source_controller(body, cycle)
         initial_qpos, initial_qvel = controller.reset(initial_phase=0.0)
@@ -316,6 +328,9 @@ def run_clamped_case(
                         ActuatorType.POSITION,
                         position_target_vector(body, held_target),
                     )
+                else:
+                    held_source_force = source_force_command(body, held_target)
+
             if drive_mode == "position_source_rate":
                 body.sim.step()
                 body._time += body.timestep
@@ -328,7 +343,7 @@ def run_clamped_case(
             elif drive_mode == "source_force_rate":
                 peak_abs_drive_force = max(
                     peak_abs_drive_force,
-                    source_force_step(body, held_target),
+                    apply_held_source_force(body, held_source_force),
                 )
             else:
                 raise KeyError(drive_mode)
@@ -463,7 +478,7 @@ def main() -> int:
         diagnosis = "REFERENCE_LIFT_PORT_APPROXIMATELY_CONSISTENT"
 
     result = {
-        "schema_version": 3,
+        "schema_version": 4,
         "pattern": str(args.pattern),
         "published_flybody_mass_mg": PUBLISHED_FLYBODY_MASS_MG,
         "source_gravity_mm_s2": SOURCE_GRAVITY_MM_S2,
@@ -476,8 +491,8 @@ def main() -> int:
         "diagnosis": diagnosis,
         "interpretation": (
             "Calibration-only comparison of the historical virtual-fly POSITION seam, "
-            "a source-rate POSITION seam, and a direct source-style force seam. Stable "
-            "free hover is deliberately not required."
+            "a source-rate POSITION seam, and the upstream source-style held-force seam. "
+            "Stable free hover is deliberately not required."
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
