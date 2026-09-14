@@ -53,7 +53,7 @@
     <img id="flyFrame" alt="live FlyBody" />
     <div id="flyMissing">FlyBody observer の映像を待っています</div>
     <div id="flyBadge">FlyBody live / 実MuJoCoモデル <span id="flyCoords">x=- / z=-</span></div>
-    <div id="flyHint">ドラッグ: 周囲を回転　ホイール: ズーム</div>
+    <div id="flyHint">ドラッグ: 周囲を回転　ホイール: ズーム　B: MaleCNS小窓の表示切替</div>
 
     <section id="brainCard">
       <div id="brainTitle"><span>MaleCNS live activity</span><span>模式配置</span></div>
@@ -88,6 +88,7 @@
 
     <h2>CNS表示</h2>
     <div class="row">
+      <label><input id="showBrainCard" type="checkbox" checked /> MaleCNS小窓</label>
       <label><input id="showEdges" type="checkbox" checked /> シナプス</label>
       <label><input id="pulseEdges" type="checkbox" checked /> 発火で発光</label>
       <label><input id="showShell" type="checkbox" checked /> CNS輪郭</label>
@@ -103,7 +104,7 @@
       <span class="dot" style="background:#ff6f7d"></span><span>PPL aversive event</span>
     </div>
 
-    <p class="note">CNS表示は全166,700ニューロンではなく、強結合と学習境界を含むviewer用サブグラフです。どちらのviewer操作も学習プロセスには返りません。</p>
+    <p class="note">MaleCNS小窓はチェックまたはBキーで一時的に消せます。CNS表示は全166,700ニューロンではなく、強結合と学習境界を含むviewer用サブグラフです。viewer操作は学習プロセスには返りません。</p>
   </aside>
 </div>
 
@@ -112,6 +113,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const stage = document.getElementById('stage');
+const brainCard = document.getElementById('brainCard');
 const brainHost = document.getElementById('brainScene');
 const brainScene = new THREE.Scene();
 brainScene.background = new THREE.Color(0x080b10);
@@ -220,6 +222,12 @@ function resetFlyCamera() {
   postFlyCamera();
 }
 
+function setBrainVisible(visible) {
+  brainCard.hidden = !visible;
+  document.getElementById('showBrainCard').checked = visible;
+  if (visible) requestAnimationFrame(resizeBrain);
+}
+
 stage.addEventListener('pointerdown', event => {
   if (event.target.closest?.('#brainCard')) return;
   flyPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
@@ -252,8 +260,16 @@ stage.addEventListener('wheel', event => {
   scheduleFlyCamera();
 }, { passive: false });
 
+window.addEventListener('keydown', event => {
+  if (event.key.toLowerCase() !== 'b' || event.repeat) return;
+  const tag = String(event.target?.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  setBrainVisible(brainCard.hidden);
+});
+
 document.getElementById('resetFlyCamera').addEventListener('click', resetFlyCamera);
 document.getElementById('resetBrainCamera').addEventListener('click', resetBrainCamera);
+document.getElementById('showBrainCard').addEventListener('change', e => setBrainVisible(e.target.checked));
 document.getElementById('showEdges').addEventListener('change', e => { if (edgeLines) edgeLines.visible = e.target.checked; });
 document.getElementById('showShell').addEventListener('change', e => { if (shellRoot) shellRoot.visible = e.target.checked; });
 document.getElementById('reconnect').addEventListener('click', () => connect(true));
@@ -436,7 +452,7 @@ updateFlyCameraLabels();
 
 function animate() {
   brainControls.update();
-  brainRenderer.render(brainScene, brainCamera);
+  if (!brainCard.hidden) brainRenderer.render(brainScene, brainCamera);
   requestAnimationFrame(animate);
 }
 animate();
