@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Build a compact static MaleCNS graph for the external live viewer.
+"""Build a compact static MaleCNS graph for the detached live viewer.
 
-The full released graph has ~25.6M edges and is unnecessarily large for an
-interactive observer. This file keeps all embodiment-boundary neurons plus the
-strongest released connections until bounded node/edge budgets are reached.
-Positions are deterministic schematic 3D coordinates; they are not anatomical
-MaleCNS morphology coordinates.
+The full released graph has ~25.6M edges. The observer therefore keeps the
+reinforcement and wing-motor boundary plus a bounded set of strongly connected
+CNS neurons. This graph is viewer-only and is never fed back into learning.
+Positions are deterministic schematic 3D coordinates, not anatomical morphology.
 """
 
 from __future__ import annotations
@@ -17,6 +16,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+
+VIEWER_REQUIRED_GROUPS = ("reward_dan", "aversive_dan")
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,8 +39,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("artifacts/embodiment/neural-viewer-graph-v1.json"),
     )
-    parser.add_argument("--max-nodes", type=int, default=6000)
-    parser.add_argument("--max-edges", type=int, default=12000)
+    parser.add_argument("--max-nodes", type=int, default=2500)
+    parser.add_argument("--max-edges", type=int, default=6000)
     return parser.parse_args()
 
 
@@ -55,12 +57,7 @@ def clean_text(value: object) -> str:
 
 def schematic_position(body_id: int, side: str, superclass: str) -> list[float]:
     side_norm = side.strip().upper()
-    if side_norm == "L":
-        x_base = -4.0
-    elif side_norm == "R":
-        x_base = 4.0
-    else:
-        x_base = 0.0
+    x_base = -4.0 if side_norm == "L" else 4.0 if side_norm == "R" else 0.0
     band = (
         int.from_bytes(hashlib.blake2b(superclass.encode(), digest_size=2).digest(), "little")
         % 9
@@ -85,9 +82,9 @@ def main() -> int:
     nt = np.fromfile(args.snapshot / manifest["neurotransmitters_file"], dtype=np.uint8)
 
     required: set[int] = set()
-    groups = json.loads(args.groups.read_text(encoding="utf-8"))
-    for group in groups.get("groups", {}).values():
-        required.update(int(value) for value in group.get("body_ids", []))
+    groups = json.loads(args.groups.read_text(encoding="utf-8")).get("groups", {})
+    for name in VIEWER_REQUIRED_GROUPS:
+        required.update(int(value) for value in groups.get(name, {}).get("body_ids", []))
     motor = json.loads(args.motor_map.read_text(encoding="utf-8"))
     required.update(int(row["body_id"]) for row in motor.get("neurons", []))
 
@@ -114,8 +111,6 @@ def main() -> int:
         selected_edges.append((pre, post, int(counts[edge_index])))
         if len(selected_edges) >= args.max_edges:
             break
-
-    selected.update(value for value in required if value in available)
 
     annotations = pd.read_feather(args.snapshot / manifest["annotations_file"])
     annotations = annotations.drop_duplicates("bodyId").set_index("bodyId")
@@ -145,9 +140,10 @@ def main() -> int:
         if pre in selected_lookup and post in selected_lookup
     ]
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "layout": "deterministic-schematic-not-anatomical",
         "source_dataset": manifest.get("dataset"),
+        "viewer_only": True,
         "nodes": nodes,
         "edges": edges,
     }
