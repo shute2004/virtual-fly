@@ -115,6 +115,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const stage = document.getElementById('stage');
 const brainCard = document.getElementById('brainCard');
 const brainHost = document.getElementById('brainScene');
+const experimentInput = document.getElementById('experiment');
+const requestedExperiment = new URLSearchParams(window.location.search).get('experiment');
+if (requestedExperiment && requestedExperiment.trim()) {
+  experimentInput.value = requestedExperiment.trim().replace(/^\/+|\/+$/g, '');
+}
 const brainScene = new THREE.Scene();
 brainScene.background = new THREE.Color(0x080b10);
 const brainCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
@@ -175,7 +180,7 @@ function buildShell() {
 buildShell();
 
 function experimentPath() {
-  return document.getElementById('experiment').value.trim().replace(/^\/+|\/+$/g, '');
+  return experimentInput.value.trim().replace(/^\/+|\/+$/g, '');
 }
 
 async function fetchJson(path) {
@@ -201,8 +206,6 @@ async function postFlyCamera() {
       cache: 'no-store',
     });
   } catch (_) {
-    // Telemetry polling reports connection failures; camera input must never
-    // make the viewer unusable when the observer server is restarting.
   }
 }
 
@@ -240,23 +243,21 @@ stage.addEventListener('pointermove', event => {
   const dy = event.clientY - flyPointer.y;
   flyPointer.x = event.clientX;
   flyPointer.y = event.clientY;
-  flyCamera.azimuth = (flyCamera.azimuth - dx * 0.38 + 3600) % 360;
-  flyCamera.elevation = Math.max(-89, Math.min(89, flyCamera.elevation - dy * 0.30));
+  flyCamera.azimuth = (flyCamera.azimuth - dx * 0.45 + 3600) % 360;
+  flyCamera.elevation = Math.max(-89, Math.min(89, flyCamera.elevation + dy * 0.35));
   scheduleFlyCamera();
 });
-function endFlyDrag(event) {
-  if (!flyPointer || flyPointer.id !== event.pointerId) return;
-  flyPointer = null;
+stage.addEventListener('pointerup', event => {
+  if (flyPointer && flyPointer.id === event.pointerId) flyPointer = null;
   stage.classList.remove('dragging');
-  try { stage.releasePointerCapture(event.pointerId); } catch (_) {}
-}
-stage.addEventListener('pointerup', endFlyDrag);
-stage.addEventListener('pointercancel', endFlyDrag);
+});
+stage.addEventListener('pointercancel', event => {
+  if (flyPointer && flyPointer.id === event.pointerId) flyPointer = null;
+  stage.classList.remove('dragging');
+});
 stage.addEventListener('wheel', event => {
-  if (event.target.closest?.('#brainCard')) return;
   event.preventDefault();
-  flyCamera.distance *= Math.exp(event.deltaY * 0.0015);
-  flyCamera.distance = Math.max(2.0, Math.min(80.0, flyCamera.distance));
+  flyCamera.distance = Math.max(2.0, Math.min(80.0, flyCamera.distance * Math.exp(event.deltaY * 0.0012)));
   scheduleFlyCamera();
 }, { passive: false });
 
@@ -413,9 +414,9 @@ async function tick() {
     }
     updateBody(body);
     updateFlyFrame(exp);
-    document.getElementById('status').textContent = status.running ? 'LIVE' : '学習停止中 / 最終フレーム';
+    document.getElementById('status').textContent = status.running ? `LIVE / ${exp}` : `学習停止中 / 最終フレーム / ${exp}`;
   } catch (error) {
-    document.getElementById('status').textContent = `telemetry待機中: ${error}`;
+    document.getElementById('status').textContent = `telemetry待機中 (${exp}): ${error}`;
   }
 }
 
