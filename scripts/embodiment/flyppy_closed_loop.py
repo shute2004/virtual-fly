@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Embodied MaleCNS <-> peripheral muscle <-> FlyBody <-> Flyppy learning loop.
 
-Information flow is deliberately constrained:
+Target information flow:
 
     physical Flyppy world
-      -> FlyBody eye cameras
-      -> local MaleCNS optic-column light sampling
-      -> current into actual R1-R6 photoreceptor body IDs
+      -> FlyBody compound-eye readout
+      -> current into actual MaleCNS R1-R6 body IDs
       -> persistent MaleCNS runtime with local plasticity
       -> exact spikes from individual released wing motor-neuron body IDs
       -> independent motor-unit / neuromuscular states
@@ -14,11 +13,11 @@ Information flow is deliberately constrained:
       -> virtual-muscle physical torque at the FlyBody wing hinge
       -> physical world
 
-No DNg02 population average, action vector, matrix policy, reward scalar, or
-externally computed steering decision is part of this path. Gate coordinates are
-never injected into the CNS. A gate pass or collision only causes current to be
-injected into configured released dopaminergic neurons; subsequent dopamine and
-plasticity arise inside the simulated MaleCNS connectivity.
+There is no population action decoder, policy matrix, target action, Q-value,
+backpropagation or signed scalar reward in this path. Teaching events inject
+current into released dopaminergic neurons. To make initial learning practical,
+small one-shot forward-progress milestones before the first gate also activate the
+reward-associated DAN group; gate passage remains the stronger success event.
 """
 
 from __future__ import annotations
@@ -63,37 +62,57 @@ def parse_args() -> argparse.Namespace:
         help="individual released wing-MN -> muscle inventory",
     )
     parser.add_argument("--backend", choices=("cpu", "gpu"), default="gpu")
-    parser.add_argument(
-        "--episodes",
-        type=int,
-        default=8,
-        help="number of episodes to run in this invocation",
-    )
+    parser.add_argument("--episodes", type=int, default=8)
     parser.add_argument("--max-control-steps", type=int, default=1800)
     parser.add_argument("--physics-steps", type=int, default=10)
     parser.add_argument(
         "--initial-forward-speed-mm-s",
         type=float,
         default=300.0,
-        help=(
-            "one-shot +x velocity applied only at episode reset; 300 mm/s is the "
-            "midpoint of the original FlyBody vision-flight 20-40 cm/s range"
-        ),
+        help="one-shot +x velocity applied only at episode reset",
     )
     parser.add_argument(
         "--photoreceptor-current-gain",
         type=float,
         default=2.0,
-        help=(
-            "calibrated local irradiance-to-current scale for R1-R6; this changes "
-            "transduction strength only and does not compute visual features"
-        ),
+        help="local irradiance/contrast-to-current scale for R1-R6",
     )
     parser.add_argument("--gate-count", type=int, default=6)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--reward-current", type=float, default=2.0)
     parser.add_argument("--aversive-current", type=float, default=2.0)
     parser.add_argument("--reinforcement-steps", type=int, default=4)
+    parser.add_argument(
+        "--progress-reward-current",
+        type=float,
+        default=0.5,
+        help="weaker PAM01 current for pre-gate forward-progress milestones",
+    )
+    parser.add_argument(
+        "--progress-reward-steps",
+        type=int,
+        default=2,
+        help="neural steps for one progress-milestone PAM01 pulse",
+    )
+    parser.add_argument(
+        "--progress-reward-start-mm",
+        type=float,
+        default=6.5,
+        help="first pre-gate x milestone that produces a weak success event",
+    )
+    parser.add_argument(
+        "--progress-reward-spacing-mm",
+        type=float,
+        default=0.25,
+        help="spacing between one-shot pre-gate progress milestones",
+    )
+    parser.add_argument(
+        "--no-progress-reward",
+        dest="progress_reward",
+        action="store_false",
+        help="disable pre-gate progress shaping and use gate/collision events only",
+    )
+    parser.set_defaults(progress_reward=True)
     parser.add_argument("--trajectory-stride", type=int, default=10)
     parser.add_argument(
         "--output-dir",
@@ -104,7 +123,7 @@ def parse_args() -> argparse.Namespace:
         "--resume-checkpoint",
         type=Path,
         default=None,
-        help="restore full CNS dynamic/plasticity state before running new episodes",
+        help="restore learned CNS state before running new episodes",
     )
     parser.add_argument(
         "--checkpoint-dir",
@@ -117,43 +136,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=8,
         metavar="EPISODES",
-        help="save full CNS state every N episodes; final episode is always saved",
     )
-    parser.add_argument(
-        "--render",
-        action="store_true",
-        help="show a live 3D tracking-camera view; off by default",
-    )
-    parser.add_argument(
-        "--record-video",
-        type=Path,
-        default=None,
-        metavar="DIR",
-        help="save one 3D MP4 per episode into DIR; off by default",
-    )
-    parser.add_argument(
-        "--playback-speed",
-        type=float,
-        default=0.2,
-        help="3D playback speed relative to simulated time (default: 0.2x)",
-    )
+    parser.add_argument("--render", action="store_true")
+    parser.add_argument("--record-video", type=Path, default=None, metavar="DIR")
+    parser.add_argument("--playback-speed", type=float, default=0.2)
     parser.add_argument("--video-fps", type=int, default=30)
-    parser.add_argument(
-        "--synapse-trace",
-        action="store_true",
-        help=(
-            "at low frequency, dump current CNS weights and keep only aggregate "
-            "plasticity statistics plus the largest changed synapses; off by default"
-        ),
-    )
+    parser.add_argument("--synapse-trace", action="store_true")
     parser.add_argument("--synapse-top-n", type=int, default=64)
-    parser.add_argument(
-        "--synapse-trace-every",
-        type=int,
-        default=1,
-        metavar="EPISODES",
-        help="capture a synapse-change snapshot every N episodes",
-    )
+    parser.add_argument("--synapse-trace-every", type=int, default=1, metavar="EPISODES")
     parser.add_argument("--synapse-min-delta", type=float, default=1e-7)
     return parser.parse_args()
 
@@ -213,6 +203,17 @@ def main() -> int:
         raise SystemExit("synapse-top-n and synapse-trace-every must be >= 1")
     if args.synapse_min_delta < 0.0:
         raise SystemExit("synapse-min-delta must be >= 0")
+    if args.progress_reward:
+        if (
+            not np.isfinite(args.progress_reward_current)
+            or args.progress_reward_current <= 0.0
+            or args.progress_reward_steps < 1
+            or not np.isfinite(args.progress_reward_start_mm)
+            or args.progress_reward_start_mm <= 0.0
+            or not np.isfinite(args.progress_reward_spacing_mm)
+            or args.progress_reward_spacing_mm <= 0.0
+        ):
+            raise SystemExit("progress-reward parameters must be finite and positive")
     if not args.retinotopic_map.exists():
         raise SystemExit(f"retinotopic vision map not found: {args.retinotopic_map}")
     if not args.wing_motor_map.exists():
@@ -222,6 +223,12 @@ def main() -> int:
 
     visualization_enabled = args.render or args.record_video is not None
     course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
+    first_gate_x_mm = float(course.gates[0].x_mm)
+    if args.progress_reward and args.progress_reward_start_mm >= first_gate_x_mm:
+        raise SystemExit(
+            "progress-reward-start-mm must be before the first gate plane "
+            f"({first_gate_x_mm:.3f} mm)"
+        )
     world = FlyppyWorld(course)
     body = FlyBodyMuscleAdapter(
         tethered=False,
@@ -245,6 +252,16 @@ def main() -> int:
             control_dt_s,
         )
     )
+    if args.progress_reward:
+        print(
+            "learning_shaping=pre-gate-progress start_x={:.3f} spacing={:.3f} "
+            "current={:.3f} steps={}".format(
+                args.progress_reward_start_mm,
+                args.progress_reward_spacing_mm,
+                args.progress_reward_current,
+                args.progress_reward_steps,
+            )
+        )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     trajectory_path = args.output_dir / "trajectory.jsonl"
@@ -275,6 +292,7 @@ def main() -> int:
     episode_results: list[dict[str, object]] = []
     total_passed = 0
     total_collisions = 0
+    total_progress_rewards = 0
     state_checkpoint_info: dict[str, object] = {}
     resume_info: dict[str, object] | None = None
     started = time.perf_counter()
@@ -310,9 +328,16 @@ def main() -> int:
                     course.reset()
                     body.reset()
                     periphery.reset()
+                    vision.reset_adaptation()
+                    # Learning lives in mutable synaptic weights. Crash transients,
+                    # membrane state, traces, modulation and eligibility are trial-
+                    # local and must not leak through the artificial episode reset.
+                    brain.reset_dynamics()
                     if visualizer.enabled:
                         visualizer.begin_episode(episode)
+
                     episode_passed = 0
+                    episode_progress_rewards = 0
                     collision = False
                     finished = False
                     max_x = float("-inf")
@@ -321,6 +346,7 @@ def main() -> int:
                     final_velocity = body.root_linear_velocity_mm_s()
                     step_count = 0
                     last_peripheral = None
+                    next_progress_x = float(args.progress_reward_start_mm)
 
                     for control_step in range(args.max_control_steps):
                         retinal = vision.encode(body.sim, body.fly)
@@ -353,7 +379,33 @@ def main() -> int:
 
                         event = course.update(x_mm, z_mm)
                         reward_stimulated = False
+                        progress_reward_stimulated = False
+                        progress_milestone_x_mm: float | None = None
                         aversive_stimulated = False
+
+                        # Weak shaping before the first gate. Each threshold can
+                        # fire only once per episode, and the signal is still a
+                        # physical current pulse to the released reward DANs.
+                        if (
+                            args.progress_reward
+                            and not event.collision
+                            and course.next_gate_index == 0
+                            and next_progress_x < first_gate_x_mm
+                            and x_mm >= next_progress_x
+                        ):
+                            progress_milestone_x_mm = next_progress_x
+                            deliver_reinforcement(
+                                brain,
+                                "reward_dan",
+                                args.progress_reward_current,
+                                args.progress_reward_steps,
+                            )
+                            progress_reward_stimulated = True
+                            episode_progress_rewards += 1
+                            total_progress_rewards += 1
+                            while next_progress_x <= x_mm:
+                                next_progress_x += args.progress_reward_spacing_mm
+
                         if event.passed_gate:
                             episode_passed += 1
                             total_passed += 1
@@ -379,6 +431,7 @@ def main() -> int:
 
                         if (
                             control_step % args.trajectory_stride == 0
+                            or progress_reward_stimulated
                             or event.passed_gate
                             or event.collision
                             or event.finished
@@ -403,10 +456,13 @@ def main() -> int:
                                             "mean_current": retinal.mean_current,
                                             "max_current": retinal.max_current,
                                         },
+                                        "progress_reward_stimulated": progress_reward_stimulated,
+                                        "progress_milestone_x_mm": progress_milestone_x_mm,
                                         "reward_stimulated": reward_stimulated,
                                         "aversive_stimulated": aversive_stimulated,
                                         "passed_gate": event.passed_gate,
                                         "collision": event.collision,
+                                        "collision_reason": event.collision_reason,
                                         "finished": event.finished,
                                     },
                                     separators=(",", ":"),
@@ -459,6 +515,7 @@ def main() -> int:
                         "episode": episode,
                         "control_steps": step_count,
                         "passed_gates": episode_passed,
+                        "progress_rewards": episode_progress_rewards,
                         "collision": collision,
                         "finished": finished,
                         "max_x_mm": max_x,
@@ -478,10 +535,12 @@ def main() -> int:
                     }
                     episode_results.append(result)
                     print(
-                        "episode={} steps={} passed={} collision={} finished={} max_x={:.3f} final_vx={:.3f}".format(
+                        "episode={} steps={} passed={} progress_rewards={} collision={} "
+                        "finished={} max_x={:.3f} final_vx={:.3f}".format(
                             episode,
                             step_count,
                             episode_passed,
+                            episode_progress_rewards,
                             collision,
                             finished,
                             max_x,
@@ -496,8 +555,8 @@ def main() -> int:
     second_half = passed_by_episode[len(passed_by_episode) // 2 :]
     checkpoint_weight_file = checkpoint_dir / "weights.f32le"
     summary = {
-        "schema_version": 5,
-        "experiment": "flyppy_closed_loop_v1_individual_wing_mn",
+        "schema_version": 6,
+        "experiment": "flyppy_closed_loop_v1_individual_wing_mn_progress_shaping",
         "backend": ready.get("backend"),
         "neurons": ready.get("neurons"),
         "edges": ready.get("edges"),
@@ -513,6 +572,7 @@ def main() -> int:
             "controller or per-step translational forcing is applied"
         ),
         "total_passed_gates_this_run": total_passed,
+        "total_progress_rewards_this_run": total_progress_rewards,
         "total_collisions_this_run": total_collisions,
         "mean_passed_first_half": float(np.mean(first_half)) if first_half else 0.0,
         "mean_passed_second_half": float(np.mean(second_half)) if second_half else 0.0,
@@ -522,11 +582,9 @@ def main() -> int:
         "full_cns_checkpoint": str(checkpoint_dir),
         "checkpoint_neural_step": state_checkpoint_info.get("step"),
         "checkpoint_scope": (
-            "CNS membrane potentials, spikes, refractory counters, activity traces, "
-            "local dopaminergic modulation state, synaptic weights, and eligibility "
-            "traces. Topology, neurotransmitter annotations, and numerical parameters "
-            "are reconstructed from the same snapshot/configuration. Peripheral muscle, "
-            "body, and environment state intentionally reset at the episode boundary."
+            "Mutable synaptic weights persist across episodes. Membrane potentials, "
+            "activity events, refractory counters, activity traces, local dopamine "
+            "modulation and eligibility traces reset at each artificial episode boundary."
         ),
         "learned_weights_file": str(checkpoint_weight_file),
         "visualization": {
@@ -540,7 +598,7 @@ def main() -> int:
         },
         "episode_results": episode_results,
         "sensory_interface": (
-            "FlyBody raw eye cameras -> MaleCNS assignedOlHex retinotopic local samples -> "
+            "FlyBody compound-eye ommatidia -> locally adapted MaleCNS retinotopic samples -> "
             "per-body-ID R1-R6 current; no external motion/edge/obstacle feature extraction"
         ),
         "retinotopic_map": str(args.retinotopic_map),
@@ -556,15 +614,23 @@ def main() -> int:
             "population_action_decoder": False,
             "dng02_population_readout_used_for_action": False,
         },
+        "progress_shaping": {
+            "enabled": bool(args.progress_reward),
+            "start_x_mm": args.progress_reward_start_mm if args.progress_reward else None,
+            "spacing_mm": args.progress_reward_spacing_mm if args.progress_reward else None,
+            "current": args.progress_reward_current if args.progress_reward else None,
+            "steps": args.progress_reward_steps if args.progress_reward else None,
+            "scope": "one-shot x-threshold success events before the first gate only",
+        },
         "body_physics": (
             "FlyGym 2.1 FlyBody with source FlyBody flight wing damping, stiffness, "
             "50-us timestep, restored per-wing MuJoCo ellipsoid-fluid geometries, "
             "unit-corrected air density/viscosity, and qfrc_applied virtual-muscle torque"
         ),
         "teaching_signal": (
-            "gate pass -> current into released PAM01 (PAM-gamma5) DANs; collision -> "
-            "current into released PPL101 (PPL1-gamma1pedc) DANs; no signed scalar "
-            "reward/punishment enters neural dynamics or plasticity"
+            "pre-gate x milestones -> weak current into released PAM01 DANs; gate pass -> "
+            "stronger PAM01 current; collision -> current into released PPL101 DANs. "
+            "No signed scalar reward/punishment enters neural dynamics or plasticity."
         ),
         "important_limit": (
             "Optic-column/body-ID retinotopy comes from MaleCNS data. FlyBody lacks "
