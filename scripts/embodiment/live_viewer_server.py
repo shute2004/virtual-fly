@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--experiment",
         type=Path,
-        default=Path("artifacts/experiments/flyppy-v1"),
+        default=Path("artifacts/experiments/flyppy-v2"),
     )
     parser.add_argument("--root", type=Path, default=Path.cwd())
     return parser.parse_args()
@@ -89,7 +89,6 @@ def make_handler(root: Path, camera_path: Path):
                 self.wfile.write(response)
 
         def log_message(self, format: str, *args) -> None:
-            # Polling live JSON/PNG at ~8 Hz would otherwise flood the terminal.
             if self.path.startswith("/artifacts/experiments/"):
                 return
             super().log_message(format, *args)
