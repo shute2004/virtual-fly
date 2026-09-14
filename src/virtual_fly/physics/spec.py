@@ -1,22 +1,23 @@
 """Physical-scale specifications for virtual-fly.
 
-Two scales are intentionally kept separate:
+Three scales are intentionally kept separate:
 
-* ``CANONICAL_FLY`` is the historical/provisional Flyppy-v2 scale used by the
-  already-recorded v2 experiments.  It is retained unchanged for reproducibility.
+* ``CANONICAL_FLY`` / ``FLYPPY_GEOMETRY`` preserve the historical Flyppy-v2
+  experiment exactly.
 * ``FLYBODY_REFERENCE`` records the published physical scale of the FlyBody model
   whose flight physics were calibrated by Vaxenburg et al. (2025).
+* ``FLYBODY_V3`` / ``FLYPPY_GEOMETRY_V3`` define the source-equivalent successor
+  task.  Its dimensions are explicit and derived from the published FlyBody scale.
 
 The distinction matters because the earlier v2 implementation incorrectly treated
 2.75 mm / 1.09 mg literature means from another Drosophila measurement as if they
 were FlyBody's own calibration values.  FlyBody reports a 2.97 mm model body length,
-6.04 mm wing span and 0.983 mg total mass.  A successor flight task should be
-validated against ``FLYBODY_REFERENCE`` before its environment geometry is locked.
+6.04 mm wing span and 0.983 mg total mass.
 
-Environment dimensions are task-design choices expressed relative to the v2 body
-length.  They are not biological measurements.  Keeping them in one immutable
-specification prevents the visual world, analytic course and MuJoCo collision world
-from silently drifting apart.
+Environment dimensions are task-design choices expressed relative to body length.
+They are not biological measurements.  v3 initially preserves v2's dimensionless
+course ratios so the physical body correction can be isolated; its gate clearance
+must still be checked against the measured v3 swept envelope before neural training.
 """
 
 from __future__ import annotations
@@ -132,9 +133,24 @@ CANONICAL_FLY = FlyPhysicalSpec(
 )
 
 
+# Source-equivalent Flyppy-v3 body.  Wing length is represented as half the
+# published 6.04 mm wing span because the FlyPhysicalSpec field is per-wing length.
+FLYBODY_V3 = FlyPhysicalSpec(
+    morphology="FlyBody published flight-calibration scale with source flight frame",
+    body_length_mm=FLYBODY_REFERENCE.body_length_mm,
+    wing_length_mm=FLYBODY_REFERENCE.wing_span_mm / 2.0,
+    total_mass_mg=FLYBODY_REFERENCE.total_mass_mg,
+    neural_sex="male",
+    morphology_sex=FLYBODY_REFERENCE.morphology_sex,
+    provenance=(
+        "Vaxenburg et al. 2025 FlyBody physical scale; virtual-fly v3 restores the "
+        "source wing frame and source flight root orientation"
+    ),
+)
+
+
 # Version-2 Flyppy world, preserved as an experimental baseline.  These are task
-# design dimensions, not measured Drosophila ecology.  A future corrected flight
-# environment should be versioned rather than silently changing these values.
+# design dimensions, not measured Drosophila ecology.
 FLYPPY_GEOMETRY = FlyppyGeometrySpec(
     body_length_mm=CANONICAL_FLY.body_length_mm,
     corridor_height_body_lengths=6.0,       # 16.50 mm
@@ -144,4 +160,19 @@ FLYPPY_GEOMETRY = FlyppyGeometrySpec(
     lateral_half_width_body_lengths=3.0,    # 8.25 mm each side
     gate_half_thickness_body_lengths=0.10,  # 0.275 mm; full 0.55 mm
     center_margin_body_lengths=0.50,        # 1.375 mm
+)
+
+
+# Version-3 world starts from the same dimensionless ratios but uses the published
+# FlyBody scale.  These values are explicit so any later task-design adjustment is
+# versioned rather than silently mutating v3.
+FLYPPY_GEOMETRY_V3 = FlyppyGeometrySpec(
+    body_length_mm=FLYBODY_V3.body_length_mm,
+    corridor_height_body_lengths=6.0,       # 17.82 mm
+    gate_gap_body_lengths=2.5,              # 7.425 mm
+    first_gate_body_lengths=4.0,            # 11.88 mm
+    gate_spacing_body_lengths=4.0,          # 11.88 mm
+    lateral_half_width_body_lengths=3.0,    # 8.91 mm each side
+    gate_half_thickness_body_lengths=0.10,  # 0.297 mm; full 0.594 mm
+    center_margin_body_lengths=0.50,        # 1.485 mm
 )
