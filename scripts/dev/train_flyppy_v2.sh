@@ -4,6 +4,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+# Flyppy v2 is preserved as a reproducible historical baseline.  Independent
+# body-mechanics diagnostics have now proven that its current virtual-muscle seam
+# has no altitude-sustaining operating point, so additional learning would mix a
+# known physical impossibility into the neural-learning results.  Keep an
+# explicit escape hatch only for intentional historical reproduction/debugging.
+if [ "${VF_ALLOW_KNOWN_NONFLYING_V2:-0}" != "1" ]; then
+  cat >&2 <<'EOF'
+Flyppy v2 training is blocked: the current body/wing seam is known to be unable
+to sustain altitude (flybody_vertical_flight_capability: sustaining=0).
+
+Use the reference-flight calibration diagnostics before further neural training.
+For deliberate historical reproduction only, set:
+  VF_ALLOW_KNOWN_NONFLYING_V2=1
+EOF
+  exit 2
+fi
+
 EXPERIMENT="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v2}"
 CHECKPOINT="$EXPERIMENT/checkpoint/manifest.json"
 if [ ! -f "$CHECKPOINT" ]; then
@@ -13,10 +30,10 @@ if [ ! -f "$CHECKPOINT" ]; then
   set -- --fresh "$@"
 fi
 
-# v2 is a new physical task: female FlyBody morphology at 2.75 mm / 1.09 mg,
+# Historical v2 task: 2.75 mm / 1.09 mg provisional body specification,
 # full-body gate collisions, researched joint limits, and the grounded
-# wing+leg+hDVM motor boundary.  Do not silently import the wing-only v1 CNS
-# checkpoint into this materially different embodiment.
+# wing+leg+hDVM motor boundary.  It is intentionally retained unchanged for
+# reproducibility while reference-flight physics is repaired in a successor task.
 unset VF_COURSE_START_GATE || true
 
 bash scripts/dev/train_flyppy.sh \
