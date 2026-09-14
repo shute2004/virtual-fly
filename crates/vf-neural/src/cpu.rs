@@ -330,6 +330,10 @@ mod tests {
     #[test]
     fn dopaminergic_activity_can_change_local_fast_weight() {
         let mut params = NeuralParams::default();
+        // Unit tests must not inherit the whole-CNS calibration selected through
+        // VF_NEURAL_SYNAPSE_SCALE. This synthetic 20-contact edge deliberately
+        // needs to cross threshold so that pre/post timing creates eligibility.
+        params.synapse_scale = 0.06;
         params.learning_rate = 0.05;
         params.modulator_scale = 0.1;
         let mut runtime = CpuRuntime::new(tiny_snapshot(), params);
