@@ -10,7 +10,7 @@ import tempfile
 
 import numpy as np
 
-from flybody_adapter import FlyBodyWingAdapter
+from flybody_runtime import FlyBodyRuntime
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from malecns_retina import MaleCNSRetina
@@ -74,7 +74,7 @@ def main() -> int:
 
     course = FlyppyCourse(seed=0, gate_count=2)
     world = FlyppyWorld(course)
-    body = FlyBodyWingAdapter(
+    body = FlyBodyRuntime(
         tethered=False,
         world=world,
         spawn_position_mm=(0.0, 0.0, 5.0),
@@ -97,8 +97,6 @@ def main() -> int:
     if initial_drive.active_photoreceptors < initial_drive.active_columns:
         raise RuntimeError("fewer active R1-R6 neurons than active optic columns")
 
-    # With an unchanged static image, the second sample should be locally adapted
-    # rather than repeating absolute luminance as DC current.
     adapted_drive = retina.encode(body.sim, body.fly)
     if adapted_drive.active_photoreceptors != 0 or adapted_drive.max_current != 0.0:
         raise RuntimeError(
@@ -109,9 +107,6 @@ def main() -> int:
 
     stimulated_indices = snapshot_indices_for_body_ids(args.snapshot, body_ids)
 
-    # Exercise the exact Flyppy body-ID protocol. Save state immediately after the
-    # physical light-on pulse and again after the propagation horizon. Propagation
-    # is defined only as activity outside the entire directly stimulated R1-R6 set.
     with tempfile.TemporaryDirectory(prefix="virtual-fly-retina-smoke-") as temp_dir:
         initial_checkpoint = Path(temp_dir) / "initial"
         final_checkpoint = Path(temp_dir) / "final"
