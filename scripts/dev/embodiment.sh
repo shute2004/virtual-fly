@@ -51,7 +51,8 @@ run "Flyppy eye rendering" uv run python scripts/embodiment/flyppy_vision_smoke.
 run "MaleCNS retinotopic photoreceptor input" uv run python scripts/embodiment/malecns_retina_smoke.py --snapshot "$SNAPSHOT" --groups "$GROUPS" --mapping "$RETINOTOPIC_MAP"
 run "Individual wing MN peripheral boundary" uv run python scripts/embodiment/wing_muscle_boundary_smoke.py --motor-map "$WING_MOTOR_MAP"
 run "Grounded whole-body MN peripheral boundary" uv run python scripts/embodiment/whole_body_motor_smoke.py --wing-motor-map "$WING_MOTOR_MAP" --body-motor-map "$BODY_MOTOR_MAP"
-run "Individual-MN virtual-muscle flight envelope" uv run python scripts/embodiment/flybody_muscle_flight_envelope.py
+run "Individual-MN virtual-muscle forward flight envelope" uv run python scripts/embodiment/flybody_muscle_flight_envelope.py
+run "Independent vertical flight capability" uv run python scripts/embodiment/flybody_vertical_flight_capability.py
 
 printf '\nembodiment=PASS\n'
 printf 'groups: %s\n' "$GROUPS"
@@ -59,6 +60,7 @@ printf 'retinotopy: %s\n' "$RETINOTOPIC_MAP"
 printf 'wing motor map: %s\n' "$WING_MOTOR_MAP"
 printf 'body motor map: %s\n' "$BODY_MOTOR_MAP"
 printf 'physical spec: %s/artifacts/embodiment/flybody-physical-spec-v2.json\n' "$ROOT"
+printf 'vertical flight capability: %s/artifacts/embodiment/flybody-vertical-flight-capability.json\n' "$ROOT"
 printf 'artifacts: %s/artifacts/embodiment\n' "$ROOT"
 printf 'unresolved neck/abdominal/distal motor mechanics remain fail-closed, not guessed.\n'
 printf 'legacy DNg02 diagnostics are intentionally excluded from the standard preflight.\n'
