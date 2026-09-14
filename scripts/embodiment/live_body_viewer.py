@@ -24,6 +24,7 @@ import mujoco as mj
 import numpy as np
 
 from flybody_muscle_adapter import FlyBodyMuscleAdapter
+from flybody_v3_adapter import FlyBodyV3MuscleAdapter
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 
@@ -119,7 +120,7 @@ def infer_training_context(experiment: Path) -> tuple[int, str]:
     except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
         gate_index = 0
         environment_version = "v1"
-    if environment_version not in {"v1", "v2"}:
+    if environment_version not in {"v1", "v2", "v3"}:
         environment_version = "v1"
     return max(0, gate_index), environment_version
 
@@ -175,7 +176,8 @@ def main() -> int:
     )
     world = FlyppyWorld(course)
     spawn_z = (course.floor_z_mm + course.ceiling_z_mm) / 2.0
-    body = FlyBodyMuscleAdapter(
+    body_cls = FlyBodyV3MuscleAdapter if environment_version == "v3" else FlyBodyMuscleAdapter
+    body = body_cls(
         tethered=False,
         world=world,
         spawn_position_mm=(0.0, 0.0, spawn_z),
