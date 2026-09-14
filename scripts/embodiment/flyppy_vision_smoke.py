@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from flybody_adapter import FlyBodyWingAdapter
+from flybody_runtime import FlyBodyRuntime
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 
@@ -29,7 +29,7 @@ def main() -> int:
     args = parse_args()
     course = FlyppyCourse(seed=args.seed, gate_count=3)
     world = FlyppyWorld(course)
-    body = FlyBodyWingAdapter(
+    body = FlyBodyRuntime(
         tethered=False,
         world=world,
         spawn_position_mm=(0.0, 0.0, 5.0),
@@ -42,8 +42,6 @@ def main() -> int:
     if not np.all(np.isfinite(readouts)):
         raise RuntimeError("compound-eye output contains non-finite values")
 
-    # Each ommatidium is yellow or pale; sum the two channels to obtain its
-    # active luminance-like channel without inventing an RGB image interface.
     active = readouts.sum(axis=2)
     left = active[0]
     right = active[1]
@@ -68,7 +66,7 @@ def main() -> int:
         },
         "interpretation": (
             "FlyGym/FlyBody compound-eye ommatidia are rendering the physical Flyppy world. "
-            "This does not yet define the MaleCNS retinotopic neuron mapping."
+            "This does not define the MaleCNS retinotopic neuron mapping."
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
