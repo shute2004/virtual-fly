@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
         "--root-pitches-deg",
         type=float,
         nargs="+",
-        default=(0.0, 47.5),
+        default=(-47.5, 0.0, 47.5),
     )
     parser.add_argument(
         "--leg-poses",
@@ -146,8 +146,6 @@ def set_exact_state(
             body.sim.mj_data.qpos[qpos_address] = angles[axis]
             body.sim.mj_data.qvel[qvel_address] = velocities[axis]
 
-    # Controls are irrelevant because no integration is performed; keep them neutral
-    # so actuator state cannot contaminate the passive-force comparison.
     body.sim.mj_data.ctrl[:] = 0.0
     body.sim.mj_data.qfrc_applied[:] = 0.0
     mj.mj_forward(body.sim.mj_model, body.sim.mj_data)
@@ -287,7 +285,9 @@ def main() -> int:
             "Wing qpos/qvel are imposed exactly from the official measured cycle; "
             "actuator and wing-inertia tracking are bypassed. The aero-on minus "
             "aero-off free-root vertical qfrc_passive difference isolates restored "
-            "wing-fluid support at identical kinematics."
+            "wing-fluid support at identical kinematics. Root pitch sweep includes "
+            "-47.5 degrees because upstream vision-flight initializes the root with "
+            "neg_quat(hover_up_dir)."
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
