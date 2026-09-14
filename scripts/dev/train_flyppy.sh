@@ -66,7 +66,8 @@ uv run python -m py_compile \
   scripts/embodiment/live_body_viewer.py \
   scripts/data/prepare_body_motor_map.py \
   scripts/data/prepare_neural_viewer_graph.py \
-  scripts/analysis/export_flyppy_report.py
+  scripts/analysis/export_flyppy_report.py \
+  scripts/analysis/append_flyppy_run_history.py
 
 if [ ! -f "$GROUPS" ]; then
   printf '\n== Generate neural boundary groups ==\n'
@@ -163,5 +164,7 @@ uv run python scripts/embodiment/train_flyppy_curriculum.py \
 
 printf '\n== Export compact Git report ==\n'
 uv run python scripts/analysis/export_flyppy_report.py --summary "$REPORT_SUMMARY"
+uv run python scripts/analysis/append_flyppy_run_history.py --summary "$REPORT_SUMMARY"
 printf 'report_md=reports/flyppy/latest.md\n'
 printf 'report_csv=reports/flyppy/latest.csv\n'
+printf 'run_history=reports/flyppy/history.csv\n'
