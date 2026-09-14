@@ -9,6 +9,7 @@ GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 PRIOR_TRAJECTORY="$ROOT/artifacts/experiments/flyppy-v1/trajectory.jsonl"
+MOTOR_CALIBRATION="$ROOT/artifacts/embodiment/flybody-muscle-calibration-v1.json"
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -48,16 +49,20 @@ printf '\n== Wing neuromuscular boundary smoke test ==\n'
 uv run python scripts/embodiment/wing_muscle_boundary_smoke.py \
   --motor-map "$WING_MOTOR_MAP"
 
-# If the previous stride-1 diagnostic trajectory is present, replay its exact
-# CNS-derived peripheral motor history through the *current* muscle calibration.
-# This is a body-layer regression test only; it neither advances nor resumes the
-# saved CNS. Fail closed before expensive learning if the known motor history is
-# still physically unstable after a body-interface calibration change.
+# If a stride-1 trajectory from the immediately preceding run exists, use it only
+# to calibrate the static muscle->hinge seam. The search is body-only and runs
+# before the trajectory is replaced by the new episode. Selected parameters are
+# frozen for the entire subsequent process through VF_MOTOR_CALIBRATION.
 if [ -f "$PRIOR_TRAJECTORY" ]; then
+  printf '\n== Robust motor-interface calibration ==\n'
+  uv run python scripts/embodiment/calibrate_motor_interface.py \
+    --trajectory "$PRIOR_TRAJECTORY" \
+    --output "$MOTOR_CALIBRATION"
+  export VF_MOTOR_CALIBRATION="$MOTOR_CALIBRATION"
+
   printf '\n== Calibrated prior-motor replay preflight ==\n'
   uv run python scripts/embodiment/calibrated_motor_replay_smoke.py \
-    --trajectory "$PRIOR_TRAJECTORY" \
-    --episode 0
+    --trajectory "$PRIOR_TRAJECTORY"
 fi
 
 PYTHON_LAUNCHER=(uv run python)
