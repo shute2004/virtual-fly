@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import os
 import random
 
 
@@ -54,6 +55,11 @@ class FlyppyCourse:
     Units are millimetres, matching FlyGym/FlyBody. The y coordinate is left to
     the body simulator; the first course intentionally tests altitude control
     before adding lateral steering.
+
+    ``VF_COURSE_START_GATE`` is a curriculum-only observer/environment switch.
+    It removes already-mastered leading gates from a training stage while
+    preserving their absolute x coordinates. It never changes body motion or
+    neural dynamics. The default is zero, which exposes the full course.
     """
 
     def __init__(
@@ -86,7 +92,7 @@ class FlyppyCourse:
             raise ValueError("corridor is too small for requested gate gap")
 
         rng = random.Random(seed)
-        self.gates = tuple(
+        all_gates = tuple(
             Gate(
                 x_mm=first_gate_x_mm + i * gate_spacing_mm,
                 center_z_mm=rng.uniform(low_center, high_center),
@@ -95,9 +101,25 @@ class FlyppyCourse:
             for i in range(gate_count)
         )
 
+        start_text = os.environ.get("VF_COURSE_START_GATE", "0").strip() or "0"
+        try:
+            start_gate = int(start_text)
+        except ValueError as exc:
+            raise ValueError("VF_COURSE_START_GATE must be an integer") from exc
+        if start_gate < 0 or start_gate >= len(all_gates):
+            raise ValueError(
+                f"VF_COURSE_START_GATE must be in [0, {len(all_gates) - 1}], got {start_gate}"
+            )
+        self.source_gate_offset = start_gate
+        self.gates = all_gates[start_gate:]
+
     @property
     def next_gate_index(self) -> int:
         return self._next_gate
+
+    @property
+    def absolute_next_gate_index(self) -> int:
+        return self.source_gate_offset + self._next_gate
 
     @property
     def finished(self) -> bool:
@@ -129,14 +151,14 @@ class FlyppyCourse:
             self._last_x_mm = x_mm
             return CourseEvent(
                 collision=True,
-                gate_index=self._next_gate if not self.finished else None,
+                gate_index=self.absolute_next_gate_index if not self.finished else None,
                 collision_reason="floor",
             )
         if z_mm + body_radius_mm >= self.ceiling_z_mm:
             self._last_x_mm = x_mm
             return CourseEvent(
                 collision=True,
-                gate_index=self._next_gate if not self.finished else None,
+                gate_index=self.absolute_next_gate_index if not self.finished else None,
                 collision_reason="ceiling",
             )
 
@@ -154,7 +176,7 @@ class FlyppyCourse:
             self._last_x_mm = x_mm
             return CourseEvent(
                 collision=True,
-                gate_index=self._next_gate,
+                gate_index=self.absolute_next_gate_index,
                 collision_reason="gate",
             )
 
@@ -164,10 +186,10 @@ class FlyppyCourse:
                 self._last_x_mm = x_mm
                 return CourseEvent(
                     collision=True,
-                    gate_index=self._next_gate,
+                    gate_index=self.absolute_next_gate_index,
                     collision_reason="gate",
                 )
-            passed = self._next_gate
+            passed = self.absolute_next_gate_index
             self._next_gate += 1
             self._last_x_mm = x_mm
             return CourseEvent(
@@ -181,22 +203,39 @@ class FlyppyCourse:
 
 
 def _self_test() -> None:
-    course = FlyppyCourse(seed=7, gate_count=2)
-    gate = course.gates[0]
-    z = gate.center_z_mm
-    assert not course.update(gate.x_mm - 1.0, z).collision
-    event = course.update(gate.x_mm + 0.1, z)
-    assert event.passed_gate and event.gate_index == 0
+    previous = os.environ.pop("VF_COURSE_START_GATE", None)
+    try:
+        course = FlyppyCourse(seed=7, gate_count=2)
+        gate = course.gates[0]
+        z = gate.center_z_mm
+        assert not course.update(gate.x_mm - 1.0, z).collision
+        event = course.update(gate.x_mm + 0.1, z)
+        assert event.passed_gate and event.gate_index == 0
 
-    course.reset()
-    assert course.next_gate_index == 0 and not course.finished
+        course.reset()
+        assert course.next_gate_index == 0 and not course.finished
 
-    bad = FlyppyCourse(seed=7, gate_count=1)
-    gate = bad.gates[0]
-    assert not bad.update(gate.x_mm - 1.0, gate.center_z_mm).collision
-    event = bad.update(gate.x_mm, bad.floor_z_mm + 0.1)
-    assert event.collision and event.collision_reason == "floor"
-    print("flyppy_course=PASS")
+        bad = FlyppyCourse(seed=7, gate_count=1)
+        gate = bad.gates[0]
+        assert not bad.update(gate.x_mm - 1.0, gate.center_z_mm).collision
+        event = bad.update(gate.x_mm, bad.floor_z_mm + 0.1)
+        assert event.collision and event.collision_reason == "floor"
+
+        os.environ["VF_COURSE_START_GATE"] = "1"
+        staged = FlyppyCourse(seed=7, gate_count=3)
+        assert staged.source_gate_offset == 1
+        assert len(staged.gates) == 2
+        target = staged.gates[0]
+        assert math.isclose(target.x_mm, 15.0)
+        assert not staged.update(target.x_mm - 1.0, target.center_z_mm).collision
+        event = staged.update(target.x_mm + 0.1, target.center_z_mm)
+        assert event.passed_gate and event.gate_index == 1
+        print("flyppy_course=PASS")
+    finally:
+        if previous is None:
+            os.environ.pop("VF_COURSE_START_GATE", None)
+        else:
+            os.environ["VF_COURSE_START_GATE"] = previous
 
 
 if __name__ == "__main__":
