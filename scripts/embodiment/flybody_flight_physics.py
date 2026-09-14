@@ -55,6 +55,7 @@ SOURCE_WING_INERTIAL_MASS = 8.0e-6
 SOURCE_FLUID_COEFS = (1.0, 0.5, 1.5, 1.7, 1.0)
 SOURCE_AIR_DENSITY = 0.00128
 SOURCE_AIR_VISCOSITY = 0.000185
+SOURCE_WING_CTRL_RANGE = (-1.0, 1.0)
 
 FLIGHT_PHYSICS_TIMESTEP_S = SOURCE_FLIGHT_PHYSICS_TIMESTEP_S
 FLIGHT_BODY_PITCH_DEG = SOURCE_BODY_PITCH_DEG
@@ -215,13 +216,19 @@ def apply_flight_air_parameters(world: BaseWorld) -> None:
 
 
 def add_flight_position_actuators(fly: FlyBody, jointdofs: Iterable) -> None:
-    """Add only the six wing position actuators required by this flight adapter.
+    """Add the six wing position actuators with source FlyBody force semantics.
 
-    FlyGym's ``ALL`` actuated-DOF preset also includes legs, abdomen, head,
-    proboscis, antennae and halteres. Adding POSITION actuators for all of them is
-    not part of the source FlyBody flight task and also causes missing-config
-    fallbacks for e.g. halteres. They therefore remain passive unless a future
-    biologically grounded motor adapter explicitly controls them.
+    In the source FlyBody model the wing ``general`` actuators are control-limited
+    to [-1, 1] but are not force-limited.  The source flight task feeds
+    ``target_angle - current_angle`` into those actuators after setting every wing
+    gain to 18.  In FlyGym's millimetre convention this is equivalent to a position
+    actuator with ``kp=1800`` and the same [-1, 1] error/control clipping.
+
+    FlyGym's generic ``add_actuators`` helper defaults to ``forcelimited=True`` and
+    ``forcerange=(-30, 30)``.  Leaving that default in place clips the converted
+    wing torque far below the source model and destroys high-frequency tracking.
+    Therefore flight wings explicitly disable force limiting here while preserving
+    the source control range.
     """
 
     wing = wing_dofs(jointdofs)
@@ -231,4 +238,7 @@ def add_flight_position_actuators(fly: FlyBody, jointdofs: Iterable) -> None:
         wing,
         ActuatorType.POSITION,
         kp=FLIGHT_WING_POSITION_KP,
+        forcelimited=False,
+        ctrllimited=True,
+        ctrlrange=SOURCE_WING_CTRL_RANGE,
     )
