@@ -38,7 +38,7 @@ uv sync >/dev/null
 
 cargo check -q -p vf-runner --bin neural_bridge
 uv run python -m py_compile \
-  scripts/embodiment/train_flyppy_persistent.py \
+  scripts/embodiment/train_flyppy_curriculum.py \
   scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_body_viewer.py
 
@@ -62,15 +62,6 @@ if [ ! -f "$RETINOTOPIC_MAP" ]; then
     --snapshot "$SNAPSHOT" \
     --output "$RETINOTOPIC_MAP" \
     --download
-fi
-
-if [ ! -f "$VIEWER_GRAPH" ]; then
-  printf '\n== Prepare live neural viewer graph ==\n'
-  uv run python scripts/data/prepare_neural_viewer_graph.py \
-    --snapshot "$SNAPSHOT" \
-    --groups "$GROUPS" \
-    --motor-map "$WING_MOTOR_MAP" \
-    --output "$VIEWER_GRAPH"
 fi
 
 CALIBRATION_SCHEMA=0
@@ -111,8 +102,8 @@ if [ "$FULL_PREFLIGHT" = "1" ]; then
 fi
 
 printf '\n== Flyppy persistent curriculum learning ==\n'
-printf 'live_viewer=separate-process command="bash scripts/dev/view_learning.sh"\n'
-exec uv run python scripts/embodiment/train_flyppy_persistent.py \
+printf 'live_viewer=separate-process command="bash scripts/dev/view_flyppy.sh"\n'
+exec uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
