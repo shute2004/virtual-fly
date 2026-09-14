@@ -10,6 +10,8 @@ SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
+EXPECTED_VIEWER_GRAPH_SCHEMA=3
+NATIVE_BODY_WINDOW="${VF_NATIVE_BODY_WINDOW:-0}"
 
 if [ "$#" -gt 0 ]; then
   EXPERIMENT="$1"
@@ -18,10 +20,19 @@ fi
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 command -v python3 >/dev/null 2>&1 || { echo 'python3 is required' >&2; exit 127; }
 
-if [ ! -f "$VIEWER_GRAPH" ]; then
-  [ -f "$GROUPS" ] || { echo "missing $GROUPS; run training/bootstrap first" >&2; exit 2; }
-  [ -f "$WING_MOTOR_MAP" ] || { echo "missing $WING_MOTOR_MAP; run training/bootstrap first" >&2; exit 2; }
-  printf 'preparing neural viewer graph...\n'
+[ -f "$GROUPS" ] || { echo "missing $GROUPS; run training/bootstrap first" >&2; exit 2; }
+[ -f "$WING_MOTOR_MAP" ] || { echo "missing $WING_MOTOR_MAP; run training/bootstrap first" >&2; exit 2; }
+
+VIEWER_SCHEMA=0
+if [ -f "$VIEWER_GRAPH" ]; then
+  VIEWER_SCHEMA="$(uv run python -c 'import json,sys
+try:
+    print(int(json.load(open(sys.argv[1])).get("schema_version", 0)))
+except Exception:
+    print(0)' "$VIEWER_GRAPH")"
+fi
+if [ "$VIEWER_SCHEMA" != "$EXPECTED_VIEWER_GRAPH_SCHEMA" ]; then
+  printf 'preparing brain-shaped neural viewer graph...\n'
   uv run python scripts/data/prepare_neural_viewer_graph.py \
     --snapshot "$SNAPSHOT" \
     --groups "$GROUPS" \
@@ -54,9 +65,12 @@ BODY_LAUNCHER=(uv run python)
 if [ "$(uname -s)" = "Darwin" ]; then
   BODY_LAUNCHER=(uv run mjpython)
 fi
+BODY_ARGS=(--experiment "$EXPERIMENT")
+if [ "$NATIVE_BODY_WINDOW" = "1" ]; then
+  BODY_ARGS+=(--native-window)
+fi
 
-"${BODY_LAUNCHER[@]}" scripts/embodiment/live_body_viewer.py \
-  --experiment "$EXPERIMENT" &
+"${BODY_LAUNCHER[@]}" scripts/embodiment/live_body_viewer.py "${BODY_ARGS[@]}" &
 BODY_PID=$!
 
 case "$(uname -s)" in
@@ -75,11 +89,11 @@ case "$(uname -s)" in
     ;;
 esac
 
-printf 'body_viewer=MuJoCo detached observer\n'
-printf 'neural_viewer=%s\n' "$URL"
+printf 'learning_viewer=%s\n' "$URL"
+printf 'FlyBody=embedded live MuJoCo render\n'
+printf 'MaleCNS=brain-shaped schematic layout with released connections/activity\n'
 printf 'telemetry=%s/live\n' "$EXPERIMENT"
-printf 'Closing either viewer does not stop training. Ctrl-C here stops observers only.\n'
+printf 'Set VF_NATIVE_BODY_WINDOW=1 before this command if you also want a native MuJoCo window.\n'
+printf 'Ctrl-C here stops observers only; training is independent.\n'
 
-# Keep the local HTTP server available even if the MuJoCo window is closed;
-# the neural viewer can remain open independently.
 wait "$SERVER_PID"
