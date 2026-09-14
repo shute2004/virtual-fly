@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>virtual-fly live neural viewer</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    html, body { margin: 0; width: 100%; height: 100%; background: #090b0f; color: #e8edf4; overflow: hidden; }
+    #root { width: 100%; height: 100%; display: grid; grid-template-columns: minmax(0,1fr) 340px; }
+    #scene { min-width: 0; position: relative; }
+    #panel { border-left: 1px solid #252c36; background: #11161d; padding: 16px; overflow: auto; }
+    h1 { margin: 0 0 6px; font-size: 17px; }
+    h2 { margin: 18px 0 8px; font-size: 13px; color: #b9c5d3; }
+    p, label, button, input { font-size: 12px; line-height: 1.45; }
+    .note { color: #9aa7b6; }
+    .warn { color: #ffc977; }
+    .metric { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 4px 0; border-bottom: 1px solid #202833; }
+    .row { display: flex; gap: 8px; align-items: center; margin: 7px 0; }
+    input[type=text] { width: 100%; box-sizing: border-box; background: #0c1016; color: #e8edf4; border: 1px solid #384353; border-radius: 6px; padding: 6px 8px; }
+    button { background: #1a222d; color: #e8edf4; border: 1px solid #384353; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+    #badge { position: absolute; left: 12px; top: 12px; background: rgba(7,9,12,.78); border: 1px solid #27303b; border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none; }
+    #legend { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    #status { min-height: 18px; color: #8fc9ff; }
+    @media (max-width: 780px) {
+      #root { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) 270px; }
+      #panel { border-left: 0; border-top: 1px solid #252c36; }
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="root">
+  <div id="scene"><div id="badge">MaleCNS live activity / 模式3D配置</div></div>
+  <aside id="panel">
+    <h1>virtual-fly live neural viewer</h1>
+    <p class="warn">配置はconnectomeを見やすくするための模式3D配置です。実際の神経形態座標ではありません。</p>
+
+    <h2>接続</h2>
+    <label>実験ディレクトリ</label>
+    <input id="experiment" type="text" value="artifacts/experiments/flyppy-v1" />
+    <div class="row"><button id="reconnect">再接続</button><label><input id="follow" type="checkbox" checked /> 自動追従</label></div>
+    <div id="status">読み込み中...</div>
+
+    <h2>現在</h2>
+    <div class="metric"><span>backend</span><span id="backend">-</span></div>
+    <div class="metric"><span>episode</span><span id="episode">-</span></div>
+    <div class="metric"><span>control step</span><span id="step">-</span></div>
+    <div class="metric"><span>depolarizing</span><span id="active">-</span></div>
+    <div class="metric"><span>gate</span><span id="gate">-</span></div>
+    <div class="metric"><span>event</span><span id="event">-</span></div>
+
+    <h2>表示</h2>
+    <div class="row"><label><input id="showEdges" type="checkbox" checked /> シナプス</label><label><input id="pulseEdges" type="checkbox" checked /> 発火で発光</label></div>
+    <div class="row"><button id="resetCamera">カメラを戻す</button></div>
+
+    <h2>凡例</h2>
+    <div id="legend">
+      <span class="dot" style="background:#93a4b8"></span><span>通常ニューロン</span>
+      <span class="dot" style="background:#56d6ff"></span><span>発火ニューロン</span>
+      <span class="dot" style="background:#69f0a5"></span><span>PAM reward event</span>
+      <span class="dot" style="background:#ff6f7d"></span><span>PPL aversive event</span>
+    </div>
+
+    <p class="note">細い線は表示対象サブグラフのreleased connectionです。presynaptic neuronが発火したstepでは、そのシナプスを明るく表示します。viewerの起動・終了は学習プロセスへ影響しません。</p>
+  </aside>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const host = document.getElementById('scene');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x090b0f);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+host.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const key = new THREE.DirectionalLight(0xffffff, 1.1);
+key.position.set(8, 12, 10);
+scene.add(key);
+
+let graph = null;
+let pointCloud = null;
+let edgeLines = null;
+let nodeIndex = new Map();
+let edges = [];
+let baseNodeColors = [];
+let lastNeuralKey = '';
+let poll = null;
+
+function resetCamera() {
+  camera.position.set(0, 4, 24);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+resetCamera();
+
+document.getElementById('resetCamera').addEventListener('click', resetCamera);
+document.getElementById('showEdges').addEventListener('change', e => { if (edgeLines) edgeLines.visible = e.target.checked; });
+document.getElementById('reconnect').addEventListener('click', () => connect(true));
+document.getElementById('follow').addEventListener('change', configurePolling);
+
+function experimentPath() {
+  return document.getElementById('experiment').value.trim().replace(/^\/+|\/+$/g, '');
+}
+
+async function fetchJson(path) {
+  const response = await fetch('/' + path, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`${response.status} ${path}`);
+  return await response.json();
+}
+
+function categoryColor(node) {
+  const nt = Number(node.nt || 0);
+  if (nt === 4) return new THREE.Color(0xb08cff);
+  if (nt === 7) return new THREE.Color(0x7fa9ff);
+  return new THREE.Color(0x93a4b8);
+}
+
+function buildGraph(payload) {
+  if (pointCloud) scene.remove(pointCloud);
+  if (edgeLines) scene.remove(edgeLines);
+  graph = payload;
+  nodeIndex = new Map();
+  edges = payload.edges || [];
+  const nodes = payload.nodes || [];
+  const positions = new Float32Array(nodes.length * 3);
+  const colors = new Float32Array(nodes.length * 3);
+  baseNodeColors = new Array(nodes.length);
+  nodes.forEach((node, i) => {
+    nodeIndex.set(Number(node.body_id), i);
+    const p = node.position || [0,0,0];
+    positions.set([Number(p[0]), Number(p[1]), Number(p[2])], i * 3);
+    const c = categoryColor(node);
+    baseNodeColors[i] = c.clone();
+    colors.set([c.r, c.g, c.b], i * 3);
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  pointCloud = new THREE.Points(
+    geometry,
+    new THREE.PointsMaterial({ size: 0.12, vertexColors: true, transparent: true, opacity: 0.88, sizeAttenuation: true })
+  );
+  scene.add(pointCloud);
+
+  const edgePositions = [];
+  for (const edge of edges) {
+    const a = nodeIndex.get(Number(edge.pre));
+    const b = nodeIndex.get(Number(edge.post));
+    if (a === undefined || b === undefined) continue;
+    edgePositions.push(
+      positions[a*3], positions[a*3+1], positions[a*3+2],
+      positions[b*3], positions[b*3+1], positions[b*3+2]
+    );
+  }
+  const edgeGeom = new THREE.BufferGeometry();
+  edgeGeom.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+  const edgeColors = new Float32Array(edgePositions.length);
+  for (let i = 0; i < edgeColors.length; i += 3) edgeColors.set([0.18,0.22,0.28], i);
+  edgeGeom.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3));
+  edgeLines = new THREE.LineSegments(
+    edgeGeom,
+    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.18 })
+  );
+  scene.add(edgeLines);
+  document.getElementById('showEdges').dispatchEvent(new Event('change'));
+}
+
+function updateActivity(neural) {
+  if (!pointCloud || !graph) return;
+  const activeIds = new Set((neural.depolarizing_body_ids || []).map(Number));
+  const colors = pointCloud.geometry.getAttribute('color');
+  const activeColor = new THREE.Color(0x56d6ff);
+  const rewardColor = new THREE.Color(0x69f0a5);
+  const aversiveColor = new THREE.Color(0xff6f7d);
+  for (let i = 0; i < baseNodeColors.length; i++) {
+    const c = baseNodeColors[i];
+    colors.setXYZ(i, c.r * 0.7, c.g * 0.7, c.b * 0.7);
+  }
+  const nodes = graph.nodes || [];
+  for (const id of activeIds) {
+    const i = nodeIndex.get(id);
+    if (i !== undefined) colors.setXYZ(i, activeColor.r, activeColor.g, activeColor.b);
+  }
+  if (neural.reward || neural.aversive) {
+    for (let i = 0; i < nodes.length; i++) {
+      if (Number(nodes[i].nt || 0) !== 4) continue;
+      const c = neural.reward ? rewardColor : aversiveColor;
+      colors.setXYZ(i, c.r, c.g, c.b);
+    }
+  }
+  colors.needsUpdate = true;
+
+  if (edgeLines && document.getElementById('pulseEdges').checked) {
+    const edgeColors = edgeLines.geometry.getAttribute('color');
+    let segment = 0;
+    for (const edge of edges) {
+      const a = nodeIndex.get(Number(edge.pre));
+      const b = nodeIndex.get(Number(edge.post));
+      if (a === undefined || b === undefined) continue;
+      const lit = activeIds.has(Number(edge.pre));
+      const c = lit ? activeColor : new THREE.Color(0x2e3847);
+      edgeColors.setXYZ(segment * 2, c.r, c.g, c.b);
+      edgeColors.setXYZ(segment * 2 + 1, c.r, c.g, c.b);
+      segment++;
+    }
+    edgeColors.needsUpdate = true;
+    edgeLines.material.opacity = 0.28;
+  }
+  document.getElementById('episode').textContent = neural.episode ?? '-';
+  document.getElementById('step').textContent = neural.control_step ?? '-';
+  document.getElementById('active').textContent = activeIds.size.toLocaleString();
+}
+
+function updateBody(body) {
+  document.getElementById('gate').textContent = body.next_gate ?? '-';
+  const event = body.collision ? `collision:${body.collision_reason || '?'}` : body.passed_gate ? 'gate pass' : body.reward ? 'reward' : body.aversive ? 'aversive' : '-';
+  document.getElementById('event').textContent = event;
+}
+
+async function tick() {
+  const exp = experimentPath();
+  try {
+    const [status, neural, body] = await Promise.all([
+      fetchJson(`${exp}/live/status.json`),
+      fetchJson(`${exp}/live/neural.json`),
+      fetchJson(`${exp}/live/body.json`),
+    ]);
+    document.getElementById('backend').textContent = status.backend || '-';
+    const key = `${neural.episode}:${neural.control_step}:${neural.neural_step}`;
+    if (key !== lastNeuralKey) {
+      lastNeuralKey = key;
+      updateActivity(neural);
+    }
+    updateBody(body);
+    document.getElementById('status').textContent = status.running ? 'LIVE' : '学習停止中 / 最終フレーム';
+  } catch (error) {
+    document.getElementById('status').textContent = `telemetry待機中: ${error}`;
+  }
+}
+
+function configurePolling() {
+  if (poll) clearInterval(poll);
+  poll = null;
+  if (document.getElementById('follow').checked) poll = setInterval(tick, 120);
+}
+
+async function connect(force = false) {
+  const exp = experimentPath();
+  try {
+    if (!graph || force) {
+      const payload = await fetchJson('artifacts/embodiment/neural-viewer-graph-v1.json');
+      buildGraph(payload);
+    }
+    await tick();
+    configurePolling();
+  } catch (error) {
+    document.getElementById('status').textContent = `接続失敗: ${error}`;
+  }
+}
+
+function resize() {
+  const w = Math.max(1, host.clientWidth);
+  const h = Math.max(1, host.clientHeight);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+function animate() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+connect();
+</script>
+</body>
+</html>
