@@ -69,15 +69,9 @@ enum Request {
         #[serde(default)]
         read_body: Vec<u64>,
     },
-    SaveWeights {
-        path: PathBuf,
-    },
-    SaveCheckpoint {
-        path: PathBuf,
-    },
-    LoadCheckpoint {
-        path: PathBuf,
-    },
+    SaveWeights { path: PathBuf },
+    SaveCheckpoint { path: PathBuf },
+    LoadCheckpoint { path: PathBuf },
     Quit,
 }
 
@@ -103,8 +97,6 @@ struct ReadyResponse<'a> {
 struct GroupReadout {
     spikes: usize,
     neurons: usize,
-    /// Diagnostic population statistic retained only for legacy probes. The
-    /// target motor boundary uses individual body-ID readout instead.
     spike_fraction: f32,
 }
 
@@ -168,14 +160,22 @@ impl Runtime {
         }
     }
 
-    fn spikes(&self) -> Result<Vec<u32>> {
+    fn spikes_at(&self, indices: &[usize]) -> Result<Vec<u32>> {
         match self {
-            Runtime::Cpu(runtime) => Ok(runtime
-                .spikes()
-                .iter()
-                .map(|&value| value as u32)
-                .collect()),
-            Runtime::Gpu(runtime) => runtime.read_spikes(),
+            Runtime::Cpu(runtime) => {
+                let spikes = runtime.spikes();
+                indices
+                    .iter()
+                    .map(|&index| {
+                        spikes
+                            .get(index)
+                            .copied()
+                            .map(u32::from)
+                            .with_context(|| format!("spike read index {index} out of range"))
+                    })
+                    .collect()
+            }
+            Runtime::Gpu(runtime) => runtime.read_spikes_at(indices),
         }
     }
 
@@ -201,14 +201,19 @@ impl Runtime {
     }
 
     fn reset_dynamics(&mut self) -> Result<()> {
-        let mut state = self.state()?;
-        state.membrane.fill(0.0);
-        state.spikes.fill(0);
-        state.refractory.fill(0);
-        state.activity_trace.fill(0.0);
-        state.modulation.fill(0.0);
-        state.eligibility.fill(0.0);
-        self.load_state(&state)
+        match self {
+            Runtime::Gpu(runtime) => runtime.reset_dynamics(),
+            Runtime::Cpu(runtime) => {
+                let mut state = runtime.state();
+                state.membrane.fill(0.0);
+                state.spikes.fill(0);
+                state.refractory.fill(0);
+                state.activity_trace.fill(0.0);
+                state.modulation.fill(0.0);
+                state.eligibility.fill(0.0);
+                runtime.load_state(&state)
+            }
+        }
     }
 
     fn backend_name(&self) -> String {
@@ -318,19 +323,16 @@ fn main() -> Result<()> {
                     event: "pong",
                 },
             ),
-            Request::ResetDynamics => {
-                let result = runtime.reset_dynamics();
-                match result {
-                    Ok(()) => write_json(
-                        &mut stdout,
-                        &SimpleResponse {
-                            ok: true,
-                            event: "dynamics_reset",
-                        },
-                    ),
-                    Err(error) => write_error(&mut stdout, error),
-                }
-            }
+            Request::ResetDynamics => match runtime.reset_dynamics() {
+                Ok(()) => write_json(
+                    &mut stdout,
+                    &SimpleResponse {
+                        ok: true,
+                        event: "dynamics_reset",
+                    },
+                ),
+                Err(error) => write_error(&mut stdout, error),
+            },
             Request::Step {
                 stimulate,
                 stimulate_body,
@@ -374,6 +376,37 @@ fn main() -> Result<()> {
                         }
                     }
 
+                    let mut read_group_indices: Vec<(String, Vec<usize>)> = Vec::new();
+                    let mut read_body_indices: Vec<(u64, usize)> = Vec::new();
+                    if request_error.is_none() {
+                        for name in read {
+                            match groups.get(&name) {
+                                Some(group) => {
+                                    read_group_indices.push((name, group.indices.clone()));
+                                }
+                                None => {
+                                    request_error = Some(anyhow::anyhow!(
+                                        "unknown read group {name:?}"
+                                    ));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if request_error.is_none() {
+                        for body_id in read_body {
+                            match snapshot.index_of_body_id(body_id) {
+                                Some(index) => read_body_indices.push((body_id, index)),
+                                None => {
+                                    request_error = Some(anyhow::anyhow!(
+                                        "unknown read body ID {body_id}"
+                                    ));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(error) = request_error {
                         write_error(&mut stdout, error)
                     } else {
@@ -391,73 +424,70 @@ fn main() -> Result<()> {
                                 }
                             }
                         }
+
                         if let Some(error) = step_error {
                             write_error(&mut stdout, error)
                         } else {
-                            match runtime.spikes() {
-                                Ok(spikes) => {
+                            let mut requested_indices = Vec::<usize>::new();
+                            let mut positions = HashMap::<usize, usize>::new();
+                            let mut add_index = |index: usize| {
+                                if !positions.contains_key(&index) {
+                                    let position = requested_indices.len();
+                                    requested_indices.push(index);
+                                    positions.insert(index, position);
+                                }
+                            };
+                            for (_, indices) in &read_group_indices {
+                                for &index in indices {
+                                    add_index(index);
+                                }
+                            }
+                            for &(_, index) in &read_body_indices {
+                                add_index(index);
+                            }
+
+                            match runtime.spikes_at(&requested_indices) {
+                                Ok(events) => {
+                                    let event_at = |index: usize| -> u32 {
+                                        positions
+                                            .get(&index)
+                                            .and_then(|&position| events.get(position))
+                                            .copied()
+                                            .unwrap_or_default()
+                                    };
                                     let mut readout = HashMap::new();
-                                    let mut read_error: Option<anyhow::Error> = None;
-                                    for name in read {
-                                        match groups.get(&name) {
-                                            Some(group) => {
-                                                let count = group
-                                                    .indices
-                                                    .iter()
-                                                    .filter(|&&index| {
-                                                        spikes[index]
-                                                            == ACTIVITY_DEPOLARIZING as u32
-                                                    })
-                                                    .count();
-                                                readout.insert(
-                                                    name,
-                                                    GroupReadout {
-                                                        spikes: count,
-                                                        neurons: group.indices.len(),
-                                                        spike_fraction: count as f32
-                                                            / group.indices.len() as f32,
-                                                    },
-                                                );
-                                            }
-                                            None => {
-                                                read_error = Some(anyhow::anyhow!(
-                                                    "unknown read group {name:?}"
-                                                ));
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    let mut body_readout = Vec::with_capacity(read_body.len());
-                                    if read_error.is_none() {
-                                        for body_id in read_body {
-                                            match snapshot.index_of_body_id(body_id) {
-                                                Some(index) => body_readout.push(BodyReadout {
-                                                    body_id,
-                                                    spike: spikes[index]
-                                                        == ACTIVITY_DEPOLARIZING as u32,
-                                                }),
-                                                None => {
-                                                    read_error = Some(anyhow::anyhow!(
-                                                        "unknown read body ID {body_id}"
-                                                    ));
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if let Some(error) = read_error {
-                                        write_error(&mut stdout, error)
-                                    } else {
-                                        write_json(
-                                            &mut stdout,
-                                            &StepResponse {
-                                                ok: true,
-                                                step: neural_step,
-                                                read: readout,
-                                                read_body: body_readout,
+                                    for (name, indices) in read_group_indices {
+                                        let count = indices
+                                            .iter()
+                                            .filter(|&&index| {
+                                                event_at(index) == ACTIVITY_DEPOLARIZING as u32
+                                            })
+                                            .count();
+                                        readout.insert(
+                                            name,
+                                            GroupReadout {
+                                                spikes: count,
+                                                neurons: indices.len(),
+                                                spike_fraction: count as f32 / indices.len() as f32,
                                             },
-                                        )
+                                        );
                                     }
+                                    let body_readout = read_body_indices
+                                        .into_iter()
+                                        .map(|(body_id, index)| BodyReadout {
+                                            body_id,
+                                            spike: event_at(index) == ACTIVITY_DEPOLARIZING as u32,
+                                        })
+                                        .collect();
+                                    write_json(
+                                        &mut stdout,
+                                        &StepResponse {
+                                            ok: true,
+                                            step: neural_step,
+                                            read: readout,
+                                            read_body: body_readout,
+                                        },
+                                    )
                                 }
                                 Err(error) => write_error(&mut stdout, error),
                             }
@@ -492,12 +522,7 @@ fn main() -> Result<()> {
             Request::SaveCheckpoint { path } => {
                 let result = (|| -> Result<()> {
                     let state = runtime.state()?;
-                    save_checkpoint(
-                        &path,
-                        &snapshot.manifest.dataset,
-                        neural_step,
-                        &state,
-                    )?;
+                    save_checkpoint(&path, &snapshot.manifest.dataset, neural_step, &state)?;
                     write_json(
                         &mut stdout,
                         &StateCheckpointResponse {
