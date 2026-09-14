@@ -2,10 +2,10 @@
 """Detached read-only observer for a running Flyppy training process.
 
 The training process publishes qpos/qvel snapshots atomically. This observer
-copies them into a separate MuJoCo model, renders the actual FlyBody and writes
-``live/fly.png`` for the browser viewer. Browser camera gestures are read from
-``live/camera.json`` and affect only this observer. Nothing in this process is
-fed back into training.
+keeps the two latest poses, interpolates them with MuJoCo-aware generalized
+coordinate math, and renders the actual FlyBody at a stable display cadence.
+Browser camera gestures are read from ``live/camera.json`` and affect only this
+observer. Nothing in this process is fed back into training.
 """
 
 from __future__ import annotations
@@ -44,7 +44,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--gate-count", type=int, default=6)
-    parser.add_argument("--poll-hz", type=float, default=30.0)
+    parser.add_argument(
+        "--poll-hz",
+        type=float,
+        default=30.0,
+        help="observer render cadence; source poses are interpolated to this rate",
+    )
     parser.add_argument("--width", type=int, default=960)
     parser.add_argument("--height", type=int, default=540)
     parser.add_argument("--native-window", action="store_true")
@@ -71,7 +76,7 @@ def encode_rgb_png(image: np.ndarray) -> bytes:
     return (
         b"\x89PNG\r\n\x1a\n"
         + _png_chunk(b"IHDR", header)
-        + _png_chunk(b"IDAT", zlib.compress(rows, level=3))
+        + _png_chunk(b"IDAT", zlib.compress(rows, level=1))
         + _png_chunk(b"IEND", b"")
     )
 
@@ -104,12 +109,7 @@ def read_camera_state(path: Path, previous: dict[str, float]) -> dict[str, float
 
 
 def infer_training_gate_index(experiment: Path) -> int:
-    """Mirror the trainer's currently selected course stage in the observer.
-
-    The viewer is a separate process, so it does not inherit the trainer's
-    ``VF_COURSE_START_GATE`` environment variable. Read the persisted curriculum
-    state instead so the rendered gates match the world used for learning.
-    """
+    """Mirror the trainer's selected course stage in the detached observer."""
 
     state_path = experiment / "curriculum-state.json"
     try:
@@ -120,6 +120,41 @@ def infer_training_gate_index(experiment: Path) -> int:
     return max(0, gate_index)
 
 
+def read_pose(path: Path) -> tuple[tuple[int, int], float, np.ndarray, np.ndarray] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    try:
+        key = (int(payload["episode"]), int(payload["control_step"]))
+        sim_time_s = float(payload.get("sim_time_s", 0.0))
+        qpos = np.asarray(payload["qpos"], dtype=np.float64)
+        qvel = np.asarray(payload["qvel"], dtype=np.float64)
+    except (KeyError, TypeError, ValueError):
+        return None
+    return key, sim_time_s, qpos, qvel
+
+
+def interpolate_qpos(
+    model,
+    qpos_a: np.ndarray,
+    qpos_b: np.ndarray,
+    alpha: float,
+    scratch_velocity: np.ndarray,
+) -> np.ndarray:
+    """Interpolate generalized positions without linearly blending quaternions."""
+
+    if alpha <= 0.0:
+        return qpos_a.copy()
+    if alpha >= 1.0:
+        return qpos_b.copy()
+    scratch_velocity.fill(0.0)
+    mj.mj_differentiatePos(model, scratch_velocity, 1.0, qpos_a, qpos_b)
+    result = qpos_a.copy()
+    mj.mj_integratePos(model, result, scratch_velocity, alpha)
+    return result
+
+
 def main() -> int:
     args = parse_args()
     if args.poll_hz <= 0.0:
@@ -128,9 +163,6 @@ def main() -> int:
         raise SystemExit("render size is too small")
 
     training_gate_index = infer_training_gate_index(args.experiment)
-    # FlyppyCourse currently takes this curriculum stage from the environment.
-    # Set it explicitly in the detached observer so its rendered world matches
-    # the training process instead of always showing gate 1.
     os.environ["VF_COURSE_START_GATE"] = str(training_gate_index)
     course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
     world = FlyppyWorld(course)
@@ -168,68 +200,112 @@ def main() -> int:
 
         native_viewer = mjviewer.launch_passive(body.sim.mj_model, body.sim.mj_data)
 
+    model = body.sim.mj_model
+    scratch_velocity = np.zeros(model.nv, dtype=np.float64)
+    pose_a_qpos: np.ndarray | None = None
+    pose_a_qvel: np.ndarray | None = None
+    pose_a_time = 0.0
+    pose_b_qpos: np.ndarray | None = None
+    pose_b_qvel: np.ndarray | None = None
+    pose_b_time = 0.0
+    transition_started = time.perf_counter()
+    transition_duration = period
+    last_source_arrival: float | None = None
+
     print(f"body_viewer_source={live_path}")
     print(f"body_frame_output={frame_path}")
     print(f"body_camera_input={camera_path}")
     print(f"body_viewer_training_gate_index={training_gate_index}")
+    print(f"body_viewer_render_hz={args.poll_hz:.1f} interpolation=MuJoCo-generalized-position")
     print("body_viewer=waiting-for-telemetry")
 
     try:
         while True:
-            started = time.perf_counter()
+            frame_started = time.perf_counter()
+            now = frame_started
             if native_viewer is not None and not native_viewer.is_running():
                 native_viewer.close()
                 native_viewer = None
 
-            try:
-                payload = json.loads(live_path.read_text(encoding="utf-8"))
-                key = (int(payload["episode"]), int(payload["control_step"]))
-                try:
-                    camera_mtime = camera_path.stat().st_mtime_ns
-                except FileNotFoundError:
-                    camera_mtime = None
-                camera_changed = camera_mtime != last_camera_mtime
+            pose = read_pose(live_path)
+            if pose is not None:
+                key, source_time, incoming_qpos, incoming_qvel = pose
+                if incoming_qpos.shape != body.sim.mj_data.qpos.shape:
+                    raise RuntimeError(
+                        f"qpos shape mismatch: telemetry={incoming_qpos.shape} viewer={body.sim.mj_data.qpos.shape}"
+                    )
+                if incoming_qvel.shape != body.sim.mj_data.qvel.shape:
+                    raise RuntimeError(
+                        f"qvel shape mismatch: telemetry={incoming_qvel.shape} viewer={body.sim.mj_data.qvel.shape}"
+                    )
 
-                if key != last_key or camera_changed:
-                    qpos = np.asarray(payload["qpos"], dtype=np.float64)
-                    qvel = np.asarray(payload["qvel"], dtype=np.float64)
-                    if qpos.shape != body.sim.mj_data.qpos.shape:
-                        raise RuntimeError(
-                            f"qpos shape mismatch: telemetry={qpos.shape} viewer={body.sim.mj_data.qpos.shape}"
-                        )
-                    if qvel.shape != body.sim.mj_data.qvel.shape:
-                        raise RuntimeError(
-                            f"qvel shape mismatch: telemetry={qvel.shape} viewer={body.sim.mj_data.qvel.shape}"
-                        )
-
-                    body.sim.mj_data.qpos[:] = qpos
-                    body.sim.mj_data.qvel[:] = qvel
-                    body.sim.mj_data.time = float(payload.get("sim_time_s", 0.0))
-                    mj.mj_forward(body.sim.mj_model, body.sim.mj_data)
-
-                    if camera_changed:
-                        camera_state = read_camera_state(camera_path, camera_state)
-                        last_camera_mtime = camera_mtime
-                    camera.azimuth = camera_state["azimuth"]
-                    camera.elevation = camera_state["elevation"]
-                    camera.distance = camera_state["distance"]
-                    camera.lookat[:] = np.asarray(body.thorax_position_mm(), dtype=np.float64)
-
-                    renderer.update_scene(body.sim.mj_data, camera=camera)
-                    frame = renderer.render()
-                    write_bytes_atomic(frame_path, encode_rgb_png(frame))
-
-                    if native_viewer is not None:
-                        native_viewer.sync()
+                if key != last_key:
+                    episode_changed = last_key is None or key[0] != last_key[0]
+                    arrival = now
+                    if episode_changed or pose_b_qpos is None:
+                        pose_a_qpos = incoming_qpos.copy()
+                        pose_a_qvel = incoming_qvel.copy()
+                        pose_a_time = source_time
+                        pose_b_qpos = incoming_qpos.copy()
+                        pose_b_qvel = incoming_qvel.copy()
+                        pose_b_time = source_time
+                        transition_duration = period
+                    else:
+                        # Start the next blend from what is currently visible,
+                        # not from the previous raw source pose. This avoids a
+                        # tiny backward snap when source and render rates differ.
+                        pose_a_qpos = np.asarray(body.sim.mj_data.qpos, dtype=np.float64).copy()
+                        pose_a_qvel = np.asarray(body.sim.mj_data.qvel, dtype=np.float64).copy()
+                        pose_a_time = float(body.sim.mj_data.time)
+                        pose_b_qpos = incoming_qpos.copy()
+                        pose_b_qvel = incoming_qvel.copy()
+                        pose_b_time = source_time
+                        if last_source_arrival is None:
+                            source_interval = period
+                        else:
+                            source_interval = arrival - last_source_arrival
+                        # Reach the target slightly before the next expected
+                        # source sample. Clamp stalls so a paused trainer does
+                        # not create a seconds-long slow-motion blend.
+                        transition_duration = max(period, min(0.25, source_interval * 0.90))
+                    transition_started = arrival
+                    last_source_arrival = arrival
                     last_key = key
-            except FileNotFoundError:
-                pass
-            except json.JSONDecodeError:
-                pass
 
-            remaining = period - (time.perf_counter() - started)
+            try:
+                camera_mtime = camera_path.stat().st_mtime_ns
+            except FileNotFoundError:
+                camera_mtime = None
+            if camera_mtime != last_camera_mtime:
+                camera_state = read_camera_state(camera_path, camera_state)
+                last_camera_mtime = camera_mtime
+
+            if pose_a_qpos is not None and pose_b_qpos is not None and pose_a_qvel is not None and pose_b_qvel is not None:
+                alpha = min(1.0, max(0.0, (now - transition_started) / max(transition_duration, 1e-6)))
+                render_qpos = interpolate_qpos(model, pose_a_qpos, pose_b_qpos, alpha, scratch_velocity)
+                render_qvel = pose_a_qvel * (1.0 - alpha) + pose_b_qvel * alpha
+                render_time = pose_a_time * (1.0 - alpha) + pose_b_time * alpha
+
+                body.sim.mj_data.qpos[:] = render_qpos
+                body.sim.mj_data.qvel[:] = render_qvel
+                body.sim.mj_data.time = render_time
+                mj.mj_forward(model, body.sim.mj_data)
+
+                camera.azimuth = camera_state["azimuth"]
+                camera.elevation = camera_state["elevation"]
+                camera.distance = camera_state["distance"]
+                camera.lookat[:] = np.asarray(body.thorax_position_mm(), dtype=np.float64)
+
+                renderer.update_scene(body.sim.mj_data, camera=camera)
+                frame = renderer.render()
+                write_bytes_atomic(frame_path, encode_rgb_png(frame))
+
+                if native_viewer is not None:
+                    native_viewer.sync()
+
+            remaining = period - (time.perf_counter() - frame_started)
             if remaining > 0.0:
-                time.sleep(min(remaining, period))
+                time.sleep(remaining)
     except KeyboardInterrupt:
         return 0
     finally:
