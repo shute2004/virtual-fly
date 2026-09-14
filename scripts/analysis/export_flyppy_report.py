@@ -60,6 +60,19 @@ def frontier_rows(episodes: list[dict[str, Any]]) -> list[tuple[float, float, fl
     return result
 
 
+def format_condition(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return "-"
+    try:
+        return "x={:.3f}, z={:.3f}, vx={:.3f}".format(
+            float(payload["x_mm"]),
+            float(payload["z_mm"]),
+            float(payload["speed_mm_s"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return "-"
+
+
 def main() -> int:
     args = parse_args()
     if not args.summary.exists():
@@ -76,6 +89,8 @@ def main() -> int:
 
     fields = [
         "episode",
+        "curriculum_mode",
+        "boundary_ease_level",
         "spawn_x_mm",
         "spawn_z_mm",
         "initial_speed_mm_s",
@@ -106,6 +121,7 @@ def main() -> int:
     elapsed = float(payload.get("elapsed_seconds", 0.0))
     episode_count = len(episodes)
     curriculum = dict(payload.get("curriculum", {}))
+    curriculum_mode = str(payload.get("curriculum_mode") or curriculum.get("curriculum_mode") or "adaptive")
     training_gate_index = int(curriculum.get("training_gate_index", 0))
     max_passed = max(int(row.get("passed_gates", 0)) for row in episodes)
     max_x = max(float(row.get("max_x_mm", float("-inf"))) for row in episodes)
@@ -120,6 +136,7 @@ def main() -> int:
         "## 集計",
         "",
         f"- backend: `{payload.get('backend', '-')}`",
+        f"- curriculum mode: `{curriculum_mode}`",
         f"- curriculum target gate: {training_gate_index + 1}",
         f"- episode: {payload.get('episode_start', episodes[0].get('episode'))}〜{payload.get('episode_end', episodes[-1].get('episode'))}（{episode_count} episode）",
         f"- elapsed: {elapsed:.3f} s（平均 {elapsed / episode_count:.3f} s/episode）",
@@ -141,6 +158,8 @@ def main() -> int:
     lines.extend(["", "## 最終カリキュラム状態", ""])
     for key in (
         "training_gate_index",
+        "training_phase",
+        "curriculum_mode",
         "spawn_x_mm",
         "spawn_z_mm",
         "initial_speed_mm_s",
@@ -155,7 +174,49 @@ def main() -> int:
         if key in curriculum:
             lines.append(f"- {key}: {fmt(curriculum[key])}")
 
-    lines.extend(["", "## 成功境界", "", "同一 `spawn_z / initial_vx` 条件ごとに、成功した中で最小のspawn xを記録します。", "", "| spawn z (mm) | initial vx (mm/s) | 最小成功spawn x (mm) | episode | passed gates |", "|---:|---:|---:|---:|---:|"])
+    boundary = curriculum.get("boundary_band")
+    if isinstance(boundary, dict):
+        lines.extend([
+            "",
+            "## 境界帯カリキュラム",
+            "",
+            f"- batch_number: {boundary.get('batch_number', '-')}",
+            f"- attempts_in_batch: {boundary.get('attempts_in_batch', '-')}",
+            f"- successes_in_batch: {boundary.get('successes_in_batch', '-')}",
+            f"- last_batch_success_rate: {fmt(boundary.get('last_batch_success_rate'))}",
+            f"- last_adjustment: {boundary.get('last_adjustment', '-')}",
+            f"- harder_shifts: {boundary.get('harder_shifts', '-')}",
+            f"- easier_shifts: {boundary.get('easier_shifts', '-')}",
+            f"- hard endpoint: {format_condition(boundary.get('hard'))}",
+            f"- easy endpoint: {format_condition(boundary.get('easy'))}",
+        ])
+
+        by_level: dict[float, list[dict[str, Any]]] = defaultdict(list)
+        for row in episodes:
+            level = row.get("boundary_ease_level")
+            if level is not None:
+                by_level[float(level)].append(row)
+        if by_level:
+            lines.extend([
+                "",
+                "| ease level | episode数 | 成功 | 成功率 |",
+                "|---:|---:|---:|---:|",
+            ])
+            for level, rows in sorted(by_level.items()):
+                level_successes = sum(int(row.get("passed_gates", 0)) > 0 for row in rows)
+                lines.append(
+                    f"| {level:.2f} | {len(rows)} | {level_successes} | {100.0 * level_successes / len(rows):.1f}% |"
+                )
+
+    lines.extend([
+        "",
+        "## 成功境界",
+        "",
+        "同一 `spawn_z / initial_vx` 条件ごとに、成功した中で最小のspawn xを記録します。",
+        "",
+        "| spawn z (mm) | initial vx (mm/s) | 最小成功spawn x (mm) | episode | passed gates |",
+        "|---:|---:|---:|---:|---:|",
+    ])
     frontier = frontier_rows(episodes)
     if frontier:
         for z_mm, vx_mm_s, x_mm, episode, passed in frontier:
@@ -170,34 +231,54 @@ def main() -> int:
     else:
         lines.append("- none")
 
-    lines.extend([
-        "",
-        "## Episode一覧",
-        "",
-        "| ep | spawn x | spawn z | vx | steps | passed | collision | max x | final vx |",
-        "|---:|---:|---:|---:|---:|---:|---|---:|---:|",
-    ])
+    include_level = any(row.get("boundary_ease_level") is not None for row in episodes)
+    lines.extend(["", "## Episode一覧", ""])
+    if include_level:
+        lines.extend([
+            "| ep | ease | spawn x | spawn z | vx | steps | passed | collision | max x | final vx |",
+            "|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|",
+        ])
+    else:
+        lines.extend([
+            "| ep | spawn x | spawn z | vx | steps | passed | collision | max x | final vx |",
+            "|---:|---:|---:|---:|---:|---:|---|---:|---:|",
+        ])
+
     for row in episodes:
         reason = str(row.get("collision_reason") or "-") if row.get("collision") else "-"
-        lines.append(
-            "| {episode} | {spawn_x:.3f} | {spawn_z:.3f} | {speed:.1f} | {steps} | {passed} | {reason} | {max_x:.3f} | {final_vx:.3f} |".format(
-                episode=int(row["episode"]),
-                spawn_x=float(row["spawn_x_mm"]),
-                spawn_z=float(row["spawn_z_mm"]),
-                speed=float(row["initial_speed_mm_s"]),
-                steps=int(row["control_steps"]),
-                passed=int(row["passed_gates"]),
-                reason=reason,
-                max_x=float(row["max_x_mm"]),
-                final_vx=float(row["final_vx_mm_s"]),
+        common = {
+            "episode": int(row["episode"]),
+            "spawn_x": float(row["spawn_x_mm"]),
+            "spawn_z": float(row["spawn_z_mm"]),
+            "speed": float(row["initial_speed_mm_s"]),
+            "steps": int(row["control_steps"]),
+            "passed": int(row["passed_gates"]),
+            "reason": reason,
+            "max_x": float(row["max_x_mm"]),
+            "final_vx": float(row["final_vx_mm_s"]),
+        }
+        if include_level:
+            level = row.get("boundary_ease_level")
+            level_text = "-" if level is None else f"{float(level):.2f}"
+            lines.append(
+                "| {episode} | {level} | {spawn_x:.3f} | {spawn_z:.3f} | {speed:.1f} | {steps} | {passed} | {reason} | {max_x:.3f} | {final_vx:.3f} |".format(
+                    level=level_text,
+                    **common,
+                )
             )
-        )
+        else:
+            lines.append(
+                "| {episode} | {spawn_x:.3f} | {spawn_z:.3f} | {speed:.1f} | {steps} | {passed} | {reason} | {max_x:.3f} | {final_vx:.3f} |".format(
+                    **common,
+                )
+            )
 
     lines.extend([
         "",
         "## 判定用メモ",
         "",
         "- `training_gate_index` は0始まりです。0=第1gate、1=第2gateです。",
+        "- `boundary_ease_level` は0.00=難しい端、1.00=易しい端です。",
         "- `latest.csv` がepisode単位の機械可読データです。",
         "- checkpoint、trajectory、live telemetryなどの巨大/高頻度データは `artifacts/` に残し、Gitへは含めません。",
         "- このレポートは最新runで上書きします。過去runはGit履歴から比較できます。",
