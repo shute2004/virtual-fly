@@ -18,6 +18,9 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 
 uv sync
 
+printf '\n== Neural bridge compile preflight ==\n'
+cargo check -p vf-runner --bin neural_bridge
+
 printf '\n== Experimental neural boundary groups ==\n'
 uv run python scripts/data/make_embodiment_groups.py \
   --snapshot "$SNAPSHOT" \
