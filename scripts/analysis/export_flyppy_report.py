@@ -106,6 +106,7 @@ def main() -> int:
     elapsed = float(payload.get("elapsed_seconds", 0.0))
     episode_count = len(episodes)
     curriculum = dict(payload.get("curriculum", {}))
+    training_gate_index = int(curriculum.get("training_gate_index", 0))
     max_passed = max(int(row.get("passed_gates", 0)) for row in episodes)
     max_x = max(float(row.get("max_x_mm", float("-inf"))) for row in episodes)
 
@@ -119,12 +120,13 @@ def main() -> int:
         "## 集計",
         "",
         f"- backend: `{payload.get('backend', '-')}`",
+        f"- curriculum target gate: {training_gate_index + 1}",
         f"- episode: {payload.get('episode_start', episodes[0].get('episode'))}〜{payload.get('episode_end', episodes[-1].get('episode'))}（{episode_count} episode）",
         f"- elapsed: {elapsed:.3f} s（平均 {elapsed / episode_count:.3f} s/episode）",
         f"- checkpoint neural step: {payload.get('checkpoint_neural_step', '-')}",
-        f"- gate成功episode: {len(successes)}/{episode_count}（{100.0 * len(successes) / episode_count:.1f}%）",
-        f"- 2 gate以上通過: {len(second_gate)} episode",
-        f"- course完走: {len(finishes)} episode",
+        f"- target gate成功episode: {len(successes)}/{episode_count}（{100.0 * len(successes) / episode_count:.1f}%）",
+        f"- target gate後にさらに1 gate以上通過: {len(second_gate)} episode",
+        f"- stage内course完走: {len(finishes)} episode",
         f"- 1 episode最大通過gate数: {max_passed}",
         f"- run内最大x: {max_x:.3f} mm",
     ]
@@ -138,6 +140,7 @@ def main() -> int:
 
     lines.extend(["", "## 最終カリキュラム状態", ""])
     for key in (
+        "training_gate_index",
         "spawn_x_mm",
         "spawn_z_mm",
         "initial_speed_mm_s",
@@ -194,6 +197,7 @@ def main() -> int:
         "",
         "## 判定用メモ",
         "",
+        "- `training_gate_index` は0始まりです。0=第1gate、1=第2gateです。",
         "- `latest.csv` がepisode単位の機械可読データです。",
         "- checkpoint、trajectory、live telemetryなどの巨大/高頻度データは `artifacts/` に残し、Gitへは含めません。",
         "- このレポートは最新runで上書きします。過去runはGit履歴から比較できます。",
