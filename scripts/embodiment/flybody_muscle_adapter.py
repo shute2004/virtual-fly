@@ -16,7 +16,8 @@ Only steering effects with a reasonably constrained qualitative sign are active
 in this first boundary: b1/b2 increase stroke-amplitude drive, b3 opposes the
 basalar pair, and i1 reduces stroke-amplitude drive. Other identified muscles
 still maintain independent neuromuscular states but exert no guessed torque yet.
-All numerical gains are explicitly calibrated bootstrap parameters.
+All numerical gains and the mapping between DLM/DVM activation and the virtual
+hinge phase are explicitly calibrated bootstrap parameters.
 """
 
 from __future__ import annotations
@@ -42,6 +43,13 @@ STEERING_STROKE_EFFECT = {
     "i1": -0.12,
 }
 
+# Offline causal replay of the first full MaleCNS -> muscle trajectory reproduced
+# the original floor collision exactly. Reducing either aggregate power or direct
+# steering to 0.9 was the closest single-parameter recovery. These values are
+# therefore calibrated body-interface parameters, not biological measurements.
+CALIBRATED_POWER_GAIN = 0.90
+CALIBRATED_STEERING_GAIN = 0.90
+
 
 class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
     """Apply peripheral muscle state as physical torque on FlyBody wing DOFs."""
@@ -51,18 +59,22 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
         *args,
         virtual_power_kp: float = FLIGHT_WING_POSITION_KP,
         virtual_power_kd: float = 0.08,
-        steering_gain: float = 1.0,
+        power_gain: float = CALIBRATED_POWER_GAIN,
+        steering_gain: float = CALIBRATED_STEERING_GAIN,
+        swap_dlm_dvm_phase: bool = True,
         max_abs_torque: float = 2500.0,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
         if virtual_power_kp <= 0.0 or virtual_power_kd < 0.0:
             raise ValueError("virtual muscle gains are invalid")
-        if steering_gain < 0.0 or max_abs_torque <= 0.0:
-            raise ValueError("steering_gain/max_abs_torque are invalid")
+        if power_gain < 0.0 or steering_gain < 0.0 or max_abs_torque <= 0.0:
+            raise ValueError("power_gain/steering_gain/max_abs_torque are invalid")
         self.virtual_power_kp = float(virtual_power_kp)
         self.virtual_power_kd = float(virtual_power_kd)
+        self.power_gain = float(power_gain)
         self.steering_gain = float(steering_gain)
+        self.swap_dlm_dvm_phase = bool(swap_dlm_dvm_phase)
         self.max_abs_torque = float(max_abs_torque)
         self.last_wing_torque: dict[str, float] = {
             f"{side}:{axis}": 0.0
@@ -108,11 +120,23 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
         self, state: PeripheralSnapshot, side: str, phase: float
     ) -> float:
         # DLM and DVM are antagonistic asynchronous power-muscle groups. The
-        # phase assignment is a calibrated coordinate convention of the virtual
-        # hinge, not a neural decoder. No population firing rate is used.
-        if math.sin(phase) >= 0.0:
-            return state.power_dlm(side)
-        return state.power_dvm(side)
+        # mapping to this abstract hinge oscillator is a calibrated coordinate
+        # convention, not a measured neural phase. Causal replay of the recorded
+        # MaleCNS motor trajectory showed that swapping the original assignment
+        # restored stable flight while retaining both biological power-muscle
+        # groups, whereas deleting DVM entirely also recovered but would be an
+        # unjustified biological ablation. Keep the reversible phase convention
+        # explicit so legacy trajectories can still be replayed exactly.
+        positive_half_cycle = math.sin(phase) >= 0.0
+        if self.swap_dlm_dvm_phase:
+            activation = (
+                state.power_dvm(side) if positive_half_cycle else state.power_dlm(side)
+            )
+        else:
+            activation = (
+                state.power_dlm(side) if positive_half_cycle else state.power_dvm(side)
+            )
+        return self.power_gain * activation
 
     def step_muscles(
         self, state: PeripheralSnapshot, *, physics_steps: int = 1
