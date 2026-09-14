@@ -79,6 +79,7 @@ pub struct GpuRuntime {
     neuron_pipeline: wgpu::ComputePipeline,
     plasticity_pipeline: wgpu::ComputePipeline,
     trace_pipeline: wgpu::ComputePipeline,
+    reset_eligibility_pipeline: wgpu::ComputePipeline,
     current_is_b: bool,
 }
 
@@ -130,8 +131,6 @@ impl GpuRuntime {
         topology.extend_from_slice(&snapshot.edge_posts);
         topology.extend_from_slice(&snapshot.synapse_counts);
 
-        // Metadata contains only released neurotransmitter codes. No external
-        // reward/aversive role is packed into neuron metadata.
         let meta_cpu = snapshot
             .neurotransmitters
             .iter()
@@ -265,6 +264,7 @@ impl GpuRuntime {
         let neuron_pipeline = create_pipeline("neuron_step");
         let plasticity_pipeline = create_pipeline("plasticity_step");
         let trace_pipeline = create_pipeline("trace_step");
+        let reset_eligibility_pipeline = create_pipeline("reset_eligibility");
 
         let bind_group_ab = create_bind_group(
             &device,
@@ -311,6 +311,7 @@ impl GpuRuntime {
             neuron_pipeline,
             plasticity_pipeline,
             trace_pipeline,
+            reset_eligibility_pipeline,
             current_is_b: false,
         })
     }
@@ -370,6 +371,49 @@ impl GpuRuntime {
         }
         self.queue.submit([encoder.finish()]);
         self.current_is_b = !self.current_is_b;
+        Ok(())
+    }
+
+    /// Reset trial-local dynamics while keeping learned synaptic weights resident
+    /// on the GPU. This avoids a full ~25.6M-edge GPU -> CPU -> GPU round trip at
+    /// every Flyppy episode boundary.
+    pub fn reset_dynamics(&mut self) -> Result<()> {
+        let zero_neurons = vec![NeuronStateGpu::zeroed(); self.neuron_count];
+        let zero_spikes = vec![0u32; self.neuron_count];
+        self.external_cpu.fill(0.0);
+        self.queue.write_buffer(
+            &self.neuron_state_buffer,
+            0,
+            bytemuck::cast_slice(&zero_neurons),
+        );
+        self.queue.write_buffer(&self.spikes_a, 0, bytemuck::cast_slice(&zero_spikes));
+        self.queue.write_buffer(&self.spikes_b, 0, bytemuck::cast_slice(&zero_spikes));
+        self.queue.write_buffer(
+            &self.external_buffer,
+            0,
+            bytemuck::cast_slice(&self.external_cpu),
+        );
+
+        if self.edge_count > 0 {
+            let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
+            let (x, y) = dispatch_grid(self.edge_count as u32, max_groups)?;
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vf reset eligibility encoder"),
+                });
+            {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("vf reset eligibility"),
+                    timestamp_writes: None,
+                });
+                pass.set_bind_group(0, &self.bind_group_ab, &[]);
+                pass.set_pipeline(&self.reset_eligibility_pipeline);
+                pass.dispatch_workgroups(x, y, 1);
+            }
+            self.queue.submit([encoder.finish()]);
+        }
+        self.current_is_b = false;
         Ok(())
     }
 
@@ -445,11 +489,48 @@ impl GpuRuntime {
         })
     }
 
-    /// Read only the current spike vector, avoiding the ~edge-count-sized weight
-    /// transfer performed by `readback()`. Closed-loop body control should use
-    /// this path unless it explicitly needs synaptic state for analysis.
     pub fn read_spikes(&self) -> Result<Vec<u32>> {
         self.read_buffer::<u32>(self.current_spike_buffer(), self.neuron_count)
+    }
+
+    /// Read only explicitly requested neuron events. Closed-loop body control
+    /// normally asks for ~60 wing motor neurons instead of synchronously copying
+    /// all 166,700 activity codes from GPU to CPU every control step.
+    pub fn read_spikes_at(&self, indices: &[usize]) -> Result<Vec<u32>> {
+        if indices.is_empty() {
+            return Ok(Vec::new());
+        }
+        for &index in indices {
+            if index >= self.neuron_count {
+                bail!("spike readback index {index} is out of range");
+            }
+        }
+
+        let item_size = std::mem::size_of::<u32>() as u64;
+        let size = indices.len() as u64 * item_size;
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("vf selected spike staging"),
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let source = self.current_spike_buffer();
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vf selected spike readback encoder"),
+            });
+        for (output_index, &neuron_index) in indices.iter().enumerate() {
+            encoder.copy_buffer_to_buffer(
+                source,
+                neuron_index as u64 * item_size,
+                &staging,
+                output_index as u64 * item_size,
+                item_size,
+            );
+        }
+        self.queue.submit([encoder.finish()]);
+        self.map_staging::<u32>(&staging)
     }
 
     fn current_spike_buffer(&self) -> &wgpu::Buffer {
@@ -460,25 +541,7 @@ impl GpuRuntime {
         }
     }
 
-    fn read_buffer<T: Pod + Copy>(&self, source: &wgpu::Buffer, count: usize) -> Result<Vec<T>> {
-        if count == 0 {
-            return Ok(Vec::new());
-        }
-        let size = (count * std::mem::size_of::<T>()) as u64;
-        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("vf readback staging"),
-            size,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vf readback encoder"),
-            });
-        encoder.copy_buffer_to_buffer(source, 0, &staging, 0, size);
-        self.queue.submit([encoder.finish()]);
-
+    fn map_staging<T: Pod + Copy>(&self, staging: &wgpu::Buffer) -> Result<Vec<T>> {
         let slice = staging.slice(..);
         let (tx, rx) = mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -514,6 +577,27 @@ impl GpuRuntime {
         drop(view);
         staging.unmap();
         Ok(values)
+    }
+
+    fn read_buffer<T: Pod + Copy>(&self, source: &wgpu::Buffer, count: usize) -> Result<Vec<T>> {
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+        let size = (count * std::mem::size_of::<T>()) as u64;
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("vf readback staging"),
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vf readback encoder"),
+            });
+        encoder.copy_buffer_to_buffer(source, 0, &staging, 0, size);
+        self.queue.submit([encoder.finish()]);
+        self.map_staging::<T>(&staging)
     }
 }
 
