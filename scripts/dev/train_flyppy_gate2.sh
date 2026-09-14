@@ -18,6 +18,10 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   exit 2
 }
 
+# Avoid inheriting a staged-course selector while computing the canonical full
+# course coordinates below. The stage selector is exported only after migration.
+unset VF_COURSE_START_GATE || true
+
 # First entry into this stage keeps the learned CNS checkpoint but replaces only
 # episode-reset curriculum coordinates. Gate 2 is at x=15 mm for the default
 # deterministic course. We start 2.5 mm before it at its own vertical center.
