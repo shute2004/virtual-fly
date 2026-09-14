@@ -8,6 +8,7 @@ SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
+BODY_MOTOR_MAP="$SNAPSHOT/body-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPECTED_NEURAL_CALIBRATION_SCHEMA=2
@@ -22,28 +23,48 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 
 FULL_PREFLIGHT="${VF_FULL_PREFLIGHT:-0}"
 FLYPPY_ARGS=()
+REPORT_SUMMARY="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v1}/summary.json"
+EXPECT_OUTPUT_DIR=0
 for arg in "$@"; do
   if [ "$arg" = "--full-preflight" ]; then
     FULL_PREFLIGHT=1
-  else
-    FLYPPY_ARGS+=("$arg")
+    continue
   fi
+  if [ "$EXPECT_OUTPUT_DIR" = "1" ]; then
+    REPORT_SUMMARY="$arg/summary.json"
+    EXPECT_OUTPUT_DIR=0
+  elif [ "$arg" = "--output-dir" ]; then
+    EXPECT_OUTPUT_DIR=1
+  elif [[ "$arg" == --output-dir=* ]]; then
+    REPORT_SUMMARY="${arg#--output-dir=}/summary.json"
+  fi
+  FLYPPY_ARGS+=("$arg")
 done
+if [ "$EXPECT_OUTPUT_DIR" = "1" ]; then
+  echo '--output-dir requires a path' >&2
+  exit 2
+fi
 
 unset VF_MOTOR_CALIBRATION || true
 unset VF_NEURAL_SYNAPSE_SCALE || true
 
 uv sync >/dev/null
-uv run python -c 'import virtual_fly.training.curriculum'
+uv run python -c 'import virtual_fly.training.curriculum, virtual_fly.physics'
 
 cargo check -q -p vf-runner --bin neural_bridge
 uv run python -m py_compile \
   scripts/embodiment/train_flyppy_curriculum.py \
+  scripts/embodiment/flybody_biophysics.py \
   scripts/embodiment/flybody_runtime.py \
   scripts/embodiment/flybody_muscle_adapter.py \
+  scripts/embodiment/flybody_neuromuscular_adapter.py \
+  scripts/embodiment/whole_body_periphery.py \
+  scripts/embodiment/flyppy_course.py \
+  scripts/embodiment/flyppy_world.py \
   scripts/embodiment/evaluate_flyppy.py \
   scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_body_viewer.py \
+  scripts/data/prepare_body_motor_map.py \
   scripts/data/prepare_neural_viewer_graph.py \
   scripts/analysis/export_flyppy_report.py
 
@@ -59,6 +80,13 @@ if [ ! -f "$WING_MOTOR_MAP" ]; then
   uv run python scripts/data/prepare_wing_motor_map.py \
     --snapshot "$SNAPSHOT" \
     --output "$WING_MOTOR_MAP"
+fi
+
+if [ ! -f "$BODY_MOTOR_MAP" ]; then
+  printf '\n== Generate grounded whole-body motor-neuron map ==\n'
+  uv run python scripts/data/prepare_body_motor_map.py \
+    --snapshot "$SNAPSHOT" \
+    --output "$BODY_MOTOR_MAP"
 fi
 
 if [ ! -f "$RETINOTOPIC_MAP" ]; then
@@ -121,14 +149,12 @@ fi
 
 printf '\n== Flyppy persistent curriculum learning ==\n'
 printf 'live_viewer=separate-process command="bash scripts/dev/view_learning.sh"\n'
-# MaleCNS viewer telemetry remains sparse because selected-neuron readback is
-# observer-only overhead. FlyBody pose telemetry is emitted every control step
-# so the detached renderer can interpolate to a smooth 30 fps stream.
 uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
   --wing-motor-map "$WING_MOTOR_MAP" \
+  --body-motor-map "$BODY_MOTOR_MAP" \
   --viewer-graph "$VIEWER_GRAPH" \
   --telemetry-stride 10 \
   --body-telemetry-stride 1 \
@@ -136,6 +162,6 @@ uv run python scripts/embodiment/train_flyppy_curriculum.py \
   "${FLYPPY_ARGS[@]}"
 
 printf '\n== Export compact Git report ==\n'
-uv run python scripts/analysis/export_flyppy_report.py
+uv run python scripts/analysis/export_flyppy_report.py --summary "$REPORT_SUMMARY"
 printf 'report_md=reports/flyppy/latest.md\n'
 printf 'report_csv=reports/flyppy/latest.csv\n'
