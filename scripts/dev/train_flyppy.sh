@@ -8,8 +8,6 @@ SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
-PRIOR_TRAJECTORY="$ROOT/artifacts/experiments/flyppy-v1/trajectory.jsonl"
-MOTOR_CALIBRATION="$ROOT/artifacts/embodiment/flybody-muscle-calibration-v1.json"
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -17,6 +15,11 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   echo "MaleCNS snapshot not found at $SNAPSHOT; run scripts/dev/bootstrap.sh first" >&2
   exit 2
 }
+
+# A previous shell or diagnostic must never leak a trajectory-conditioned body
+# calibration into learning. The virtual-muscle seam is fixed independently of
+# Flyppy outcomes; crashes remain genuine neural/body outcomes and teaching events.
+unset VF_MOTOR_CALIBRATION || true
 
 uv sync
 
@@ -49,21 +52,12 @@ printf '\n== Wing neuromuscular boundary smoke test ==\n'
 uv run python scripts/embodiment/wing_muscle_boundary_smoke.py \
   --motor-map "$WING_MOTOR_MAP"
 
-# If a stride-1 trajectory from the immediately preceding run exists, use it only
-# to calibrate the static muscle->hinge seam. The search is body-only and runs
-# before the trajectory is replaced by the new episode. Selected parameters are
-# frozen for the entire subsequent process through VF_MOTOR_CALIBRATION.
-if [ -f "$PRIOR_TRAJECTORY" ]; then
-  printf '\n== Robust motor-interface calibration ==\n'
-  uv run python scripts/embodiment/calibrate_motor_interface.py \
-    --trajectory "$PRIOR_TRAJECTORY" \
-    --output "$MOTOR_CALIBRATION"
-  export VF_MOTOR_CALIBRATION="$MOTOR_CALIBRATION"
-
-  printf '\n== Calibrated prior-motor replay preflight ==\n'
-  uv run python scripts/embodiment/calibrated_motor_replay_smoke.py \
-    --trajectory "$PRIOR_TRAJECTORY"
-fi
+# Body-only invariant: before involving the CNS, the fixed bootstrap
+# muscle->hinge seam must possess at least one viable bilateral power operating
+# point and the legacy FlyBody reference must remain viable. This diagnostic does
+# not inspect any neural trajectory, reward, gate outcome, or learned state.
+printf '\n== Independent virtual-muscle flight envelope ==\n'
+uv run python scripts/embodiment/flybody_muscle_flight_envelope.py
 
 PYTHON_LAUNCHER=(uv run python)
 if [ "$(uname -s)" = "Darwin" ]; then
