@@ -45,7 +45,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-control-steps", type=int, default=1800)
     parser.add_argument("--physics-steps", type=int, default=10)
     parser.add_argument("--trajectory-stride", type=int, default=10)
-    parser.add_argument("--telemetry-stride", type=int, default=5)
+    parser.add_argument(
+        "--telemetry-stride",
+        type=int,
+        default=5,
+        help="MaleCNS/activity telemetry cadence in control steps",
+    )
+    parser.add_argument(
+        "--body-telemetry-stride",
+        type=int,
+        default=1,
+        help="FlyBody pose telemetry cadence; keep at 1 for smooth detached rendering",
+    )
     parser.add_argument("--checkpoint-every", type=int, default=4)
     parser.add_argument("--photoreceptor-current-gain", type=float, default=2.0)
     parser.add_argument("--reward-current", type=float, default=2.0)
@@ -152,8 +163,8 @@ def validate(args: argparse.Namespace, first_gate) -> None:
         raise SystemExit("episodes must be >= 1")
     if args.max_control_steps < 1 or args.physics_steps < 1:
         raise SystemExit("control/physics steps must be >= 1")
-    if args.trajectory_stride < 1 or args.telemetry_stride < 1:
-        raise SystemExit("trajectory/telemetry stride must be >= 1")
+    if args.trajectory_stride < 1 or args.telemetry_stride < 1 or args.body_telemetry_stride < 1:
+        raise SystemExit("trajectory/telemetry strides must be >= 1")
     if args.checkpoint_every < 1:
         raise SystemExit("checkpoint-every must be >= 1")
     if args.curriculum_start_x_mm >= first_gate.x_mm:
@@ -214,7 +225,11 @@ def main() -> int:
     vision = MaleCNSRetina(args.retinotopic_map, current_gain=args.photoreceptor_current_gain)
     control_dt_s = body.timestep * args.physics_steps
 
-    print(f"persistent_runtime=enabled episodes_per_process={args.episodes} telemetry_nodes={len(viewer_ids)}")
+    print(
+        f"persistent_runtime=enabled episodes_per_process={args.episodes} "
+        f"telemetry_nodes={len(viewer_ids)} neural_telemetry_stride={args.telemetry_stride} "
+        f"body_telemetry_stride={args.body_telemetry_stride}"
+    )
     print(
         "curriculum first_gate_x={:.3f} gate_center_z={:.3f} target=(x={:.3f},z={:.3f},vx={:.1f})".format(
             first_gate.x_mm,
@@ -281,8 +296,9 @@ def main() -> int:
                 step_count = 0
 
                 for control_step in range(args.max_control_steps):
-                    telemetry_sample = control_step % args.telemetry_stride == 0
-                    if telemetry_sample and viewer_ids:
+                    neural_telemetry_sample = control_step % args.telemetry_stride == 0
+                    body_telemetry_sample = control_step % args.body_telemetry_stride == 0
+                    if neural_telemetry_sample and viewer_ids:
                         read_body = tuple(dict.fromkeys((*periphery.body_ids, *viewer_ids)))
                     else:
                         read_body = periphery.body_ids
@@ -321,6 +337,8 @@ def main() -> int:
                     if event.finished:
                         finished = True
 
+                    next_gate = getattr(course, "absolute_next_gate_index", course.next_gate_index)
+
                     if control_step % args.trajectory_stride == 0 or reward or aversive or finished:
                         trajectory.write(
                             json.dumps(
@@ -333,7 +351,7 @@ def main() -> int:
                                     "vx_mm_s": float(final_velocity[0]),
                                     "vy_mm_s": float(final_velocity[1]),
                                     "vz_mm_s": float(final_velocity[2]),
-                                    "next_gate": course.next_gate_index,
+                                    "next_gate": next_gate,
                                     "motor_periphery": peripheral.compact_diagnostics(),
                                     "retinal_input": {
                                         "active_columns": retinal.active_columns,
@@ -352,7 +370,7 @@ def main() -> int:
                             ) + "\n"
                         )
 
-                    if telemetry_sample or reward or aversive or finished:
+                    if neural_telemetry_sample or reward or aversive or finished:
                         active_viewer = [body_id for body_id in viewer_ids if body_spikes.get(body_id, False)]
                         publisher.publish_neural(
                             episode=episode,
@@ -363,11 +381,13 @@ def main() -> int:
                             reward=reward,
                             aversive=aversive,
                         )
+
+                    if body_telemetry_sample or reward or aversive or finished:
                         publisher.publish_body(
                             episode=episode,
                             control_step=control_step,
                             sim=body.sim,
-                            next_gate=course.next_gate_index,
+                            next_gate=next_gate,
                             passed_gate=event.passed_gate,
                             collision=event.collision,
                             collision_reason=event.collision_reason,
