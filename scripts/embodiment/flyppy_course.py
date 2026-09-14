@@ -115,7 +115,8 @@ class FlyppyCourse:
 
     @property
     def next_gate_index(self) -> int:
-        return self._next_gate
+        """Absolute zero-based gate index exposed to logs/viewers."""
+        return self.absolute_next_gate_index
 
     @property
     def absolute_next_gate_index(self) -> int:
@@ -224,12 +225,14 @@ def _self_test() -> None:
         os.environ["VF_COURSE_START_GATE"] = "1"
         staged = FlyppyCourse(seed=7, gate_count=3)
         assert staged.source_gate_offset == 1
+        assert staged.next_gate_index == 1
         assert len(staged.gates) == 2
         target = staged.gates[0]
         assert math.isclose(target.x_mm, 15.0)
         assert not staged.update(target.x_mm - 1.0, target.center_z_mm).collision
         event = staged.update(target.x_mm + 0.1, target.center_z_mm)
         assert event.passed_gate and event.gate_index == 1
+        assert staged.next_gate_index == 2
         print("flyppy_course=PASS")
     finally:
         if previous is None:
