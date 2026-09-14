@@ -65,6 +65,20 @@ pub struct NeuralParams {
     pub modulator_scale: f32,
 }
 
+fn synapse_scale_override(default: f32) -> f32 {
+    let Ok(raw) = std::env::var("VF_NEURAL_SYNAPSE_SCALE") else {
+        return default;
+    };
+    let value = raw
+        .parse::<f32>()
+        .unwrap_or_else(|_| panic!("VF_NEURAL_SYNAPSE_SCALE must be a finite positive f32"));
+    assert!(
+        value.is_finite() && value > 0.0,
+        "VF_NEURAL_SYNAPSE_SCALE must be a finite positive f32"
+    );
+    value
+}
+
 impl Default for NeuralParams {
     fn default() -> Self {
         Self {
@@ -74,19 +88,16 @@ impl Default for NeuralParams {
             refractory_steps: 2,
             trace_decay: 0.95,
             eligibility_decay: 0.995,
-            // Calibrated bootstrap value. The first whole-CNS Flyppy run with
-            // 5e-4 produced >1M changed edges and saturation at weight_max after
-            // only eight aversive events. This lower value keeps the same local
-            // rule while reducing per-event updates by a conservative factor.
             learning_rate: 0.00001,
-            // Numerical safety rail, not a biological measurement.
             weight_max: 1_000.0,
             modulator_decay: 0.98,
-            synapse_scale: 0.02,
-            // Calibrated bootstrap value. The first whole-CNS Flyppy run with
-            // 0.005 produced modulation above 130 in the absence of visual
-            // input. Scaling by 1/100 places the observed peak near order unity
-            // without changing which released dopaminergic connections carry it.
+            // 0.02 is retained only as the historical bootstrap fallback. The
+            // Flyppy launcher now calibrates this task-independently from a
+            // one-pulse -> zero-input whole-CNS stability probe and exports the
+            // selected value through VF_NEURAL_SYNAPSE_SCALE before constructing
+            // any runtime. This changes only the numerical connectome scale; it
+            // does not use reward, behavior, or a target action.
+            synapse_scale: synapse_scale_override(0.02),
             modulator_scale: 0.00005,
         }
     }
