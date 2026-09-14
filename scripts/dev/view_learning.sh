@@ -20,7 +20,9 @@ python3 -m http.server "$PORT" --bind 127.0.0.1 >"$LOG" 2>&1 &
 SERVER_PID=$!
 BODY_PID=""
 cleanup() {
-  if [ -n "$BODY_PID" ]; then kill "$BODY_PID" >/dev/null 2>&1 || true; fi
+  if [ -n "$BODY_PID" ]; then
+    kill "$BODY_PID" >/dev/null 2>&1 || true
+  fi
   kill "$SERVER_PID" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
@@ -34,11 +36,8 @@ fi
 case "$(uname -s)" in
   Darwin)
     open "$URL"
-    if command -v mjpython >/dev/null 2>&1; then
-      uv run mjpython scripts/embodiment/live_body_viewer.py --experiment "$EXPERIMENT" &
-    else
-      echo 'mjpython is required for the detached MuJoCo body window on macOS' >&2
-    fi
+    uv run mjpython scripts/embodiment/live_body_viewer.py --experiment "$EXPERIMENT" &
+    BODY_PID=$!
     ;;
   Linux)
     if command -v xdg-open >/dev/null 2>&1; then
@@ -47,21 +46,20 @@ case "$(uname -s)" in
       echo "open in a browser: $URL"
     fi
     uv run python scripts/embodiment/live_body_viewer.py --experiment "$EXPERIMENT" &
+    BODY_PID=$!
     ;;
   *)
     echo "open in a browser: $URL"
     uv run python scripts/embodiment/live_body_viewer.py --experiment "$EXPERIMENT" &
+    BODY_PID=$!
     ;;
 esac
-BODY_PID=$!
 
 printf 'neural viewer: %s\n' "$URL"
 printf 'body viewer:   detached MuJoCo observer\n'
 printf 'experiment:    %s\n' "$EXPERIMENT"
-printf 'Closing either viewer does not stop training. Ctrl-C here closes observers only.\n'
+printf 'Viewer processes are read-only. Training continues if either window is closed.\n'
+printf 'Press Ctrl-C in this terminal to close the remaining observer processes.\n'
 
-if [ -n "$BODY_PID" ]; then
-  wait "$BODY_PID" || true
-else
-  wait "$SERVER_PID"
-fi
+# Keep the HTTP server alive even if the independent MuJoCo window is closed.
+wait "$SERVER_PID"
