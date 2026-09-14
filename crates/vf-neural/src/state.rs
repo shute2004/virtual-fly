@@ -9,6 +9,9 @@ use anyhow::{Result, bail};
 #[derive(Debug, Clone)]
 pub struct NeuralState {
     pub membrane: Vec<f32>,
+    /// Activity-event code per neuron: 0=silent, 1=positive/depolarizing
+    /// deviation, 2=negative/hyperpolarizing deviation. The runtime still
+    /// exposes only code 1 as a motor-neuron spike to the body boundary.
     pub spikes: Vec<u32>,
     pub refractory: Vec<u32>,
     pub activity_trace: Vec<f32>,
@@ -43,9 +46,11 @@ impl NeuralState {
             .iter()
             .copied()
             .enumerate()
-            .find(|(_, value)| *value > 1)
+            .find(|(_, value)| *value > 2)
         {
-            bail!("state spike at neuron {index} is {value}; expected 0 or 1");
+            bail!(
+                "state activity event at neuron {index} is {value}; expected 0, 1, or 2"
+            );
         }
         if self
             .membrane
@@ -84,9 +89,9 @@ mod tests {
     fn dynamics_reset_preserves_only_weights() {
         let mut state = NeuralState {
             membrane: vec![1.0, -2.0],
-            spikes: vec![1, 0],
+            spikes: vec![1, 2],
             refractory: vec![2, 3],
-            activity_trace: vec![0.4, 0.5],
+            activity_trace: vec![0.4, -0.5],
             modulation: vec![-0.6, 0.7],
             weights: vec![3.0, 4.0, 5.0],
             eligibility: vec![0.8, -0.9, 1.0],
