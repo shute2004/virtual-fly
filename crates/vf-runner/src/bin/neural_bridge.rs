@@ -205,12 +205,7 @@ impl Runtime {
             Runtime::Gpu(runtime) => runtime.reset_dynamics(),
             Runtime::Cpu(runtime) => {
                 let mut state = runtime.state();
-                state.membrane.fill(0.0);
-                state.spikes.fill(0);
-                state.refractory.fill(0);
-                state.activity_trace.fill(0.0);
-                state.modulation.fill(0.0);
-                state.eligibility.fill(0.0);
+                state.reset_dynamics_preserving_weights();
                 runtime.load_state(&state)
             }
         }
