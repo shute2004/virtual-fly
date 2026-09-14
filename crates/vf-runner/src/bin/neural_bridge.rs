@@ -8,7 +8,10 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
-use vf_neural::{ConnectomeSnapshot, CpuRuntime, NeuralParams, NeuralState, Stimulus};
+use vf_neural::{
+    ConnectomeSnapshot, CpuRuntime, NeuralParams, NeuralState, Stimulus,
+    model::ACTIVITY_DEPOLARIZING,
+};
 use vf_runner::checkpoint::{load_checkpoint, save_checkpoint};
 
 #[derive(Debug, Parser)]
@@ -380,10 +383,17 @@ fn main() -> Result<()> {
                                     for name in read {
                                         match groups.get(&name) {
                                             Some(group) => {
+                                                // Only a positive/depolarizing event is
+                                                // exposed as a conventional spike. A
+                                                // hyperpolarizing graded deviation is
+                                                // internal neural state, not a motor event.
                                                 let count = group
                                                     .indices
                                                     .iter()
-                                                    .filter(|&&index| spikes[index] != 0)
+                                                    .filter(|&&index| {
+                                                        spikes[index]
+                                                            == ACTIVITY_DEPOLARIZING as u32
+                                                    })
                                                     .count();
                                                 readout.insert(
                                                     name,
@@ -409,7 +419,8 @@ fn main() -> Result<()> {
                                             match snapshot.index_of_body_id(body_id) {
                                                 Some(index) => body_readout.push(BodyReadout {
                                                     body_id,
-                                                    spike: spikes[index] != 0,
+                                                    spike: spikes[index]
+                                                        == ACTIVITY_DEPOLARIZING as u32,
                                                 }),
                                                 None => {
                                                     read_error = Some(anyhow::anyhow!(
