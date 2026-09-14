@@ -3,7 +3,9 @@
 from .spec import (
     CANONICAL_FLY,
     FLYBODY_REFERENCE,
+    FLYBODY_V3,
     FLYPPY_GEOMETRY,
+    FLYPPY_GEOMETRY_V3,
     FlyBodyPublishedReference,
     FlyPhysicalSpec,
     FlyppyGeometrySpec,
@@ -12,7 +14,9 @@ from .spec import (
 __all__ = [
     "CANONICAL_FLY",
     "FLYBODY_REFERENCE",
+    "FLYBODY_V3",
     "FLYPPY_GEOMETRY",
+    "FLYPPY_GEOMETRY_V3",
     "FlyBodyPublishedReference",
     "FlyPhysicalSpec",
     "FlyppyGeometrySpec",
