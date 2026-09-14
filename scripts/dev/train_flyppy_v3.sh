@@ -8,10 +8,13 @@ EXPERIMENT="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v3}"
 CHECKPOINT="$EXPERIMENT/checkpoint/manifest.json"
 
 # v3 is not allowed to start neural learning until the actual source-equivalent
-# virtual-muscle body demonstrates both altitude sustain and positive altitude gain.
+# body has both a physically valid course clearance and an operating point that
+# sustains altitude and gains altitude.
 if [ "${VF_SKIP_V3_FLIGHT_PREFLIGHT:-0}" != "1" ]; then
   printf '== Flyppy v3 measured wing data ==\n'
   uv run python scripts/dev/prefetch_flybody_flight_data.py
+  printf '\n== Flyppy v3 physical scale / gate clearance ==\n'
+  uv run python scripts/embodiment/flybody_v3_physical_spec_smoke.py
   printf '\n== Flyppy v3 vertical flight capability ==\n'
   uv run python scripts/embodiment/flybody_v3_vertical_flight_capability.py
 fi
