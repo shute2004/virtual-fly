@@ -33,9 +33,10 @@ printf 'motor path: individual released wing MN -> WingMusclePeriphery -> FlyBod
 
 run "Embodiment Python dependencies" uv sync
 run "Packaged curriculum import" uv run python -c 'import virtual_fly.training.curriculum'
+run "Curriculum unit tests" uv run python -m unittest discover -s tests -p 'test_*.py'
 run "FlyBody asset prefetch" uv run python scripts/dev/prefetch_flybody_assets.py
 run "Python syntax preflight" uv run python -m compileall -q \
-  src/virtual_fly scripts/embodiment scripts/data scripts/analysis scripts/dev/prefetch_flybody_assets.py
+  src/virtual_fly tests scripts/embodiment scripts/data scripts/analysis scripts/dev/prefetch_flybody_assets.py
 run "MaleCNS embodiment group discovery" uv run python scripts/data/make_embodiment_groups.py --snapshot "$SNAPSHOT" --output "$GROUPS"
 run "MaleCNS retinotopic R1-R6 map" uv run python scripts/data/prepare_retinotopic_vision.py --snapshot "$SNAPSHOT" --output "$RETINOTOPIC_MAP" --download
 run "Individual wing motor-neuron map" uv run python scripts/data/prepare_wing_motor_map.py --snapshot "$SNAPSHOT" --output "$WING_MOTOR_MAP"
