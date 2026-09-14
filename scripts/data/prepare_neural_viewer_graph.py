@@ -4,7 +4,12 @@
 The full released graph has ~25.6M edges. The observer therefore keeps the
 reinforcement and wing-motor boundary plus a bounded set of strongly connected
 CNS neurons. This graph is viewer-only and is never fed back into learning.
-Positions are deterministic schematic 3D coordinates, not anatomical morphology.
+
+Coordinates are deliberately schematic. They preserve released body IDs,
+connections, side labels and broad annotation categories, but they are not
+morphology/skeleton coordinates. The layout is shaped as bilateral brain lobes,
+optic lobes and a ventral nerve cord so live activity is easier to interpret
+than the previous rectangular hash bands.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -55,18 +61,82 @@ def clean_text(value: object) -> str:
     return str(value)
 
 
-def schematic_position(body_id: int, side: str, superclass: str) -> list[float]:
-    side_norm = side.strip().upper()
-    x_base = -4.0 if side_norm == "L" else 4.0 if side_norm == "R" else 0.0
-    band = (
-        int.from_bytes(hashlib.blake2b(superclass.encode(), digest_size=2).digest(), "little")
-        % 9
-    ) - 4
+def classify_region(superclass: str, neuron_type: str, nerve: str) -> str:
+    text = f"{superclass} {neuron_type} {nerve}".lower()
+    if any(token in text for token in ("optic", "visual", "photoreceptor")):
+        return "optic_lobe"
+    if any(
+        token in text
+        for token in (
+            "descending",
+            "ascending",
+            "motor",
+            "sensory",
+            "nerve",
+            "vnc",
+            "ventral",
+        )
+    ):
+        return "ventral_nerve_cord"
+    return "central_brain"
+
+
+def ellipsoid_point(
+    body_id: int,
+    *,
+    salt: str,
+    center: tuple[float, float, float],
+    radii: tuple[float, float, float],
+) -> list[float]:
+    # Deterministic approximately uniform volume sample inside an ellipsoid.
+    azimuth = 2.0 * math.pi * stable_unit(body_id, f"{salt}:azimuth")
+    cos_polar = 2.0 * stable_unit(body_id, f"{salt}:polar") - 1.0
+    sin_polar = math.sqrt(max(0.0, 1.0 - cos_polar * cos_polar))
+    radius = stable_unit(body_id, f"{salt}:radius") ** (1.0 / 3.0)
+    unit = (
+        radius * sin_polar * math.cos(azimuth),
+        radius * cos_polar,
+        radius * sin_polar * math.sin(azimuth),
+    )
     return [
-        x_base + (stable_unit(body_id, "x") - 0.5) * 4.0,
-        band * 1.25 + (stable_unit(body_id, "y") - 0.5) * 1.1,
-        (stable_unit(body_id, "z") - 0.5) * 9.0,
+        center[0] + radii[0] * unit[0],
+        center[1] + radii[1] * unit[1],
+        center[2] + radii[2] * unit[2],
     ]
+
+
+def schematic_position(
+    body_id: int,
+    side: str,
+    superclass: str,
+    neuron_type: str,
+    nerve: str,
+) -> tuple[list[float], str]:
+    region = classify_region(superclass, neuron_type, nerve)
+    side_norm = side.strip().upper()
+    if side_norm == "L":
+        sign = -1.0
+    elif side_norm == "R":
+        sign = 1.0
+    else:
+        sign = -1.0 if stable_unit(body_id, "side") < 0.5 else 1.0
+
+    if region == "optic_lobe":
+        center = (sign * 4.5, 1.2, 0.0)
+        radii = (1.65, 2.45, 2.05)
+    elif region == "ventral_nerve_cord":
+        center = (sign * 0.75, -5.2, 0.0)
+        radii = (1.15, 4.2, 1.35)
+    else:
+        center = (sign * 1.55, 1.35, 0.0)
+        radii = (2.7, 3.0, 2.55)
+
+    return ellipsoid_point(
+        body_id,
+        salt=region,
+        center=center,
+        radii=radii,
+    ), region
 
 
 def main() -> int:
@@ -121,6 +191,19 @@ def main() -> int:
         side = "" if row is None else clean_text(row.get("side", ""))
         superclass = "" if row is None else clean_text(row.get("superclass", ""))
         neuron_type = "" if row is None else clean_text(row.get("type", ""))
+        nerve = ""
+        if row is not None:
+            nerve = " ".join(
+                clean_text(row.get(name, ""))
+                for name in ("nerve", "entryNerve", "exitNerve")
+            ).strip()
+        position, region = schematic_position(
+            body_id,
+            side,
+            superclass,
+            neuron_type,
+            nerve,
+        )
         dense = index_by_body.get(body_id)
         nodes.append(
             {
@@ -128,8 +211,9 @@ def main() -> int:
                 "side": side,
                 "superclass": superclass,
                 "type": neuron_type,
+                "region": region,
                 "nt": int(nt[dense]) if dense is not None else 0,
-                "position": schematic_position(body_id, side, superclass),
+                "position": position,
             }
         )
 
@@ -140,8 +224,8 @@ def main() -> int:
         if pre in selected_lookup and post in selected_lookup
     ]
     payload = {
-        "schema_version": 2,
-        "layout": "deterministic-schematic-not-anatomical",
+        "schema_version": 3,
+        "layout": "schematic-bilateral-brain-optic-lobes-vnc-not-anatomical",
         "source_dataset": manifest.get("dataset"),
         "viewer_only": True,
         "nodes": nodes,
