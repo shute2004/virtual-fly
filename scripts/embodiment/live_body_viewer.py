@@ -103,6 +103,23 @@ def read_camera_state(path: Path, previous: dict[str, float]) -> dict[str, float
     }
 
 
+def infer_training_gate_index(experiment: Path) -> int:
+    """Mirror the trainer's currently selected course stage in the observer.
+
+    The viewer is a separate process, so it does not inherit the trainer's
+    ``VF_COURSE_START_GATE`` environment variable. Read the persisted curriculum
+    state instead so the rendered gates match the world used for learning.
+    """
+
+    state_path = experiment / "curriculum-state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        gate_index = int(state.get("training_gate_index", 0))
+    except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
+        gate_index = 0
+    return max(0, gate_index)
+
+
 def main() -> int:
     args = parse_args()
     if args.poll_hz <= 0.0:
@@ -110,6 +127,11 @@ def main() -> int:
     if args.width < 160 or args.height < 120:
         raise SystemExit("render size is too small")
 
+    training_gate_index = infer_training_gate_index(args.experiment)
+    # FlyppyCourse currently takes this curriculum stage from the environment.
+    # Set it explicitly in the detached observer so its rendered world matches
+    # the training process instead of always showing gate 1.
+    os.environ["VF_COURSE_START_GATE"] = str(training_gate_index)
     course = FlyppyCourse(seed=args.seed, gate_count=args.gate_count)
     world = FlyppyWorld(course)
     body = FlyBodyMuscleAdapter(
@@ -149,6 +171,7 @@ def main() -> int:
     print(f"body_viewer_source={live_path}")
     print(f"body_frame_output={frame_path}")
     print(f"body_camera_input={camera_path}")
+    print(f"body_viewer_training_gate_index={training_gate_index}")
     print("body_viewer=waiting-for-telemetry")
 
     try:
