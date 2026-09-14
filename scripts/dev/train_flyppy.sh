@@ -30,14 +30,13 @@ done
 
 unset VF_MOTOR_CALIBRATION || true
 unset VF_NEURAL_SYNAPSE_SCALE || true
+unset VF_CURRICULUM_SPAWN_Z || true
 
 uv sync >/dev/null
 
-# The bridge compile is cheap and catches protocol changes such as episode-state
-# reset before launching a multi-minute training job.
+# Cheap compile guard only. Ordinary training reuses validated static artifacts.
 cargo check -q -p vf-runner --bin neural_bridge
 
-# Static/generated artifacts are cached. Rebuild only when absent.
 if [ ! -f "$GROUPS" ]; then
   printf '\n== Generate neural boundary groups ==\n'
   uv run python scripts/data/make_embodiment_groups.py \
@@ -107,8 +106,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
   done
 fi
 
-printf '\n== Flyppy learning ==\n'
-exec "${PYTHON_LAUNCHER[@]}" scripts/embodiment/flyppy_closed_loop.py \
+printf '\n== Flyppy persistent curriculum learning ==\n'
+exec "${PYTHON_LAUNCHER[@]}" scripts/embodiment/train_flyppy_curriculum.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
