@@ -36,10 +36,9 @@ unset VF_CURRICULUM_SPAWN_Z || true
 
 uv sync >/dev/null
 
-# Cheap guards only. Ordinary training reuses validated static artifacts.
 cargo check -q -p vf-runner --bin neural_bridge
 uv run python -m py_compile \
-  scripts/embodiment/train_flyppy_curriculum.py \
+  scripts/embodiment/train_flyppy_persistent.py \
   scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_body_viewer.py
 
@@ -112,8 +111,8 @@ if [ "$FULL_PREFLIGHT" = "1" ]; then
 fi
 
 printf '\n== Flyppy persistent curriculum learning ==\n'
-printf 'live_viewer=separate-process command="bash scripts/dev/view_flyppy.sh"\n'
-exec uv run python scripts/embodiment/train_flyppy_curriculum.py \
+printf 'live_viewer=separate-process command="bash scripts/dev/view_learning.sh"\n'
+exec uv run python scripts/embodiment/train_flyppy_persistent.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
