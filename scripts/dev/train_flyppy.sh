@@ -9,6 +9,7 @@ GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
+VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPECTED_NEURAL_CALIBRATION_SCHEMA=2
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
@@ -30,12 +31,17 @@ done
 
 unset VF_MOTOR_CALIBRATION || true
 unset VF_NEURAL_SYNAPSE_SCALE || true
+unset VF_CURRICULUM_SPAWN_X || true
 unset VF_CURRICULUM_SPAWN_Z || true
 
 uv sync >/dev/null
 
-# Cheap compile guard only. Ordinary training reuses validated static artifacts.
+# Cheap guards only. Ordinary training reuses validated static artifacts.
 cargo check -q -p vf-runner --bin neural_bridge
+uv run python -m py_compile \
+  scripts/embodiment/train_flyppy_curriculum.py \
+  scripts/embodiment/live_telemetry.py \
+  scripts/embodiment/live_body_viewer.py
 
 if [ ! -f "$GROUPS" ]; then
   printf '\n== Generate neural boundary groups ==\n'
@@ -57,6 +63,15 @@ if [ ! -f "$RETINOTOPIC_MAP" ]; then
     --snapshot "$SNAPSHOT" \
     --output "$RETINOTOPIC_MAP" \
     --download
+fi
+
+if [ ! -f "$VIEWER_GRAPH" ]; then
+  printf '\n== Prepare live neural viewer graph ==\n'
+  uv run python scripts/data/prepare_neural_viewer_graph.py \
+    --snapshot "$SNAPSHOT" \
+    --groups "$GROUPS" \
+    --motor-map "$WING_MOTOR_MAP" \
+    --output "$VIEWER_GRAPH"
 fi
 
 CALIBRATION_SCHEMA=0
@@ -96,20 +111,12 @@ if [ "$FULL_PREFLIGHT" = "1" ]; then
   uv run python scripts/embodiment/flybody_muscle_flight_envelope.py
 fi
 
-PYTHON_LAUNCHER=(uv run python)
-if [ "$(uname -s)" = "Darwin" ]; then
-  for arg in "${FLYPPY_ARGS[@]}"; do
-    if [ "$arg" = "--render" ]; then
-      PYTHON_LAUNCHER=(uv run mjpython)
-      break
-    fi
-  done
-fi
-
 printf '\n== Flyppy persistent curriculum learning ==\n'
-exec "${PYTHON_LAUNCHER[@]}" scripts/embodiment/train_flyppy_curriculum.py \
+printf 'live_viewer=separate-process command="bash scripts/dev/view_flyppy.sh"\n'
+exec uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
   --wing-motor-map "$WING_MOTOR_MAP" \
+  --viewer-graph "$VIEWER_GRAPH" \
   "${FLYPPY_ARGS[@]}"
