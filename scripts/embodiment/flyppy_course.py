@@ -45,6 +45,7 @@ class CourseEvent:
     collision: bool = False
     finished: bool = False
     gate_index: int | None = None
+    collision_reason: str | None = None
 
 
 class FlyppyCourse:
@@ -124,9 +125,20 @@ class FlyppyCourse:
         if body_radius_mm <= 0:
             raise ValueError("body_radius_mm must be > 0")
 
-        if z_mm - body_radius_mm <= self.floor_z_mm or z_mm + body_radius_mm >= self.ceiling_z_mm:
+        if z_mm - body_radius_mm <= self.floor_z_mm:
             self._last_x_mm = x_mm
-            return CourseEvent(collision=True, gate_index=self._next_gate if not self.finished else None)
+            return CourseEvent(
+                collision=True,
+                gate_index=self._next_gate if not self.finished else None,
+                collision_reason="floor",
+            )
+        if z_mm + body_radius_mm >= self.ceiling_z_mm:
+            self._last_x_mm = x_mm
+            return CourseEvent(
+                collision=True,
+                gate_index=self._next_gate if not self.finished else None,
+                collision_reason="ceiling",
+            )
 
         if self.finished:
             self._last_x_mm = x_mm
@@ -140,13 +152,21 @@ class FlyppyCourse:
         )
         if horizontal_overlap and not vertical_clear:
             self._last_x_mm = x_mm
-            return CourseEvent(collision=True, gate_index=self._next_gate)
+            return CourseEvent(
+                collision=True,
+                gate_index=self._next_gate,
+                collision_reason="gate",
+            )
 
         crossed_plane = self._last_x_mm < gate.x_mm <= x_mm
         if crossed_plane:
             if not vertical_clear:
                 self._last_x_mm = x_mm
-                return CourseEvent(collision=True, gate_index=self._next_gate)
+                return CourseEvent(
+                    collision=True,
+                    gate_index=self._next_gate,
+                    collision_reason="gate",
+                )
             passed = self._next_gate
             self._next_gate += 1
             self._last_x_mm = x_mm
@@ -175,7 +195,7 @@ def _self_test() -> None:
     gate = bad.gates[0]
     assert not bad.update(gate.x_mm - 1.0, gate.center_z_mm).collision
     event = bad.update(gate.x_mm, bad.floor_z_mm + 0.1)
-    assert event.collision
+    assert event.collision and event.collision_reason == "floor"
     print("flyppy_course=PASS")
 
 
