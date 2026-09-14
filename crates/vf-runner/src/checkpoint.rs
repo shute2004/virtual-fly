@@ -24,10 +24,12 @@ pub struct CheckpointManifest {
     pub eligibility_file: String,
 }
 
-// v2 changes the meaning of `modulation`: it is now derived from released
-// dopaminergic presynaptic neurons/connectivity only. Old v1 checkpoints may
-// contain externally signed +1/-1 modulator-role state and must not be resumed.
-const SCHEMA_VERSION: u32 = 2;
+// v2 changed modulation to released-dopamine-derived state only. v3 changes
+// the meaning of `spikes`: 0=silent, 1=positive/depolarizing activity event,
+// 2=negative/hyperpolarizing activity deviation. The latter is required for
+// graded inhibitory circuits such as R1-R6 -> lamina and therefore old dynamic
+// state must not be resumed under the new runtime semantics.
+const SCHEMA_VERSION: u32 = 3;
 
 pub fn save_checkpoint(
     directory: impl AsRef<Path>,
@@ -103,7 +105,7 @@ pub fn load_checkpoint(
 
     if manifest.schema_version != SCHEMA_VERSION {
         bail!(
-            "unsupported checkpoint schema {}; expected {} (v1 used externally signed modulator roles and is intentionally incompatible)",
+            "unsupported checkpoint schema {}; expected {} (v1 used externally signed modulator roles; v2 used one-sided 0/1 activity events; both are intentionally incompatible)",
             manifest.schema_version,
             SCHEMA_VERSION
         );
@@ -203,9 +205,9 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let state = NeuralState {
             membrane: vec![0.1, -0.2, 0.3],
-            spikes: vec![1, 0, 1],
+            spikes: vec![1, 2, 0],
             refractory: vec![2, 0, 1],
-            activity_trace: vec![0.4, 0.5, 0.6],
+            activity_trace: vec![0.4, -0.5, 0.6],
             modulation: vec![0.0, 0.7, 0.8],
             weights: vec![1.1, 2.2],
             eligibility: vec![0.9, -0.4],
@@ -213,6 +215,7 @@ mod tests {
 
         let saved = save_checkpoint(&root, "synthetic:test", 42, &state).unwrap();
         assert_eq!(saved.step, 42);
+        assert_eq!(saved.schema_version, 3);
         let (loaded_manifest, loaded) =
             load_checkpoint(&root, "synthetic:test", 3, 2).unwrap();
         assert_eq!(loaded_manifest.step, 42);
