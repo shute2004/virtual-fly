@@ -42,6 +42,31 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def read_checkpoint_arrays(checkpoint: Path) -> tuple[np.ndarray, np.ndarray]:
+    manifest = json.loads((checkpoint / "manifest.json").read_text(encoding="utf-8"))
+    traces = np.memmap(
+        checkpoint / str(manifest["activity_trace_file"]),
+        dtype="<f4",
+        mode="r",
+    )
+    events = np.memmap(
+        checkpoint / str(manifest["spikes_file"]), dtype="<u4", mode="r"
+    )
+    return np.asarray(traces), np.asarray(events)
+
+
+def snapshot_indices_for_body_ids(snapshot: Path, body_ids: list[int]) -> np.ndarray:
+    snapshot_body_ids = np.fromfile(snapshot / "body_ids.u64le", dtype="<u8")
+    index_by_body = {int(body_id): index for index, body_id in enumerate(snapshot_body_ids)}
+    try:
+        indices = np.asarray([index_by_body[int(body_id)] for body_id in body_ids], dtype=np.int64)
+    except KeyError as exc:
+        raise RuntimeError(f"R1-R6 body ID missing from snapshot: {exc.args[0]}") from exc
+    if len(indices) != len(np.unique(indices)):
+        raise RuntimeError("stimulated R1-R6 body IDs do not map one-to-one to snapshot indices")
+    return indices
+
+
 def main() -> int:
     args = parse_args()
     if args.propagation_steps < 2:
@@ -73,7 +98,7 @@ def main() -> int:
         raise RuntimeError("fewer active R1-R6 neurons than active optic columns")
 
     # With an unchanged static image, the second sample should be locally adapted
-    # rather than repeating the absolute luminance as DC current.
+    # rather than repeating absolute luminance as DC current.
     adapted_drive = retina.encode(body.sim, body.fly)
     if adapted_drive.active_photoreceptors != 0 or adapted_drive.max_current != 0.0:
         raise RuntimeError(
@@ -82,11 +107,14 @@ def main() -> int:
             f"max_current={adapted_drive.max_current}"
         )
 
-    # Exercise the exact Flyppy body-ID protocol. One physical light-on pulse is
-    # followed by locally adapted static samples. Plasticity is disabled: this
-    # test asks whether a transient can enter and propagate through the connectome.
+    stimulated_indices = snapshot_indices_for_body_ids(args.snapshot, body_ids)
+
+    # Exercise the exact Flyppy body-ID protocol. Save state immediately after the
+    # physical light-on pulse and again after the propagation horizon. Propagation
+    # is defined only as activity outside the entire directly stimulated R1-R6 set.
     with tempfile.TemporaryDirectory(prefix="virtual-fly-retina-smoke-") as temp_dir:
-        checkpoint = Path(temp_dir) / "checkpoint"
+        initial_checkpoint = Path(temp_dir) / "initial"
+        final_checkpoint = Path(temp_dir) / "final"
         with NeuralBridgeClient(
             snapshot=args.snapshot,
             groups=args.groups,
@@ -98,45 +126,63 @@ def main() -> int:
                 read=(),
                 plasticity=False,
             )
+            brain.save_checkpoint(initial_checkpoint)
             for _ in range(args.propagation_steps - 1):
                 static_drive = retina.encode(body.sim, body.fly)
+                if static_drive.body_currents:
+                    raise RuntimeError(
+                        "unchanged static retinal sample unexpectedly produced current "
+                        "during propagation smoke test"
+                    )
                 brain.step(
-                    stimulate_body=static_drive.body_currents,
+                    stimulate_body=(),
                     read=(),
                     plasticity=False,
                 )
-            brain.save_checkpoint(checkpoint)
+            brain.save_checkpoint(final_checkpoint)
 
-        manifest = json.loads(
-            (checkpoint / "manifest.json").read_text(encoding="utf-8")
-        )
-        traces = np.memmap(
-            checkpoint / str(manifest["activity_trace_file"]),
-            dtype="<f4",
-            mode="r",
-        )
-        events = np.memmap(
-            checkpoint / str(manifest["spikes_file"]), dtype="<u4", mode="r"
-        )
-        nonzero_trace = int(np.count_nonzero(np.abs(np.asarray(traces)) > 1e-12))
-        positive_events = int(np.count_nonzero(np.asarray(events) == 1))
-        hyperpolarizing_events = int(np.count_nonzero(np.asarray(events) == 2))
+        initial_traces, initial_events = read_checkpoint_arrays(initial_checkpoint)
+        final_traces, final_events = read_checkpoint_arrays(final_checkpoint)
 
-    if nonzero_trace <= initial_drive.active_photoreceptors:
+    if len(initial_traces) != len(final_traces):
+        raise RuntimeError("initial/final checkpoint neuron arrays differ in length")
+
+    eps = 1e-12
+    initial_event_mask = (initial_events == 1) | (initial_events == 2)
+    stimulated_mask = np.zeros(len(initial_traces), dtype=bool)
+    stimulated_mask[stimulated_indices] = True
+    initial_events_outside_r1_r6 = int(np.count_nonzero(initial_event_mask & ~stimulated_mask))
+    if initial_events_outside_r1_r6 != 0:
         raise RuntimeError(
-            "retinal transient reached R1-R6 but did not propagate beyond directly "
-            f"stimulated photoreceptors: traces={nonzero_trace} "
-            f"r1_r6={initial_drive.active_photoreceptors}"
+            "first neural step produced activity outside directly stimulated R1-R6; "
+            "one-step propagation ordering invariant was violated"
+        )
+
+    initial_active_r1_r6 = int(np.count_nonzero(initial_event_mask & stimulated_mask))
+    final_trace_mask = np.abs(final_traces) > eps
+    downstream_trace_nonzero = int(np.count_nonzero(final_trace_mask & ~stimulated_mask))
+    total_trace_nonzero = int(np.count_nonzero(final_trace_mask))
+    positive_events = int(np.count_nonzero(final_events == 1))
+    hyperpolarizing_events = int(np.count_nonzero(final_events == 2))
+
+    if initial_active_r1_r6 <= 0:
+        raise RuntimeError("light-on current did not produce any R1-R6 activity event")
+    if downstream_trace_nonzero <= 0:
+        raise RuntimeError(
+            "retinal transient produced R1-R6 events but no activity trace outside "
+            f"the directly stimulated R1-R6 set: initial_events={initial_active_r1_r6}"
         )
 
     print(f"active_columns={initial_drive.active_columns}")
-    print(f"active_r1_r6={initial_drive.active_photoreceptors}")
+    print(f"stimulated_r1_r6={initial_drive.active_photoreceptors}")
+    print(f"initial_event_r1_r6={initial_active_r1_r6}")
     print(f"mean_current={initial_drive.mean_current:.6f}")
     print(f"max_current={initial_drive.max_current:.6f}")
     print("adapted_static_active_r1_r6=0")
     print("adapted_static_max_current=0.000000")
     print(f"propagation_steps={args.propagation_steps}")
-    print(f"nonzero_activity_traces={nonzero_trace}")
+    print(f"nonzero_activity_traces={total_trace_nonzero}")
+    print(f"downstream_trace_nonzero={downstream_trace_nonzero}")
     print(f"positive_events_final_step={positive_events}")
     print(f"hyperpolarizing_events_final_step={hyperpolarizing_events}")
     print("external_visual_features=NONE")
