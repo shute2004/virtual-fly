@@ -11,7 +11,7 @@ WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPECTED_NEURAL_CALIBRATION_SCHEMA=2
-EXPECTED_VIEWER_GRAPH_SCHEMA=2
+EXPECTED_VIEWER_GRAPH_SCHEMA=3
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
