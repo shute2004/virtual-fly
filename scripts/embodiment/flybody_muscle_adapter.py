@@ -62,18 +62,25 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
         max_abs_torque: float = 2500.0,
         **kwargs,
     ) -> None:
-        # Curriculum may change only the episode-reset starting altitude. This is
-        # deliberately an environment initial condition, not a per-step body
-        # controller. Normal/final training leaves the requested spawn untouched.
+        # Curriculum may change only the episode-reset initial position. These are
+        # environment initial conditions, never per-step body or policy control.
+        curriculum_spawn_x = os.environ.get("VF_CURRICULUM_SPAWN_X")
         curriculum_spawn_z = os.environ.get("VF_CURRICULUM_SPAWN_Z")
-        if curriculum_spawn_z is not None:
-            z = float(curriculum_spawn_z)
-            if not math.isfinite(z):
-                raise ValueError("VF_CURRICULUM_SPAWN_Z must be finite")
+        if curriculum_spawn_x is not None or curriculum_spawn_z is not None:
             spawn = tuple(kwargs.get("spawn_position_mm", (0.0, 0.0, 4.0)))
             if len(spawn) != 3:
                 raise ValueError("spawn_position_mm must have three coordinates")
-            kwargs["spawn_position_mm"] = (float(spawn[0]), float(spawn[1]), z)
+            x = float(spawn[0])
+            z = float(spawn[2])
+            if curriculum_spawn_x is not None:
+                x = float(curriculum_spawn_x)
+                if not math.isfinite(x):
+                    raise ValueError("VF_CURRICULUM_SPAWN_X must be finite")
+            if curriculum_spawn_z is not None:
+                z = float(curriculum_spawn_z)
+                if not math.isfinite(z):
+                    raise ValueError("VF_CURRICULUM_SPAWN_Z must be finite")
+            kwargs["spawn_position_mm"] = (x, float(spawn[1]), z)
 
         super().__init__(*args, **kwargs)
         if virtual_power_kp <= 0.0 or virtual_power_kd < 0.0:
