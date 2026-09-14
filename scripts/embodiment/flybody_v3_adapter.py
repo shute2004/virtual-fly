@@ -21,7 +21,11 @@ from flygym.compose.fly import FlyBody as FlyGymFlyBody
 
 from virtual_fly.physics import FLYBODY_REFERENCE
 from flybody_biophysics import normalize_fly_mass
-from flybody_measured_wingbeat import DEFAULT_PATTERN, install_measured_wingbeat
+from flybody_measured_wingbeat import (
+    DEFAULT_PATTERN,
+    SOURCE_CONTROL_TIMESTEP_S,
+    install_measured_wingbeat,
+)
 from flybody_muscle_adapter import FlyBodyMuscleAdapter
 from flybody_neuromuscular_adapter import FlyBodyNeuromuscularAdapter
 
@@ -69,6 +73,15 @@ def _prepare_v3_kwargs(kwargs: dict) -> dict:
     # FlyBodyRuntime's historical default is the v2 provisional 1.09 mg body.
     # Skip that normalization and apply the published FlyBody 0.983 mg target below.
     prepared["normalize_canonical_mass"] = False
+
+    # The source FlyBody flight task integrates physics at 50 us but updates and
+    # holds its wing command every 0.2 ms.  Controller A/B on the source-equivalent
+    # body showed that recomputing the virtual-muscle command every 50 us reduces
+    # vertical support from ~1.05 BW to ~0.86 BW.  v1/v2 retain their historical
+    # defaults; v3 alone restores the source command cadence.  The upstream flight
+    # actuator is proportional, so v3 also removes the provisional derivative term.
+    prepared.setdefault("virtual_power_kd", 0.0)
+    prepared.setdefault("virtual_control_timestep_s", SOURCE_CONTROL_TIMESTEP_S)
     return prepared
 
 
