@@ -11,7 +11,6 @@ bootstrap regime must satisfy both:
    steps, because this bootstrap model contains no intrinsic baseline/noise source.
 
 No Flyppy gate, reward, motor output, collision, or task score enters selection.
-The selected scale is the center candidate of the widest contiguous stable range.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from flybody_adapter import FlyBodyWingAdapter
+from flybody_runtime import FlyBodyRuntime
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from malecns_retina import MaleCNSRetina
@@ -81,7 +80,7 @@ def main() -> int:
 
     course = FlyppyCourse(seed=0, gate_count=2)
     world = FlyppyWorld(course)
-    body = FlyBodyWingAdapter(
+    body = FlyBodyRuntime(
         tethered=False,
         world=world,
         spawn_position_mm=(0.0, 0.0, 5.0),
@@ -164,7 +163,6 @@ def main() -> int:
             "another Flyppy/body calibration"
         )
 
-    # Split stable candidates into contiguous runs in the tested-scale ordering.
     stable_scales = {float(item["synapse_scale"]) for item in stable}
     runs: list[list[dict[str, object]]] = []
     current: list[dict[str, object]] = []
@@ -178,9 +176,6 @@ def main() -> int:
         runs.append(current)
     widest = max(runs, key=lambda run: (len(run), float(run[-1]["synapse_scale"])))
 
-    # For an even-sized run choose the lower of the two central candidates. This
-    # gives margin from the high-gain self-sustaining transition without selecting
-    # the lower propagation boundary itself when >=3 stable samples are present.
     selected = widest[(len(widest) - 1) // 2]
     selected_scale = float(selected["synapse_scale"])
 
