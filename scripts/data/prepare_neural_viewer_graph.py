@@ -47,6 +47,12 @@ def stable_unit(body_id: int, salt: str) -> float:
     return int.from_bytes(digest, "little") / float(2**64 - 1)
 
 
+def clean_text(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    return str(value)
+
+
 def schematic_position(body_id: int, side: str, superclass: str) -> list[float]:
     side_norm = side.strip().upper()
     if side_norm == "L":
@@ -117,9 +123,9 @@ def main() -> int:
     nodes = []
     for body_id in sorted(selected):
         row = annotations.loc[body_id] if body_id in annotations.index else None
-        side = "" if row is None else str(row.get("side", "") or "")
-        superclass = "" if row is None else str(row.get("superclass", "") or "")
-        neuron_type = "" if row is None else str(row.get("type", "") or "")
+        side = "" if row is None else clean_text(row.get("side", ""))
+        superclass = "" if row is None else clean_text(row.get("superclass", ""))
+        neuron_type = "" if row is None else clean_text(row.get("type", ""))
         dense = index_by_body.get(body_id)
         nodes.append(
             {
