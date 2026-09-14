@@ -1,38 +1,26 @@
 #!/usr/bin/env python3
 """FlyBody mechanics driven by individual-MN-derived peripheral muscle state.
 
-This is a virtual-muscle compatibility layer for FlyBody's six idealized wing
-joint DOFs. FlyBody does not currently expose the anatomical Drosophila wing
-muscles, so the peripheral muscle activations are converted to joint torque here
-rather than being converted to an action or position command.
+This is the current motor path. Released wing motor-neuron spikes feed
+``WingMusclePeriphery`` and the resulting motor-unit/muscle state produces
+physical torque on FlyBody wing DOFs. No DNg02 population decoder is used.
 
-The power-muscle path uses an autonomous thoracic wingbeat phase because
-Drosophila DLM/DVM indirect flight muscles are asynchronous: low-frequency motor
-input maintains calcium while stretch activation and thoracic resonance produce
-high-frequency wingbeats. The oscillator therefore belongs to the peripheral
-mechanical approximation, not to the CNS action-selection path.
-
-Only steering effects with a reasonably constrained qualitative sign are active
-in this first boundary: b1/b2 increase stroke-amplitude drive, b3 opposes the
-basalar pair, and i1 reduces stroke-amplitude drive. Other identified muscles
-still maintain independent neuromuscular states but exert no guessed torque yet.
-All numerical gains and the mapping between DLM/DVM activation and the virtual
-hinge phase are explicitly bootstrap body-interface assumptions rather than
-biological measurements.
+FlyBody does not currently expose the anatomical Drosophila wing muscles, so
+peripheral muscle activations are converted to joint torque here rather than to
+an action or position command. The power-muscle path uses an autonomous thoracic
+wingbeat phase because DLM/DVM indirect flight muscles are asynchronous.
 """
 
 from __future__ import annotations
 
 import math
-import os
 
-import mujoco as mj
 import numpy as np
 
 from flygym.compose import ActuatorType
 
-from flybody_adapter import FlyBodyWingAdapter
 from flybody_flight_physics import FLIGHT_WING_POSITION_KP
+from flybody_runtime import FlyBodyRuntime
 from wing_muscle_periphery import PeripheralSnapshot
 
 
@@ -48,7 +36,7 @@ BOOTSTRAP_STEERING_GAIN = 1.0
 BOOTSTRAP_SWAP_DLM_DVM_PHASE = False
 
 
-class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
+class FlyBodyMuscleAdapter(FlyBodyRuntime):
     """Apply peripheral muscle state as physical torque on FlyBody wing DOFs."""
 
     def __init__(
@@ -62,26 +50,6 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
         max_abs_torque: float = 2500.0,
         **kwargs,
     ) -> None:
-        # Curriculum may change only the episode-reset initial position. These are
-        # environment initial conditions, never per-step body or policy control.
-        curriculum_spawn_x = os.environ.get("VF_CURRICULUM_SPAWN_X")
-        curriculum_spawn_z = os.environ.get("VF_CURRICULUM_SPAWN_Z")
-        if curriculum_spawn_x is not None or curriculum_spawn_z is not None:
-            spawn = tuple(kwargs.get("spawn_position_mm", (0.0, 0.0, 4.0)))
-            if len(spawn) != 3:
-                raise ValueError("spawn_position_mm must have three coordinates")
-            x = float(spawn[0])
-            z = float(spawn[2])
-            if curriculum_spawn_x is not None:
-                x = float(curriculum_spawn_x)
-                if not math.isfinite(x):
-                    raise ValueError("VF_CURRICULUM_SPAWN_X must be finite")
-            if curriculum_spawn_z is not None:
-                z = float(curriculum_spawn_z)
-                if not math.isfinite(z):
-                    raise ValueError("VF_CURRICULUM_SPAWN_Z must be finite")
-            kwargs["spawn_position_mm"] = (x, float(spawn[1]), z)
-
         super().__init__(*args, **kwargs)
         if virtual_power_kp <= 0.0 or virtual_power_kd < 0.0:
             raise ValueError("virtual muscle gains are invalid")
@@ -98,22 +66,6 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
             for side in ("left", "right")
             for axis in ("yaw", "roll", "pitch")
         }
-
-    def set_root_position_mm(
-        self, position: np.ndarray | tuple[float, float, float]
-    ) -> None:
-        if self.tethered:
-            raise RuntimeError("tethered FlyBody has no free root position")
-        vector = np.asarray(position, dtype=np.float64)
-        if vector.shape != (3,) or not np.all(np.isfinite(vector)):
-            raise ValueError("root position must contain 3 finite values")
-        joint_types = np.asarray(self.sim.mj_model.jnt_type)
-        free_ids = np.flatnonzero(joint_types == int(mj.mjtJoint.mjJNT_FREE))
-        if len(free_ids) != 1:
-            raise RuntimeError(f"expected one root freejoint, found {len(free_ids)}")
-        qpos_address = int(self.sim.mj_model.jnt_qposadr[int(free_ids[0])])
-        self.sim.mj_data.qpos[qpos_address : qpos_address + 3] = vector
-        mj.mj_forward(self.sim.mj_model, self.sim.mj_data)
 
     def _neutralize_position_actuators(self) -> None:
         target = self._neutral_target.copy()
