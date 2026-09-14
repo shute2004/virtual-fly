@@ -32,14 +32,16 @@ done
 
 unset VF_MOTOR_CALIBRATION || true
 unset VF_NEURAL_SYNAPSE_SCALE || true
-unset VF_CURRICULUM_SPAWN_X || true
-unset VF_CURRICULUM_SPAWN_Z || true
 
 uv sync >/dev/null
+uv run python -c 'import virtual_fly.training.curriculum'
 
 cargo check -q -p vf-runner --bin neural_bridge
 uv run python -m py_compile \
   scripts/embodiment/train_flyppy_curriculum.py \
+  scripts/embodiment/flybody_runtime.py \
+  scripts/embodiment/flybody_muscle_adapter.py \
+  scripts/embodiment/evaluate_flyppy.py \
   scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_body_viewer.py \
   scripts/data/prepare_neural_viewer_graph.py \
