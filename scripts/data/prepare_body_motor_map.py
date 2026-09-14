@@ -84,9 +84,13 @@ def leg_effect(target: str) -> tuple[str, str, str] | None:
         return "coxa_femur_pitch", "flex", "identified antagonist: trochanter flexor"
 
     # These thoracic muscles have explicit forward/backward functions in the
-    # MANC circuit paper.  Runtime geometry determines the local joint sign, so
+    # MANC circuit paper. Runtime geometry determines the local joint sign, so
     # side-specific coordinate conventions are not guessed here.
-    if "sternal anterior rotator" in t or "tergopleural promotor" in t or "tergoplural promotor" in t:
+    if (
+        "sternal anterior rotator" in t
+        or "tergopleural promotor" in t
+        or "tergoplural promotor" in t
+    ):
         return "thorax_coxa_yaw", "protract", "literature: rotates/protracts leg forward"
     if "sternal posterior rotator" in t:
         return "thorax_coxa_yaw", "retract", "literature: opposing posterior rotation during stance"
@@ -101,12 +105,9 @@ def haltere_effect(target: str, type_name: str) -> tuple[str, str, str] | None:
     t = norm(f"{target} {type_name}")
     if "hdvm" in t or "haltere dorsal ventral" in t:
         return "haltere_pitch", "power", "identified asynchronous hDVM power muscle"
-    if re.search(r"\bhi1\b", t) or "first axillary" in t and "haltere" in t:
-        return (
-            "haltere_pitch",
-            "reduce_amplitude",
-            "literature: hDVM+hI1 activation reduces ventral stroke extent; hI1 retained as grounded steering effect",
-        )
+    # Haltere steering MN identities are useful and remain in the inventory, but
+    # published hDVM+hI1 co-activation does not isolate an hI1-only mechanical
+    # transfer function.  Do not manufacture one here.
     return None
 
 
@@ -119,7 +120,12 @@ def main() -> int:
     if not np.array_equal(annotations["bodyId"].astype(np.uint64).to_numpy(), body_ids):
         raise RuntimeError("annotations are not aligned with body_ids.u64le")
 
-    superclass = annotations.get("superclass", pd.Series("", index=annotations.index)).fillna("").astype(str).str.lower()
+    superclass = (
+        annotations.get("superclass", pd.Series("", index=annotations.index))
+        .fillna("")
+        .astype(str)
+        .str.lower()
+    )
     rows = annotations.loc[superclass.eq("vnc_motor")].copy()
     if rows.empty:
         raise RuntimeError("no superclass=vnc_motor neurons found")
@@ -170,7 +176,9 @@ def main() -> int:
             )
         records.append(record)
 
-    records.sort(key=lambda item: (str(item["subclass"]), str(item["type"]), int(item["body_id"])))
+    records.sort(
+        key=lambda item: (str(item["subclass"]), str(item["type"]), int(item["body_id"]))
+    )
     grounded = [row for row in records if row["mechanical_status"] == "grounded"]
     status = Counter(str(row["mechanical_status"]) for row in records)
     subclass_counts = Counter(str(row["subclass"]) for row in records)
@@ -190,7 +198,9 @@ def main() -> int:
         "provenance": {
             "neuron_and_target_identity": "observed: MaleCNS v1.0 annotations",
             "leg_function": "literature: MANC leg MN target/function studies plus FlyBody joint coordinate definitions",
-            "haltere_function": "literature: identified haltere power/steering muscles and measured stroke modulation",
+            "haltere_function": (
+                "literature: hDVM is the asynchronous haltere power muscle; steering MN mechanical transfer remains unresolved"
+            ),
             "unknown_policy": "unresolved targets are preserved but never converted into a body command",
             "references": REFERENCE_URLS,
         },
