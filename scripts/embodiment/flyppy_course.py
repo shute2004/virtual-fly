@@ -2,9 +2,9 @@
 """Deterministic geometric Flyppy course.
 
 Version 1 preserves the historical 10 mm corridor / 4 mm gate experiment.
-Version 2 derives every dimension from the canonical physical fly specification
-and delegates collision detection to the full MuJoCo body rather than a thorax
-center plus fixed radius approximation.
+Version 2 preserves the provisional 2.75 mm / 1.09 mg physical-scale experiment.
+Version 3 uses the published FlyBody physical scale while keeping v2's explicit
+full-body MuJoCo collision semantics.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import math
 import os
 import random
 
-from virtual_fly.physics import FLYPPY_GEOMETRY
+from virtual_fly.physics import FLYPPY_GEOMETRY, FLYPPY_GEOMETRY_V3
 
 
 @dataclass(frozen=True)
@@ -70,49 +70,50 @@ class FlyppyCourse:
         gate_half_thickness_mm: float | None = None,
         lateral_half_width_mm: float | None = None,
     ) -> None:
-        if environment_version not in {"v1", "v2"}:
-            raise ValueError("environment_version must be v1 or v2")
+        if environment_version not in {"v1", "v2", "v3"}:
+            raise ValueError("environment_version must be v1, v2, or v3")
         if gate_count < 1:
             raise ValueError("gate_count must be >= 1")
 
-        if environment_version == "v2":
+        if environment_version in {"v2", "v3"}:
+            geometry = FLYPPY_GEOMETRY if environment_version == "v2" else FLYPPY_GEOMETRY_V3
             first_gate_x_mm = (
-                FLYPPY_GEOMETRY.first_gate_x_mm
+                geometry.first_gate_x_mm
                 if first_gate_x_mm is None
                 else first_gate_x_mm
             )
             gate_spacing_mm = (
-                FLYPPY_GEOMETRY.gate_spacing_mm
+                geometry.gate_spacing_mm
                 if gate_spacing_mm is None
                 else gate_spacing_mm
             )
             corridor_low_z_mm = (
-                FLYPPY_GEOMETRY.corridor_low_z_mm
+                geometry.corridor_low_z_mm
                 if corridor_low_z_mm is None
                 else corridor_low_z_mm
             )
             corridor_high_z_mm = (
-                FLYPPY_GEOMETRY.corridor_high_z_mm
+                geometry.corridor_high_z_mm
                 if corridor_high_z_mm is None
                 else corridor_high_z_mm
             )
             gap_half_height_mm = (
-                FLYPPY_GEOMETRY.gate_gap_half_height_mm
+                geometry.gate_gap_half_height_mm
                 if gap_half_height_mm is None
                 else gap_half_height_mm
             )
             center_margin_mm = (
-                FLYPPY_GEOMETRY.center_margin_mm
+                geometry.center_margin_mm
                 if center_margin_mm is None
                 else center_margin_mm
             )
             gate_half_thickness_mm = (
-                FLYPPY_GEOMETRY.gate_half_thickness_mm
+                geometry.gate_half_thickness_mm
                 if gate_half_thickness_mm is None
                 else gate_half_thickness_mm
             )
             lateral_half_width_mm = (
-                FLYPPY_GEOMETRY.lateral_half_width_mm
+                geometry.lateral_half_width_mm
                 if lateral_half_width_mm is None
                 else lateral_half_width_mm
             )
@@ -225,8 +226,8 @@ class FlyppyCourse:
     ) -> CourseEvent:
         """Advance gate state after one physics/control step.
 
-        v1 uses the historical thorax-center radius approximation. v2 passes a
-        MuJoCo-derived ``physical_collision_reason`` and sets
+        v1 uses the historical thorax-center radius approximation. v2/v3 pass a
+        MuJoCo-derived ``physical_collision_reason`` and set
         ``analytic_body_collision=False`` so the complete articulated body,
         including wings and halteres, decides collisions.
         """
@@ -322,18 +323,27 @@ def _self_test() -> None:
         assert math.isclose(
             2.0 * v2.gates[0].half_gap_mm, FLYPPY_GEOMETRY.gate_gap_height_mm
         )
-        v2_gate = v2.gates[0]
-        assert not v2.update(
-            v2_gate.x_mm - 1.0,
-            v2_gate.center_z_mm,
-            analytic_body_collision=False,
-        ).collision
-        event = v2.update(
-            v2_gate.x_mm + 0.1,
-            v2_gate.center_z_mm,
-            analytic_body_collision=False,
+
+        v3 = FlyppyCourse(seed=7, gate_count=2, environment_version="v3")
+        assert math.isclose(v3.ceiling_z_mm, FLYPPY_GEOMETRY_V3.corridor_high_z_mm)
+        assert math.isclose(v3.gates[0].x_mm, FLYPPY_GEOMETRY_V3.first_gate_x_mm)
+        assert math.isclose(
+            2.0 * v3.gates[0].half_gap_mm, FLYPPY_GEOMETRY_V3.gate_gap_height_mm
         )
-        assert event.passed_gate
+
+        for physical in (v2, v3):
+            physical_gate = physical.gates[0]
+            assert not physical.update(
+                physical_gate.x_mm - 1.0,
+                physical_gate.center_z_mm,
+                analytic_body_collision=False,
+            ).collision
+            event = physical.update(
+                physical_gate.x_mm + 0.1,
+                physical_gate.center_z_mm,
+                analytic_body_collision=False,
+            )
+            assert event.passed_gate
 
         bad = FlyppyCourse(seed=7, gate_count=1)
         gate = bad.gates[0]
