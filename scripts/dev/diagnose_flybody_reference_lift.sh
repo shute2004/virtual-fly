@@ -10,5 +10,9 @@ uv run python scripts/dev/prefetch_flybody_flight_data.py
 printf '\n== FlyBody reference lift calibration ==\n'
 uv run python scripts/embodiment/flybody_reference_lift_calibration.py
 
+printf '\n== Exact-kinematic FlyBody aerodynamic support ==\n'
+uv run python scripts/embodiment/flybody_kinematic_aero_support.py
+
 printf '\nreference_lift_diagnosis=COMPLETE\n'
 printf 'result=%s/artifacts/embodiment/flybody-reference-lift-calibration.json\n' "$ROOT"
+printf 'kinematic_result=%s/artifacts/embodiment/flybody-kinematic-aero-support.json\n' "$ROOT"
