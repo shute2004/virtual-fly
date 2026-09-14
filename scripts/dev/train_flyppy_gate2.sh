@@ -18,8 +18,8 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   exit 2
 }
 
-# Avoid inheriting a staged-course selector while computing the canonical full
-# course coordinates below. The stage selector is exported only after migration.
+# Keep curriculum setup independent of any inherited shell state. The embedded
+# initializer needs the full course so it can locate gate 2 by absolute index.
 unset VF_COURSE_START_GATE || true
 
 # First entry into this stage keeps the learned CNS checkpoint but replaces only
@@ -68,11 +68,15 @@ PY
 
 export VF_COURSE_START_GATE=1
 
+# The first gate-2 run found a sharp mastery boundary: x=11.0/z=5.54/vx=375
+# was repeatedly successful while the next old step x=10.5/z=5.29/vx=350
+# repeatedly failed. Refine the staircase rather than bouncing across it.
 exec bash scripts/dev/train_flyppy.sh \
   --curriculum-target-x-mm 9.0 \
   --curriculum-target-z-mm 5.0 \
   --curriculum-target-speed-mm-s 300.0 \
-  --curriculum-x-step-mm 0.5 \
-  --curriculum-z-step-mm 0.25 \
-  --curriculum-speed-step-mm-s 25.0 \
+  --curriculum-x-step-mm 0.25 \
+  --curriculum-failure-x-step-mm 0.25 \
+  --curriculum-z-step-mm 0.125 \
+  --curriculum-speed-step-mm-s 12.5 \
   "$@"
