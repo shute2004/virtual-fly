@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """Fast persistent Flyppy curriculum learner.
 
-Unlike the legacy curriculum driver, this process constructs FlyBody, the Rust
-neural bridge, and the GPU runtime once and keeps them alive across all episodes.
-Only trial-local physical/neural state is reset. Learned synaptic weights remain
-resident in the neural runtime and full checkpoints are written periodically,
-not after every episode.
-
-Rendering is deliberately absent. Lightweight live telemetry is published for
-independent observers that may attach or detach at any time.
+FlyBody, the Rust neural bridge and the GPU runtime are constructed once and
+kept alive across episodes. Only trial-local state is reset; learned synaptic
+weights remain resident. Rendering is deliberately absent. Lightweight live
+telemetry is published for independent observers and never advances neural time.
 """
 
 from __future__ import annotations
@@ -19,8 +15,6 @@ import math
 from pathlib import Path
 import shutil
 import time
-
-import numpy as np
 
 from flybody_muscle_adapter import FlyBodyMuscleAdapter
 from flyppy_course import FlyppyCourse
@@ -53,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trajectory-stride", type=int, default=10)
     parser.add_argument("--telemetry-stride", type=int, default=10)
     parser.add_argument("--no-live-telemetry", action="store_true")
-    parser.add_argument("--checkpoint-every", type=int, default=8)
+    parser.add_argument("--checkpoint-every", type=int, default=32)
     parser.add_argument("--photoreceptor-current-gain", type=float, default=2.0)
     parser.add_argument("--reward-current", type=float, default=2.0)
     parser.add_argument("--aversive-current", type=float, default=2.0)
@@ -71,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--curriculum-max-easy-speed-mm-s", type=float, default=500.0)
     parser.add_argument("--curriculum-failure-x-step-mm", type=float, default=0.5)
 
-    # Kept only so old commands do not fail. Rendering is now a detached process.
+    # Compatibility only. Visualization is now a separate observer process.
     parser.add_argument("--render", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--record-video", type=Path, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()
@@ -155,7 +149,6 @@ def main() -> int:
     )
     resuming = checkpoint.joinpath("manifest.json").exists() and not args.fresh
     if not resuming and not args.fresh:
-        # A curriculum-state file without a checkpoint cannot carry learning.
         state = new_state(default_x=default_x, default_z=default_z, default_speed=default_speed)
 
     world = FlyppyWorld(course)
@@ -245,7 +238,7 @@ def main() -> int:
                 max_x = float("-inf")
                 final_velocity = body.root_linear_velocity_mm_s()
                 step_count = 0
-                last_peripheral = None
+                last_viewer_spikes: dict[int, bool] = {}
 
                 telemetry.publish_status(
                     running=True,
@@ -265,9 +258,13 @@ def main() -> int:
                         read_body=read_ids,
                         plasticity=True,
                     )
-                    motor_spikes = {body_id: bool(body_spikes.get(body_id, False)) for body_id in periphery.body_ids}
+                    if telemetry_due:
+                        last_viewer_spikes = dict(body_spikes)
+                    motor_spikes = {
+                        body_id: bool(body_spikes.get(body_id, False))
+                        for body_id in periphery.body_ids
+                    }
                     peripheral_state = periphery.step(motor_spikes, dt_s=control_dt_s)
-                    last_peripheral = peripheral_state
                     body.step_muscles(peripheral_state, physics_steps=args.physics_steps)
 
                     position = body.thorax_position_mm()
@@ -281,31 +278,35 @@ def main() -> int:
                     aversive = False
                     if event.passed_gate:
                         episode_passed += 1
-                        deliver_reinforcement(brain, "reward_dan", args.reward_current, args.reinforcement_steps)
+                        deliver_reinforcement(
+                            brain,
+                            "reward_dan",
+                            args.reward_current,
+                            args.reinforcement_steps,
+                        )
                         reward = True
                     if event.collision:
                         collision = True
-                        deliver_reinforcement(brain, "aversive_dan", args.aversive_current, args.reinforcement_steps)
+                        deliver_reinforcement(
+                            brain,
+                            "aversive_dan",
+                            args.aversive_current,
+                            args.reinforcement_steps,
+                        )
                         aversive = True
                     if event.finished:
                         finished = True
 
                     event_frame = reward or aversive or collision or finished
                     if telemetry.enabled and (telemetry_due or event_frame):
-                        # If an event happened between periodic telemetry samples,
-                        # request the viewer subgraph once after reinforcement so
-                        # DAN-related activity is visible without changing policy.
-                        if event_frame and not telemetry_due:
-                            _, viewer_spikes = brain.step_with_body_readout(
-                                read_body=telemetry_read_ids,
-                                read=(),
-                                plasticity=True,
-                                steps=1,
-                            )
-                        else:
-                            viewer_spikes = body_spikes
+                        # Observer-only data must never advance the CNS. Event
+                        # frames between periodic neural samples reuse the latest
+                        # sampled activity and mark the DAN event separately.
+                        viewer_spikes = body_spikes if telemetry_due else last_viewer_spikes
                         depolarizing = [
-                            body_id for body_id in graph_body_ids if viewer_spikes.get(body_id, False)
+                            body_id
+                            for body_id in graph_body_ids
+                            if viewer_spikes.get(body_id, False)
                         ]
                         telemetry.publish_body(
                             episode=episode,
@@ -373,17 +374,34 @@ def main() -> int:
 
                 state["curriculum_episodes"] = episode + 1
                 if episode_passed > 0:
-                    state["successful_first_gates"] = int(state.get("successful_first_gates", 0)) + 1
+                    state["successful_first_gates"] = int(
+                        state.get("successful_first_gates", 0)
+                    ) + 1
                     state["consecutive_failures"] = 0
-                    state["spawn_x_mm"] = move_toward(spawn_x, args.curriculum_target_x_mm, args.curriculum_x_step_mm)
-                    state["spawn_z_mm"] = move_toward(spawn_z, args.curriculum_target_z_mm, args.curriculum_z_step_mm)
+                    state["spawn_x_mm"] = move_toward(
+                        spawn_x,
+                        args.curriculum_target_x_mm,
+                        args.curriculum_x_step_mm,
+                    )
+                    state["spawn_z_mm"] = move_toward(
+                        spawn_z,
+                        args.curriculum_target_z_mm,
+                        args.curriculum_z_step_mm,
+                    )
                     state["initial_speed_mm_s"] = move_toward(
-                        speed, args.curriculum_target_speed_mm_s, args.curriculum_speed_step_mm_s
+                        speed,
+                        args.curriculum_target_speed_mm_s,
+                        args.curriculum_speed_step_mm_s,
                     )
                 else:
-                    state["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
+                    state["consecutive_failures"] = int(
+                        state.get("consecutive_failures", 0)
+                    ) + 1
                     easiest_x = float(first_gate.x_mm) - 1.0
-                    state["spawn_x_mm"] = min(easiest_x, spawn_x + args.curriculum_failure_x_step_mm)
+                    state["spawn_x_mm"] = min(
+                        easiest_x,
+                        spawn_x + args.curriculum_failure_x_step_mm,
+                    )
                     state["initial_speed_mm_s"] = min(
                         args.curriculum_max_easy_speed_mm_s,
                         speed + args.curriculum_speed_step_mm_s,
@@ -393,17 +411,32 @@ def main() -> int:
                 state["target_z_mm"] = float(args.curriculum_target_z_mm)
                 state["target_speed_mm_s"] = float(args.curriculum_target_speed_mm_s)
                 state["curriculum_complete"] = bool(
-                    math.isclose(float(state["spawn_x_mm"]), args.curriculum_target_x_mm, abs_tol=1e-9)
-                    and math.isclose(float(state["spawn_z_mm"]), args.curriculum_target_z_mm, abs_tol=1e-9)
-                    and math.isclose(float(state["initial_speed_mm_s"]), args.curriculum_target_speed_mm_s, abs_tol=1e-9)
+                    math.isclose(
+                        float(state["spawn_x_mm"]),
+                        args.curriculum_target_x_mm,
+                        abs_tol=1e-9,
+                    )
+                    and math.isclose(
+                        float(state["spawn_z_mm"]),
+                        args.curriculum_target_z_mm,
+                        abs_tol=1e-9,
+                    )
+                    and math.isclose(
+                        float(state["initial_speed_mm_s"]),
+                        args.curriculum_target_speed_mm_s,
+                        abs_tol=1e-9,
+                    )
                 )
-                save_state(state_path, state)
 
                 checkpoint_seconds = 0.0
                 checkpoint_saved = False
-                if (local_episode + 1) % args.checkpoint_every == 0 or local_episode + 1 == args.episodes:
+                if (
+                    (local_episode + 1) % args.checkpoint_every == 0
+                    or local_episode + 1 == args.episodes
+                ):
                     checkpoint_started = time.perf_counter()
                     brain.save_checkpoint(checkpoint)
+                    save_state(state_path, state)
                     checkpoint_seconds = time.perf_counter() - checkpoint_started
                     checkpoint_saved = True
 
@@ -436,7 +469,8 @@ def main() -> int:
                     )
                 )
                 print(
-                    "curriculum_result next_spawn=(x={:.3f},z={:.3f}) next_vx={:.1f} failures={} complete={}".format(
+                    "curriculum_result next_spawn=(x={:.3f},z={:.3f}) next_vx={:.1f} "
+                    "failures={} complete={}".format(
                         float(state["spawn_x_mm"]),
                         float(state["spawn_z_mm"]),
                         float(state["initial_speed_mm_s"]),
@@ -455,14 +489,15 @@ def main() -> int:
 
     elapsed = time.perf_counter() - run_started
     summary = {
-        "schema_version": 7,
-        "experiment": "flyppy_persistent_curriculum_v1",
+        "schema_version": 8,
+        "experiment": "flyppy_persistent_curriculum_v2",
         "backend": backend_name,
         "episodes_this_run": len(run_results),
         "elapsed_seconds": elapsed,
         "persistent_runtime": True,
         "checkpoint_every": args.checkpoint_every,
         "live_telemetry": telemetry.enabled,
+        "telemetry_affects_neural_steps": False,
         "viewer_graph": str(args.viewer_graph) if telemetry.enabled else None,
         "curriculum_state": state,
         "episode_results": run_results,
