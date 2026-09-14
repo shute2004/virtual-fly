@@ -37,6 +37,12 @@ uv run python scripts/data/prepare_retinotopic_vision.py \
   --output "$RETINOTOPIC_MAP" \
   --download
 
+printf '\n== MaleCNS retinal current smoke test ==\n'
+uv run python scripts/embodiment/malecns_retina_smoke.py \
+  --snapshot "$SNAPSHOT" \
+  --groups "$GROUPS" \
+  --mapping "$RETINOTOPIC_MAP"
+
 printf '\n== Wing neuromuscular boundary smoke test ==\n'
 uv run python scripts/embodiment/wing_muscle_boundary_smoke.py \
   --motor-map "$WING_MOTOR_MAP"
