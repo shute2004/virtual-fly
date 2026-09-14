@@ -1,6 +1,6 @@
 """Curriculum policies for Flyppy training.
 
-The neural learning rule lives in the CNS runtime.  Curriculum code may only
+The neural learning rule lives in the CNS runtime. Curriculum code may only
 choose episode-reset initial conditions and record success/failure statistics;
 it must never inject target actions, scalar reward values, or motor commands.
 """
@@ -56,7 +56,7 @@ def move_toward(value: float, target: float, step: float) -> float:
 
 
 def _move_away_toward_cap(value: float, target: float, cap: float, step: float) -> float:
-    """Ease one parameter away from target but never beyond its initial cap."""
+    """Ease one parameter away from target without moving beyond ``cap``."""
 
     if math.isclose(value, cap, abs_tol=1e-12):
         return cap
@@ -177,11 +177,30 @@ def _condition_from_dict(payload: MutableMapping[str, Any]) -> SpawnCondition:
     )
 
 
+def _recovery_caps(config: BoundaryBandConfig) -> tuple[SpawnCondition, SpawnCondition]:
+    """Return one-band-easier caps for recovery after a poor batch.
+
+    ``recovery_hard`` is the initial easy endpoint. ``recovery_easy`` extends
+    the initial band by the same width once more. For the measured gate-2 band
+    this gives an easy recovery endpoint near the previously observed
+    x=10.75/z=5.415/vx=362.5 success condition.
+    """
+
+    recovery_hard = config.easy
+    recovery_easy = SpawnCondition(
+        config.easy.x_mm + (config.easy.x_mm - config.hard.x_mm),
+        config.easy.z_mm + (config.easy.z_mm - config.hard.z_mm),
+        config.easy.speed_mm_s + (config.easy.speed_mm_s - config.hard.speed_mm_s),
+    )
+    return recovery_hard, recovery_easy
+
+
 def _validate_boundary(config: BoundaryBandConfig) -> None:
     if config.batch_size < 5:
         raise ValueError("boundary batch_size must be >= 5")
     if not 0.0 <= config.ease_success_rate < config.harden_success_rate <= 1.0:
         raise ValueError("boundary success-rate thresholds are invalid")
+    recovery_hard, recovery_easy = _recovery_caps(config)
     values = (
         config.hard.x_mm,
         config.hard.z_mm,
@@ -192,6 +211,12 @@ def _validate_boundary(config: BoundaryBandConfig) -> None:
         config.target.x_mm,
         config.target.z_mm,
         config.target.speed_mm_s,
+        recovery_hard.x_mm,
+        recovery_hard.z_mm,
+        recovery_hard.speed_mm_s,
+        recovery_easy.x_mm,
+        recovery_easy.z_mm,
+        recovery_easy.speed_mm_s,
     )
     if not all(math.isfinite(value) for value in values):
         raise ValueError("boundary conditions must be finite")
@@ -211,12 +236,15 @@ def ensure_boundary_state(
     state: MutableMapping[str, Any], config: BoundaryBandConfig
 ) -> MutableMapping[str, Any]:
     _validate_boundary(config)
+    recovery_hard, recovery_easy = _recovery_caps(config)
     payload = state.get("boundary_band")
     if not isinstance(payload, dict) or int(payload.get("schema_version", 0)) != 1:
         payload = {
             "schema_version": 1,
             "initial_hard": _condition_dict(config.hard),
             "initial_easy": _condition_dict(config.easy),
+            "recovery_hard": _condition_dict(recovery_hard),
+            "recovery_easy": _condition_dict(recovery_easy),
             "hard": _condition_dict(config.hard),
             "easy": _condition_dict(config.easy),
             "batch_number": 0,
@@ -228,6 +256,11 @@ def ensure_boundary_state(
             "easier_shifts": 0,
         }
         state["boundary_band"] = payload
+    else:
+        # Schema 1 existed briefly before explicit recovery caps were added.
+        # Preserve any progress while adding the new fail-safe range.
+        payload.setdefault("recovery_hard", _condition_dict(recovery_hard))
+        payload.setdefault("recovery_easy", _condition_dict(recovery_easy))
     return payload
 
 
@@ -237,7 +270,11 @@ def _level_counts(batch_size: int) -> list[int]:
     raw = [batch_size * weight / sum(weights) for weight in weights]
     counts = [int(math.floor(value)) for value in raw]
     remaining = batch_size - sum(counts)
-    order = sorted(range(5), key=lambda i: (raw[i] - counts[i], -abs(i - 2)), reverse=True)
+    order = sorted(
+        range(5),
+        key=lambda i: (raw[i] - counts[i], -abs(i - 2)),
+        reverse=True,
+    )
     for i in order[:remaining]:
         counts[i] += 1
     return counts
@@ -297,20 +334,20 @@ def _harden(condition: SpawnCondition, config: BoundaryBandConfig) -> SpawnCondi
 
 def _ease(
     condition: SpawnCondition,
-    initial: SpawnCondition,
+    cap: SpawnCondition,
     config: BoundaryBandConfig,
 ) -> SpawnCondition:
     return SpawnCondition(
         _move_away_toward_cap(
-            condition.x_mm, config.target.x_mm, initial.x_mm, config.ease_step.x_mm
+            condition.x_mm, config.target.x_mm, cap.x_mm, config.ease_step.x_mm
         ),
         _move_away_toward_cap(
-            condition.z_mm, config.target.z_mm, initial.z_mm, config.ease_step.z_mm
+            condition.z_mm, config.target.z_mm, cap.z_mm, config.ease_step.z_mm
         ),
         _move_away_toward_cap(
             condition.speed_mm_s,
             config.target.speed_mm_s,
-            initial.speed_mm_s,
+            cap.speed_mm_s,
             config.ease_step.speed_mm_s,
         ),
     )
@@ -340,8 +377,8 @@ def record_boundary_result(
         rate = successes / attempts
         hard = _condition_from_dict(payload["hard"])
         easy = _condition_from_dict(payload["easy"])
-        initial_hard = _condition_from_dict(payload["initial_hard"])
-        initial_easy = _condition_from_dict(payload["initial_easy"])
+        recovery_hard = _condition_from_dict(payload["recovery_hard"])
+        recovery_easy = _condition_from_dict(payload["recovery_easy"])
 
         adjustment = "hold"
         if rate >= config.harden_success_rate:
@@ -350,8 +387,8 @@ def record_boundary_result(
             payload["harder_shifts"] = int(payload["harder_shifts"]) + 1
             adjustment = "harder"
         elif rate < config.ease_success_rate:
-            hard = _ease(hard, initial_hard, config)
-            easy = _ease(easy, initial_easy, config)
+            hard = _ease(hard, recovery_hard, config)
+            easy = _ease(easy, recovery_easy, config)
             payload["easier_shifts"] = int(payload["easier_shifts"]) + 1
             adjustment = "easier"
 
