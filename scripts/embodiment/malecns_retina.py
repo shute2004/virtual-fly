@@ -8,13 +8,20 @@ lattice seam; that local ommatidium intensity is converted to current for the
 released R1-R6 body IDs assigned to the column. All subsequent spatial/temporal
 integration is left to the MaleCNS network.
 
+R1-R6 photoreceptors adapt strongly to mean luminance while retaining responses
+to local temporal contrast. The transduction seam therefore keeps one independent
+adaptation state per FlyBody ommatidium. The first sample provides the ordinary
+light-on response; subsequent samples inject only that ommatidium's signed local
+contrast relative to its exponentially adapting baseline. This is photoreceptor
+transduction, not external visual feature extraction.
+
 Provenance boundaries:
 - R1-R6 identity, root side, lamina wiring and assignedOlHex coordinates:
   MaleCNS-derived map;
 - MaleCNS hex-lattice -> FlyBody ommatidium-lattice registration:
   calibrated geometric seam;
-- local ommatidium irradiance -> injected current gain:
-  calibrated transduction seam.
+- local irradiance -> contrast-current gain, adaptation time constant and contrast
+  clamp: calibrated transduction seam.
 
 FlyBody already performs the raw-camera -> compound-eye conversion using its 721
 ommatidia per eye. Using those readouts is important: the raw camera image is an
@@ -28,6 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -55,11 +63,26 @@ class MaleCNSRetina:
         *,
         current_gain: float = 2.0,
         current_floor: float = 1e-6,
+        sample_interval_s: float = 5.0e-4,
+        adaptation_tau_s: float = 5.0e-2,
+        contrast_denominator_floor: float = 5.0e-2,
+        contrast_clip: float = 1.0,
     ) -> None:
         if not np.isfinite(current_gain) or current_gain <= 0.0:
             raise ValueError("current_gain must be finite and positive")
         if not np.isfinite(current_floor) or current_floor < 0.0:
             raise ValueError("current_floor must be finite and non-negative")
+        if not np.isfinite(sample_interval_s) or sample_interval_s <= 0.0:
+            raise ValueError("sample_interval_s must be finite and positive")
+        if not np.isfinite(adaptation_tau_s) or adaptation_tau_s <= 0.0:
+            raise ValueError("adaptation_tau_s must be finite and positive")
+        if (
+            not np.isfinite(contrast_denominator_floor)
+            or contrast_denominator_floor <= 0.0
+        ):
+            raise ValueError("contrast_denominator_floor must be finite and positive")
+        if not np.isfinite(contrast_clip) or contrast_clip <= 0.0:
+            raise ValueError("contrast_clip must be finite and positive")
 
         data = json.loads(mapping_path.read_text(encoding="utf-8"))
         if data.get("schema_version") != 3:
@@ -75,6 +98,13 @@ class MaleCNSRetina:
 
         self.current_gain = float(current_gain)
         self.current_floor = float(current_floor)
+        self.sample_interval_s = float(sample_interval_s)
+        self.adaptation_tau_s = float(adaptation_tau_s)
+        self.contrast_denominator_floor = float(contrast_denominator_floor)
+        self.contrast_clip = float(contrast_clip)
+        self._adaptation_alpha = 1.0 - math.exp(
+            -self.sample_interval_s / self.adaptation_tau_s
+        )
         self.mapping_path = mapping_path
         self._columns_by_side: dict[str, list[dict[str, object]]] = {"L": [], "R": []}
         assigned_body: dict[int, tuple[str, int, int]] = {}
@@ -109,6 +139,17 @@ class MaleCNSRetina:
             self._attach_uv(self._columns_by_side[side])
             self._attach_ommatidia(self._columns_by_side[side], ommatidia_uv)
 
+        self._adapted_light: dict[str, np.ndarray] = {
+            side: np.full(self.flybody_ommatidia_per_eye, np.nan, dtype=np.float64)
+            for side in ("L", "R")
+        }
+
+    def reset_adaptation(self) -> None:
+        """Reset local photoreceptor adaptation state at an explicit trial boundary."""
+
+        for values in self._adapted_light.values():
+            values.fill(np.nan)
+
     @staticmethod
     def _attach_uv(columns: list[dict[str, object]]) -> None:
         # Standard axial-hex planar unrolling. This is a calibrated optical seam:
@@ -130,13 +171,7 @@ class MaleCNSRetina:
 
     @staticmethod
     def _flybody_ommatidia_uv(ommatidia_id_map: np.ndarray) -> np.ndarray:
-        """Return normalized centroids for FlyBody's numbered ommatidia.
-
-        `Retina.ommatidia_id_map` is the same hexagonal registration used by
-        FlyGym to convert rendered camera pixels into compound-eye readouts. We
-        use only its geometry here; no rendered pixels or task features enter the
-        registration.
-        """
+        """Return normalized centroids for FlyBody's numbered ommatidia."""
 
         ids = np.asarray(ommatidia_id_map, dtype=np.int64)
         if ids.ndim != 2 or int(ids.max(initial=0)) < 1:
@@ -166,9 +201,6 @@ class MaleCNSRetina:
     def _attach_ommatidia(
         columns: list[dict[str, object]], ommatidia_uv: np.ndarray
     ) -> None:
-        # Both FlyBody eyes use the same Retina lattice template. Eye side is kept
-        # separate by the simulation camera/readout; no left/right averaging is
-        # performed. The nearest-neighbour registration is explicitly calibrated.
         for item in columns:
             point = np.asarray([float(item["u"]), float(item["v"])])
             distance2 = np.sum((ommatidia_uv - point) ** 2, axis=1)
@@ -201,17 +233,30 @@ class MaleCNSRetina:
             raise IndexError(
                 f"ommatidium index {ommatidium_index} outside 0..{len(readouts) - 1}"
             )
-        # FlyGym places each ommatidium's intensity in one of two pale/yellow
-        # channels. Their local sum is therefore an achromatic per-ommatidium
-        # intensity, not spatial pooling or a computed visual feature.
         value = float(np.sum(readouts[ommatidium_index], dtype=np.float64))
         return float(np.clip(value, 0.0, 1.0))
+
+    def _transduce(self, side: str, ommatidium_index: int, light: float) -> float:
+        baseline = float(self._adapted_light[side][ommatidium_index])
+        if not np.isfinite(baseline):
+            # A light-on transient seeds the local state. Repeated presentation of
+            # the same luminance does not continue injecting an absolute DC current.
+            self._adapted_light[side][ommatidium_index] = light
+            return light * self.current_gain
+
+        denominator = max(abs(baseline), self.contrast_denominator_floor)
+        contrast = (light - baseline) / denominator
+        contrast = float(np.clip(contrast, -self.contrast_clip, self.contrast_clip))
+        self._adapted_light[side][ommatidium_index] = (
+            baseline + self._adaptation_alpha * (light - baseline)
+        )
+        return contrast * self.current_gain
 
     def encode(self, sim, fly) -> RetinalDrive:
         eyes = self._eye_readouts(sim, fly)
         body_currents: list[tuple[int, float]] = []
         active_columns = 0
-        currents: list[float] = []
+        current_magnitudes: list[float] = []
 
         for side in ("L", "R"):
             eye = eyes[side]
@@ -221,22 +266,25 @@ class MaleCNSRetina:
                     f"expected {self.flybody_ommatidia_per_eye}"
                 )
             for column in self._columns_by_side[side]:
-                light = self._local_achromatic(
-                    eye,
-                    int(column["ommatidium_index"]),
-                )
-                current = light * self.current_gain
-                if current <= self.current_floor:
+                ommatidium_index = int(column["ommatidium_index"])
+                light = self._local_achromatic(eye, ommatidium_index)
+                current = self._transduce(side, ommatidium_index, light)
+                if abs(current) <= self.current_floor:
                     continue
                 active_columns += 1
+                magnitude = abs(current)
                 for body_id in column["body_ids"]:
                     body_currents.append((int(body_id), current))
-                    currents.append(current)
+                    current_magnitudes.append(magnitude)
 
         return RetinalDrive(
             body_currents=tuple(body_currents),
             active_photoreceptors=len(body_currents),
             active_columns=active_columns,
-            mean_current=float(np.mean(currents)) if currents else 0.0,
-            max_current=float(np.max(currents)) if currents else 0.0,
+            mean_current=(
+                float(np.mean(current_magnitudes)) if current_magnitudes else 0.0
+            ),
+            max_current=(
+                float(np.max(current_magnitudes)) if current_magnitudes else 0.0
+            ),
         )
