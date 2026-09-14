@@ -85,6 +85,19 @@ class NeuralBridgeClient:
         if response.get("event") != "pong":
             raise NeuralBridgeError(f"unexpected ping response: {response}")
 
+    def reset_dynamics(self) -> None:
+        """Clear short-lived CNS state while preserving learned synaptic weights.
+
+        Episode boundaries reset membrane potential, activity events, refractory
+        counters, activity traces, dopamine modulation and eligibility traces.
+        Mutable synaptic weights are intentionally preserved, so learned changes
+        carry into the next episode without carrying crash transients with them.
+        """
+
+        response = self._request({"type": "reset_dynamics"})
+        if response.get("event") != "dynamics_reset":
+            raise NeuralBridgeError(f"unexpected dynamics reset response: {response}")
+
     def step_with_body_readout(
         self,
         *,
