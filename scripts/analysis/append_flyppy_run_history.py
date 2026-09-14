@@ -3,8 +3,8 @@
 
 The trainer's ignored ``summary.json`` already records wall-clock elapsed time
 and episode results.  This script preserves one row per completed run under
-``reports/flyppy/history.csv`` so learning speed can be compared across runs
-without committing checkpoints or trajectories.
+``reports/flyppy/history.csv`` so learning speed and vertical flight behavior can
+be compared across runs without committing checkpoints or trajectories.
 """
 
 from __future__ import annotations
@@ -45,6 +45,10 @@ FIELDS = [
     "collisions",
     "finished_episodes",
     "max_x_mm",
+    "episodes_ever_above_spawn",
+    "max_altitude_gain_mm",
+    "worst_altitude_loss_mm",
+    "mean_max_altitude_gain_mm",
     "checkpoint_neural_step",
     "curriculum_mode",
     "curriculum_episodes_total",
@@ -87,6 +91,20 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
     collisions = sum(bool(row.get("collision", False)) for row in episodes)
     finishes = sum(bool(row.get("finished", False)) for row in episodes)
     max_x = max(finite_float(row.get("max_x_mm"), float("-inf")) for row in episodes)
+
+    altitude_gains = [
+        finite_float(row.get("max_z_mm")) - finite_float(row.get("spawn_z_mm"))
+        for row in episodes
+    ]
+    altitude_losses = [
+        finite_float(row.get("spawn_z_mm")) - finite_float(row.get("min_z_mm"))
+        for row in episodes
+    ]
+    episodes_above_spawn = sum(gain > 1e-6 for gain in altitude_gains)
+    max_altitude_gain = max(altitude_gains)
+    worst_altitude_loss = max(altitude_losses)
+    mean_max_altitude_gain = sum(altitude_gains) / episode_count
+
     curriculum = dict(payload.get("curriculum", {}))
     experiment = str(payload.get("experiment", "-"))
     environment_version = str(payload.get("environment_version", "-"))
@@ -128,6 +146,10 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
         "collisions": collisions,
         "finished_episodes": finishes,
         "max_x_mm": f"{max_x:.6f}",
+        "episodes_ever_above_spawn": episodes_above_spawn,
+        "max_altitude_gain_mm": f"{max_altitude_gain:.6f}",
+        "worst_altitude_loss_mm": f"{worst_altitude_loss:.6f}",
+        "mean_max_altitude_gain_mm": f"{mean_max_altitude_gain:.6f}",
         "checkpoint_neural_step": checkpoint_step,
         "curriculum_mode": payload.get("curriculum_mode", curriculum.get("curriculum_mode", "-")),
         "curriculum_episodes_total": curriculum.get("curriculum_episodes", ""),
@@ -166,6 +188,9 @@ def main() -> int:
     print(f"elapsed_seconds={row['elapsed_seconds']}")
     print(f"control_steps_per_second={row['control_steps_per_second']}")
     print(f"success_rate={row['success_rate']}")
+    print(f"episodes_ever_above_spawn={row['episodes_ever_above_spawn']}")
+    print(f"max_altitude_gain_mm={row['max_altitude_gain_mm']}")
+    print(f"worst_altitude_loss_mm={row['worst_altitude_loss_mm']}")
     return 0
 
 
