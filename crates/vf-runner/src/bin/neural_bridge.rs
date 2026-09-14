@@ -54,6 +54,7 @@ struct Group {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Request {
     Ping,
+    ResetDynamics,
     Step {
         #[serde(default)]
         stimulate: HashMap<String, f32>,
@@ -199,6 +200,17 @@ impl Runtime {
         }
     }
 
+    fn reset_dynamics(&mut self) -> Result<()> {
+        let mut state = self.state()?;
+        state.membrane.fill(0.0);
+        state.spikes.fill(0);
+        state.refractory.fill(0);
+        state.activity_trace.fill(0.0);
+        state.modulation.fill(0.0);
+        state.eligibility.fill(0.0);
+        self.load_state(&state)
+    }
+
     fn backend_name(&self) -> String {
         match self {
             Runtime::Cpu(_) => "cpu-rayon".to_owned(),
@@ -211,10 +223,6 @@ fn resolve_groups(
     snapshot: &ConnectomeSnapshot,
     config: GroupConfigFile,
 ) -> Result<HashMap<String, Group>> {
-    // Schema v2 only changes experiment/provenance metadata and keeps the
-    // executable `groups.{name}.body_ids` shape identical to v1. Accept both so
-    // older generated files remain usable while the current Flyppy setup can
-    // carry explicit reinforcement provenance without breaking the bridge.
     if !matches!(config.schema_version, 1 | 2) {
         bail!("unsupported group config schema {}", config.schema_version);
     }
@@ -271,9 +279,6 @@ fn main() -> Result<()> {
         Backend::Cpu => Runtime::Cpu(CpuRuntime::new(snapshot.clone(), params)),
         Backend::Gpu => Runtime::Gpu(vf_neural::gpu::GpuRuntime::new(&snapshot, params)?),
     };
-    // The numerical state deliberately contains only neural arrays. The monotonic
-    // simulation step belongs to the bridge/checkpoint protocol and is persisted
-    // in CheckpointManifest instead of being mixed into NeuralState.
     let mut neural_step = 0u64;
 
     let stdin = io::stdin();
@@ -313,6 +318,19 @@ fn main() -> Result<()> {
                     event: "pong",
                 },
             ),
+            Request::ResetDynamics => {
+                let result = runtime.reset_dynamics();
+                match result {
+                    Ok(()) => write_json(
+                        &mut stdout,
+                        &SimpleResponse {
+                            ok: true,
+                            event: "dynamics_reset",
+                        },
+                    ),
+                    Err(error) => write_error(&mut stdout, error),
+                }
+            }
             Request::Step {
                 stimulate,
                 stimulate_body,
@@ -383,10 +401,6 @@ fn main() -> Result<()> {
                                     for name in read {
                                         match groups.get(&name) {
                                             Some(group) => {
-                                                // Only a positive/depolarizing event is
-                                                // exposed as a conventional spike. A
-                                                // hyperpolarizing graded deviation is
-                                                // internal neural state, not a motor event.
                                                 let count = group
                                                     .indices
                                                     .iter()
