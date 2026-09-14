@@ -6,13 +6,13 @@ constant DLM/DVM activation to the physical virtual-muscle layer. It is therefor
 not a controller and does not use Flyppy geometry or reward. Its purpose is to
 answer a narrower calibration question before expensive neural training:
 
-    can the current muscle->hinge torque model physically sustain a plausible
-    free-flight operating point long enough to reach the first Flyppy gate?
+    can the fixed muscle->hinge torque model physically sustain at least one
+    plausible free-flight operating point long enough to reach the first Flyppy
+    gate distance?
 
-A legacy FlyBody position-actuated wingbeat is also measured as a reference. If
-that reference is viable while every virtual-muscle operating point is not, the
-problem is localized to the virtual-muscle mechanics rather than the restored
-FlyBody flight physics as a whole.
+A legacy FlyBody position-actuated wingbeat is also measured as a reference. The
+training preflight fails closed unless both the reference and at least one fixed
+virtual-muscle operating point are viable. No prior CNS trajectory is used.
 """
 
 from __future__ import annotations
@@ -192,7 +192,9 @@ def main() -> int:
         raise SystemExit("forward speed/distance must be positive")
     if not args.minimum_z_mm < args.maximum_z_mm:
         raise SystemExit("minimum-z-mm must be below maximum-z-mm")
-    if not args.levels or any(not math.isfinite(v) or not 0.0 <= v <= 1.0 for v in args.levels):
+    if not args.levels or any(
+        not math.isfinite(v) or not 0.0 <= v <= 1.0 for v in args.levels
+    ):
         raise SystemExit("levels must contain finite values in [0, 1]")
 
     samples: list[dict[str, object]] = []
@@ -256,8 +258,10 @@ def main() -> int:
         "viable_virtual_muscle_levels": viable_levels,
         "best_virtual_muscle_sample": best,
         "interpretation": (
-            "Body-mechanics calibration only. Constant bilateral power-muscle activation "
-            "contains no Flyppy observation, reward, action decoder, or CNS output."
+            "Body-mechanics invariant only. Constant bilateral power-muscle activation "
+            "contains no Flyppy observation, reward, action decoder, CNS output, or prior "
+            "neural trajectory. Training is allowed to crash if the CNS emits a bad motor "
+            "pattern; this preflight only proves that the fixed body seam has viable states."
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -288,6 +292,18 @@ def main() -> int:
         )
     print(f"viable_virtual_muscle_levels={viable_levels}")
     print(f"result={args.output}")
+
+    if not bool(reference["viable"]):
+        raise RuntimeError(
+            "legacy FlyBody position-wing reference is not viable; body flight physics "
+            "must be repaired before neural learning"
+        )
+    if not viable_levels:
+        raise RuntimeError(
+            "fixed virtual-muscle seam has no viable bilateral power operating point; "
+            "repair body mechanics independently of CNS task outcomes"
+        )
+
     print("flybody_muscle_flight_envelope=PASS")
     return 0
 
