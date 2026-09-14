@@ -17,13 +17,18 @@ printf '\n== Exact-kinematic FlyBody aerodynamic support ==\n'
 uv run python scripts/embodiment/flybody_kinematic_aero_support.py
 
 printf '\n== FlyGym wing-frame aerodynamic A/B ==\n'
-uv run python scripts/embodiment/flybody_wing_frame_aero_ab.py
+uv run python scripts/embodiment/flybody_wing_frame_aero_ab.py \
+  --root-pitches-deg -47.5 0 47.5
 
 printf '\n== Upstream XML exact-kinematic aerodynamic support ==\n'
 uv run python scripts/embodiment/flybody_upstream_source_aero_reference.py
+
+printf '\n== Upstream XML root-orientation / force-vector sweep ==\n'
+uv run python scripts/embodiment/flybody_upstream_source_orientation_sweep.py
 
 printf '\nreference_lift_diagnosis=COMPLETE\n'
 printf 'result=%s/artifacts/embodiment/flybody-reference-lift-calibration.json\n' "$ROOT"
 printf 'kinematic_result=%s/artifacts/embodiment/flybody-kinematic-aero-support.json\n' "$ROOT"
 printf 'wing_frame_result=%s/artifacts/embodiment/flybody-wing-frame-aero-ab.json\n' "$ROOT"
 printf 'upstream_source_result=%s/artifacts/embodiment/flybody-upstream-source-aero-reference.json\n' "$ROOT"
+printf 'upstream_orientation_result=%s/artifacts/embodiment/flybody-upstream-source-orientation-sweep.json\n' "$ROOT"
