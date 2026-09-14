@@ -52,10 +52,6 @@ fi
 
 BODY_LAUNCHER=(uv run python)
 if [ "$(uname -s)" = "Darwin" ]; then
-  command -v mjpython >/dev/null 2>&1 || {
-    echo 'mjpython is required on macOS for the detached MuJoCo viewer' >&2
-    exit 127
-  }
   BODY_LAUNCHER=(uv run mjpython)
 fi
 
