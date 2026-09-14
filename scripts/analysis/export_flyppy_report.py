@@ -110,9 +110,15 @@ def main() -> int:
         for row in episodes:
             writer.writerow({name: row.get(name) for name in fields})
 
-    successes = [row for row in episodes if int(row.get("passed_gates", 0)) > 0]
-    second_gate = [row for row in episodes if int(row.get("passed_gates", 0)) > 1]
+    first_gate_successes = [row for row in episodes if int(row.get("passed_gates", 0)) > 0]
+    additional_gate_successes = [row for row in episodes if int(row.get("passed_gates", 0)) > 1]
     finishes = [row for row in episodes if bool(row.get("finished", False))]
+    collision_free = [row for row in episodes if not bool(row.get("collision", False))]
+    post_first_gate_collisions = [
+        row
+        for row in first_gate_successes
+        if bool(row.get("collision", False))
+    ]
     collisions = Counter(
         str(row.get("collision_reason") or "none")
         for row in episodes
@@ -122,13 +128,34 @@ def main() -> int:
     episode_count = len(episodes)
     curriculum = dict(payload.get("curriculum", {}))
     curriculum_mode = str(payload.get("curriculum_mode") or curriculum.get("curriculum_mode") or "adaptive")
-    training_gate_index = int(curriculum.get("training_gate_index", 0))
+    training_gate_index_raw = curriculum.get("training_gate_index")
+    training_gate_index = (
+        int(training_gate_index_raw)
+        if training_gate_index_raw is not None
+        else None
+    )
     max_passed = max(int(row.get("passed_gates", 0)) for row in episodes)
     max_x = max(float(row.get("max_x_mm", float("-inf"))) for row in episodes)
 
+    altitude_gains = [
+        float(row.get("max_z_mm", row["spawn_z_mm"])) - float(row["spawn_z_mm"])
+        for row in episodes
+    ]
+    altitude_losses = [
+        float(row["spawn_z_mm"]) - float(row.get("min_z_mm", row["spawn_z_mm"]))
+        for row in episodes
+    ]
+    episodes_ever_above_spawn = sum(gain > 0.0 for gain in altitude_gains)
+    max_altitude_gain = max(altitude_gains)
+    worst_altitude_loss = max(altitude_losses)
+    mean_max_altitude_gain = sum(altitude_gains) / len(altitude_gains)
+
     hardest_success = None
-    if successes:
-        hardest_success = min(successes, key=lambda row: float(row["spawn_x_mm"]))
+    if first_gate_successes:
+        hardest_success = min(
+            first_gate_successes,
+            key=lambda row: float(row["spawn_x_mm"]),
+        )
 
     lines = [
         "# Flyppy latest run",
@@ -137,19 +164,30 @@ def main() -> int:
         "",
         f"- backend: `{payload.get('backend', '-')}`",
         f"- curriculum mode: `{curriculum_mode}`",
-        f"- curriculum target gate: {training_gate_index + 1}",
+    ]
+    if training_gate_index is None:
+        lines.append("- adaptive training criterion: first gate pass (`passed_gates > 0`)")
+    else:
+        lines.append(f"- curriculum training gate: {training_gate_index + 1}")
+    lines.extend([
         f"- episode: {payload.get('episode_start', episodes[0].get('episode'))}〜{payload.get('episode_end', episodes[-1].get('episode'))}（{episode_count} episode）",
         f"- elapsed: {elapsed:.3f} s（平均 {elapsed / episode_count:.3f} s/episode）",
         f"- checkpoint neural step: {payload.get('checkpoint_neural_step', '-')}",
-        f"- target gate成功episode: {len(successes)}/{episode_count}（{100.0 * len(successes) / episode_count:.1f}%）",
-        f"- target gate後にさらに1 gate以上通過: {len(second_gate)} episode",
+        f"- first gate通過episode: {len(first_gate_successes)}/{episode_count}（{100.0 * len(first_gate_successes) / episode_count:.1f}%）",
+        f"- first gate後にさらに1 gate以上通過: {len(additional_gate_successes)} episode",
+        f"- first gate通過後に衝突: {len(post_first_gate_collisions)} episode",
+        f"- 無衝突episode: {len(collision_free)} episode",
         f"- stage内course完走: {len(finishes)} episode",
         f"- 1 episode最大通過gate数: {max_passed}",
         f"- run内最大x: {max_x:.3f} mm",
-    ]
+        f"- spawn高度を一度でも上回ったepisode: {episodes_ever_above_spawn}/{episode_count}",
+        f"- run内最大高度gain: {max_altitude_gain:+.3f} mm",
+        f"- run内最大高度loss: {worst_altitude_loss:.3f} mm",
+        f"- episodeごとの最大高度gain平均: {mean_max_altitude_gain:+.3f} mm",
+    ])
     if hardest_success is not None:
         lines.append(
-            "- 最も小さいspawn xでの成功: "
+            "- 最も小さいspawn xでのfirst gate通過: "
             f"episode {hardest_success['episode']} / x={float(hardest_success['spawn_x_mm']):.3f} / "
             f"z={float(hardest_success['spawn_z_mm']):.3f} / vx={float(hardest_success['initial_speed_mm_s']):.1f} / "
             f"passed={int(hardest_success['passed_gates'])}"
@@ -199,7 +237,7 @@ def main() -> int:
         if by_level:
             lines.extend([
                 "",
-                "| ease level | episode数 | 成功 | 成功率 |",
+                "| ease level | episode数 | first gate通過 | 通過率 |",
                 "|---:|---:|---:|---:|",
             ])
             for level, rows in sorted(by_level.items()):
@@ -210,9 +248,9 @@ def main() -> int:
 
     lines.extend([
         "",
-        "## 成功境界",
+        "## First-gate成功境界",
         "",
-        "同一 `spawn_z / initial_vx` 条件ごとに、成功した中で最小のspawn xを記録します。",
+        "同一 `spawn_z / initial_vx` 条件ごとに、first gateを通過した中で最小のspawn xを記録します。",
         "",
         "| spawn z (mm) | initial vx (mm/s) | 最小成功spawn x (mm) | episode | passed gates |",
         "|---:|---:|---:|---:|---:|",
@@ -235,13 +273,13 @@ def main() -> int:
     lines.extend(["", "## Episode一覧", ""])
     if include_level:
         lines.extend([
-            "| ep | ease | spawn x | spawn z | vx | steps | passed | collision | max x | final vx |",
-            "|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|",
+            "| ep | ease | spawn x | spawn z | vx | steps | passed | collision | min z | max z | max x | final vx |",
+            "|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|",
         ])
     else:
         lines.extend([
-            "| ep | spawn x | spawn z | vx | steps | passed | collision | max x | final vx |",
-            "|---:|---:|---:|---:|---:|---:|---|---:|---:|",
+            "| ep | spawn x | spawn z | vx | steps | passed | collision | min z | max z | max x | final vx |",
+            "|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|",
         ])
 
     for row in episodes:
@@ -254,6 +292,8 @@ def main() -> int:
             "steps": int(row["control_steps"]),
             "passed": int(row["passed_gates"]),
             "reason": reason,
+            "min_z": float(row["min_z_mm"]),
+            "max_z": float(row["max_z_mm"]),
             "max_x": float(row["max_x_mm"]),
             "final_vx": float(row["final_vx_mm_s"]),
         }
@@ -261,14 +301,14 @@ def main() -> int:
             level = row.get("boundary_ease_level")
             level_text = "-" if level is None else f"{float(level):.2f}"
             lines.append(
-                "| {episode} | {level} | {spawn_x:.3f} | {spawn_z:.3f} | {speed:.1f} | {steps} | {passed} | {reason} | {max_x:.3f} | {final_vx:.3f} |".format(
+                "| {episode} | {level} | {spawn_x:.3f} | {spawn_z:.3f} | {speed:.1f} | {steps} | {passed} | {reason} | {min_z:.3f} | {max_z:.3f} | {max_x:.3f} | {final_vx:.3f} |".format(
                     level=level_text,
                     **common,
                 )
             )
         else:
             lines.append(
-                "| {episode} | {spawn_x:.3f} | {spawn_z:.3f} | {speed:.1f} | {steps} | {passed} | {reason} | {max_x:.3f} | {final_vx:.3f} |".format(
+                "| {episode} | {spawn_x:.3f} | {spawn_z:.3f} | {speed:.1f} | {steps} | {passed} | {reason} | {min_z:.3f} | {max_z:.3f} | {max_x:.3f} | {final_vx:.3f} |".format(
                     **common,
                 )
             )
@@ -277,7 +317,8 @@ def main() -> int:
         "",
         "## 判定用メモ",
         "",
-        "- `training_gate_index` は0始まりです。0=第1gate、1=第2gateです。",
+        "- adaptive curriculumの現在の成功条件は `passed_gates > 0`、すなわちfirst gate通過です。episode全体の無衝突成功を意味しません。",
+        "- `training_gate_index` がstateに存在する場合のみ、その値を明示します。0始まりです。",
         "- `boundary_ease_level` は0.00=難しい端、1.00=易しい端です。",
         "- `latest.csv` がepisode単位の機械可読データです。",
         "- checkpoint、trajectory、live telemetryなどの巨大/高頻度データは `artifacts/` に残し、Gitへは含めません。",
