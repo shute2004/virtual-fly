@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>virtual-fly live neural viewer</title>
+  <title>virtual-fly live learning viewer</title>
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
-    html, body { margin: 0; width: 100%; height: 100%; background: #090b0f; color: #e8edf4; overflow: hidden; }
+    html, body { margin: 0; width: 100%; height: 100%; background: #080b10; color: #e8edf4; overflow: hidden; }
     #root { width: 100%; height: 100%; display: grid; grid-template-columns: minmax(0,1fr) 340px; }
-    #scene { min-width: 0; position: relative; }
+    #scene { min-width: 0; position: relative; overflow: hidden; }
     #panel { border-left: 1px solid #252c36; background: #11161d; padding: 16px; overflow: auto; }
     h1 { margin: 0 0 6px; font-size: 17px; }
     h2 { margin: 18px 0 8px; font-size: 13px; color: #b9c5d3; }
@@ -16,16 +16,22 @@
     .note { color: #9aa7b6; }
     .warn { color: #ffc977; }
     .metric { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 4px 0; border-bottom: 1px solid #202833; }
-    .row { display: flex; gap: 8px; align-items: center; margin: 7px 0; }
+    .row { display: flex; gap: 8px; align-items: center; margin: 7px 0; flex-wrap: wrap; }
     input[type=text] { width: 100%; box-sizing: border-box; background: #0c1016; color: #e8edf4; border: 1px solid #384353; border-radius: 6px; padding: 6px 8px; }
     button { background: #1a222d; color: #e8edf4; border: 1px solid #384353; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
-    #badge { position: absolute; left: 12px; top: 12px; background: rgba(7,9,12,.78); border: 1px solid #27303b; border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none; }
+    #badge { position: absolute; left: 12px; top: 12px; z-index: 3; background: rgba(7,9,12,.78); border: 1px solid #27303b; border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none; }
+    #flyCard { position: absolute; right: 14px; bottom: 14px; z-index: 4; width: min(42vw, 520px); min-width: 300px; border: 1px solid #384353; border-radius: 10px; overflow: hidden; background: rgba(8,11,16,.94); box-shadow: 0 10px 35px rgba(0,0,0,.35); }
+    #flyTitle { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; font-size: 11px; color: #b9c5d3; border-bottom: 1px solid #252c36; }
+    #flyFrameWrap { position: relative; aspect-ratio: 16/9; background: #05070a; display: grid; place-items: center; }
+    #flyFrame { width: 100%; height: 100%; object-fit: cover; display: block; }
+    #flyMissing { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; color: #79889a; text-align: center; font-size: 12px; pointer-events: none; }
     #legend { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; }
     .dot { width: 10px; height: 10px; border-radius: 50%; }
     #status { min-height: 18px; color: #8fc9ff; }
-    @media (max-width: 780px) {
-      #root { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) 270px; }
+    @media (max-width: 900px) {
+      #root { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) 280px; }
       #panel { border-left: 0; border-top: 1px solid #252c36; }
+      #flyCard { width: min(56vw, 430px); min-width: 250px; }
     }
   </style>
   <script type="importmap">
@@ -39,10 +45,19 @@
 </head>
 <body>
 <div id="root">
-  <div id="scene"><div id="badge">MaleCNS live activity / 模式3D配置</div></div>
+  <div id="scene">
+    <div id="badge">MaleCNS live activity / 左右脳葉 + 視覚葉 + VNC 模式配置</div>
+    <div id="flyCard">
+      <div id="flyTitle"><span>FlyBody live</span><span id="flyCoords">x=- / z=-</span></div>
+      <div id="flyFrameWrap">
+        <img id="flyFrame" alt="live FlyBody" />
+        <div id="flyMissing">FlyBody observer の映像を待っています</div>
+      </div>
+    </div>
+  </div>
   <aside id="panel">
-    <h1>virtual-fly live neural viewer</h1>
-    <p class="warn">配置はconnectomeを見やすくするための模式3D配置です。実際の神経形態座標ではありません。</p>
+    <h1>virtual-fly live learning viewer</h1>
+    <p class="warn">ニューロン配置の形だけは模式図です。body ID・released connection・発火はMaleCNS由来です。FlyBody欄は別MuJoCo observerが実モデルを描画しています。</p>
 
     <h2>接続</h2>
     <label>実験ディレクトリ</label>
@@ -54,23 +69,28 @@
     <div class="metric"><span>backend</span><span id="backend">-</span></div>
     <div class="metric"><span>episode</span><span id="episode">-</span></div>
     <div class="metric"><span>control step</span><span id="step">-</span></div>
-    <div class="metric"><span>depolarizing</span><span id="active">-</span></div>
+    <div class="metric"><span>表示中の発火</span><span id="active">-</span></div>
     <div class="metric"><span>gate</span><span id="gate">-</span></div>
     <div class="metric"><span>event</span><span id="event">-</span></div>
 
     <h2>表示</h2>
-    <div class="row"><label><input id="showEdges" type="checkbox" checked /> シナプス</label><label><input id="pulseEdges" type="checkbox" checked /> 発火で発光</label></div>
+    <div class="row">
+      <label><input id="showEdges" type="checkbox" checked /> シナプス</label>
+      <label><input id="pulseEdges" type="checkbox" checked /> 発火で発光</label>
+      <label><input id="showShell" type="checkbox" checked /> CNS輪郭</label>
+    </div>
     <div class="row"><button id="resetCamera">カメラを戻す</button></div>
 
     <h2>凡例</h2>
     <div id="legend">
       <span class="dot" style="background:#93a4b8"></span><span>通常ニューロン</span>
       <span class="dot" style="background:#56d6ff"></span><span>発火ニューロン</span>
+      <span class="dot" style="background:#b08cff"></span><span>dopamine neuron</span>
       <span class="dot" style="background:#69f0a5"></span><span>PAM reward event</span>
       <span class="dot" style="background:#ff6f7d"></span><span>PPL aversive event</span>
     </div>
 
-    <p class="note">細い線は表示対象サブグラフのreleased connectionです。presynaptic neuronが発火したstepでは、そのシナプスを明るく表示します。viewerの起動・終了は学習プロセスへ影響しません。</p>
+    <p class="note">表示は全166,700ニューロンではなく、強結合と学習境界を含むviewer用サブグラフです。viewerの起動・終了は学習プロセスへ影響しません。</p>
   </aside>
 </div>
 
@@ -80,37 +100,63 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const host = document.getElementById('scene');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x090b0f);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+scene.background = new THREE.Color(0x080b10);
+const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 host.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const key = new THREE.DirectionalLight(0xffffff, 1.1);
+scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+const key = new THREE.DirectionalLight(0xffffff, 1.0);
 key.position.set(8, 12, 10);
 scene.add(key);
 
 let graph = null;
 let pointCloud = null;
 let edgeLines = null;
+let shellRoot = null;
 let nodeIndex = new Map();
 let edges = [];
 let baseNodeColors = [];
 let lastNeuralKey = '';
 let poll = null;
+let lastFlyKey = '';
 
 function resetCamera() {
-  camera.position.set(0, 4, 24);
-  controls.target.set(0, 0, 0);
+  camera.position.set(0, 1.5, 27);
+  controls.target.set(0, -1.5, 0);
   controls.update();
 }
 resetCamera();
 
+function addShell(center, scale, opacity = 0.08) {
+  const material = new THREE.MeshBasicMaterial({ color: 0x89a7c4, wireframe: true, transparent: true, opacity, depthWrite: false });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), material);
+  mesh.position.set(...center);
+  mesh.scale.set(...scale);
+  shellRoot.add(mesh);
+}
+
+function buildShell() {
+  if (shellRoot) scene.remove(shellRoot);
+  shellRoot = new THREE.Group();
+  addShell([-1.55, 1.35, 0], [2.7, 3.0, 2.55], .08);
+  addShell([ 1.55, 1.35, 0], [2.7, 3.0, 2.55], .08);
+  addShell([-4.5, 1.2, 0], [1.65, 2.45, 2.05], .07);
+  addShell([ 4.5, 1.2, 0], [1.65, 2.45, 2.05], .07);
+  addShell([-0.75, -5.2, 0], [1.15, 4.2, 1.35], .06);
+  addShell([ 0.75, -5.2, 0], [1.15, 4.2, 1.35], .06);
+  scene.add(shellRoot);
+  shellRoot.visible = document.getElementById('showShell').checked;
+}
+
+buildShell();
+
 document.getElementById('resetCamera').addEventListener('click', resetCamera);
 document.getElementById('showEdges').addEventListener('change', e => { if (edgeLines) edgeLines.visible = e.target.checked; });
+document.getElementById('showShell').addEventListener('change', e => { if (shellRoot) shellRoot.visible = e.target.checked; });
 document.getElementById('reconnect').addEventListener('click', () => connect(true));
 document.getElementById('follow').addEventListener('change', configurePolling);
 
@@ -128,6 +174,9 @@ function categoryColor(node) {
   const nt = Number(node.nt || 0);
   if (nt === 4) return new THREE.Color(0xb08cff);
   if (nt === 7) return new THREE.Color(0x7fa9ff);
+  const region = String(node.region || '');
+  if (region === 'optic_lobe') return new THREE.Color(0x879fb8);
+  if (region === 'ventral_nerve_cord') return new THREE.Color(0x9f9ca7);
   return new THREE.Color(0x93a4b8);
 }
 
@@ -154,7 +203,7 @@ function buildGraph(payload) {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   pointCloud = new THREE.Points(
     geometry,
-    new THREE.PointsMaterial({ size: 0.12, vertexColors: true, transparent: true, opacity: 0.88, sizeAttenuation: true })
+    new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, opacity: 0.92, sizeAttenuation: true })
   );
   scene.add(pointCloud);
 
@@ -171,11 +220,11 @@ function buildGraph(payload) {
   const edgeGeom = new THREE.BufferGeometry();
   edgeGeom.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
   const edgeColors = new Float32Array(edgePositions.length);
-  for (let i = 0; i < edgeColors.length; i += 3) edgeColors.set([0.18,0.22,0.28], i);
+  for (let i = 0; i < edgeColors.length; i += 3) edgeColors.set([0.16,0.20,0.27], i);
   edgeGeom.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3));
   edgeLines = new THREE.LineSegments(
     edgeGeom,
-    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.18 })
+    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.17 })
   );
   scene.add(edgeLines);
   document.getElementById('showEdges').dispatchEvent(new Event('change'));
@@ -190,7 +239,7 @@ function updateActivity(neural) {
   const aversiveColor = new THREE.Color(0xff6f7d);
   for (let i = 0; i < baseNodeColors.length; i++) {
     const c = baseNodeColors[i];
-    colors.setXYZ(i, c.r * 0.7, c.g * 0.7, c.b * 0.7);
+    colors.setXYZ(i, c.r * 0.64, c.g * 0.64, c.b * 0.64);
   }
   const nodes = graph.nodes || [];
   for (const id of activeIds) {
@@ -198,10 +247,9 @@ function updateActivity(neural) {
     if (i !== undefined) colors.setXYZ(i, activeColor.r, activeColor.g, activeColor.b);
   }
   if (neural.reward || neural.aversive) {
+    const eventColor = neural.reward ? rewardColor : aversiveColor;
     for (let i = 0; i < nodes.length; i++) {
-      if (Number(nodes[i].nt || 0) !== 4) continue;
-      const c = neural.reward ? rewardColor : aversiveColor;
-      colors.setXYZ(i, c.r, c.g, c.b);
+      if (Number(nodes[i].nt || 0) === 4) colors.setXYZ(i, eventColor.r, eventColor.g, eventColor.b);
     }
   }
   colors.needsUpdate = true;
@@ -214,7 +262,7 @@ function updateActivity(neural) {
       const b = nodeIndex.get(Number(edge.post));
       if (a === undefined || b === undefined) continue;
       const lit = activeIds.has(Number(edge.pre));
-      const c = lit ? activeColor : new THREE.Color(0x2e3847);
+      const c = lit ? activeColor : new THREE.Color(0x293441);
       edgeColors.setXYZ(segment * 2, c.r, c.g, c.b);
       edgeColors.setXYZ(segment * 2 + 1, c.r, c.g, c.b);
       segment++;
@@ -231,6 +279,19 @@ function updateBody(body) {
   document.getElementById('gate').textContent = body.next_gate ?? '-';
   const event = body.collision ? `collision:${body.collision_reason || '?'}` : body.passed_gate ? 'gate pass' : body.reward ? 'reward' : body.aversive ? 'aversive' : '-';
   document.getElementById('event').textContent = event;
+  const x = Number(body.qpos?.[0]);
+  const z = Number(body.qpos?.[2]);
+  document.getElementById('flyCoords').textContent = Number.isFinite(x) && Number.isFinite(z) ? `x=${x.toFixed(2)} / z=${z.toFixed(2)} mm` : 'x=- / z=-';
+}
+
+function updateFlyFrame(exp, body) {
+  const key = `${body.episode}:${body.control_step}`;
+  if (key === lastFlyKey) return;
+  lastFlyKey = key;
+  const img = document.getElementById('flyFrame');
+  img.onload = () => { document.getElementById('flyMissing').style.display = 'none'; };
+  img.onerror = () => { document.getElementById('flyMissing').style.display = 'grid'; };
+  img.src = `/${exp}/live/fly.png?v=${encodeURIComponent(key)}-${Date.now()}`;
 }
 
 async function tick() {
@@ -248,6 +309,7 @@ async function tick() {
       updateActivity(neural);
     }
     updateBody(body);
+    updateFlyFrame(exp, body);
     document.getElementById('status').textContent = status.running ? 'LIVE' : '学習停止中 / 最終フレーム';
   } catch (error) {
     document.getElementById('status').textContent = `telemetry待機中: ${error}`;
