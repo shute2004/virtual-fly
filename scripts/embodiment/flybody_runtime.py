@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """Shared FlyBody/MuJoCo runtime used by current and legacy motor interfaces.
 
-This module owns only body construction, flight-physics compatibility, root
-state access, wing joint access, vision access, and the peripheral analytic
-wingbeat phase used by the virtual-muscle approximation.  It contains no CNS
-readout or action-selection policy.
-
-Current code should depend on :class:`FlyBodyRuntime`.  The old DNg02 adapter is
-a separate subclass and must not be a base class for the individual-MN muscle
-path.
+This module owns body construction, flight-physics compatibility, root state,
+joint access, vision access, canonical body mass and researched mechanical joint
+limits.  It contains no CNS readout or action-selection policy.
 """
 
 from __future__ import annotations
@@ -35,6 +30,11 @@ from flygym.flybody.anatomy_flybody import (
 )
 from flygym.utils.math import Rotation3D
 
+from flybody_biophysics import (
+    apply_researched_joint_ranges,
+    compiled_joint_ranges,
+    normalize_fly_mass,
+)
 from flybody_flight_physics import (
     FLIGHT_BODY_PITCH_DEG,
     FLIGHT_PHYSICS_TIMESTEP_S,
@@ -60,6 +60,7 @@ class FlyBodyRuntime:
         enable_vision: bool = False,
         enable_observer_camera: bool = False,
         enable_wing_aerodynamics: bool = True,
+        normalize_canonical_mass: bool = True,
         world: BaseWorld | None = None,
     ) -> None:
         if wingbeat_hz <= 0:
@@ -96,10 +97,12 @@ class FlyBodyRuntime:
             axis_order=FlyBodyAxisOrder.YAW_ROLL_PITCH,
         )
         self.fly.add_joints(skeleton, KinematicPosePreset.FLYBODY_NEUTRAL)
+        self.joint_range_overrides = apply_researched_joint_ranges(self.fly)
         apply_flight_wing_joint_parameters(self.fly)
 
-        # Select only the six wing DOFs. FlyGym's broad actuator preset also
-        # includes non-flight joints such as halteres.
+        # The current wing actuator path still needs only the six wing POSITION
+        # actuators.  Grounded leg/haltere motor output is applied as physical
+        # generalized force, so it does not need a synthetic position command.
         add_flight_position_actuators(self.fly, list(skeleton.iter_jointdofs()))
         self.fly.add_tendons()
         self.fly.add_tendon_actuators()
@@ -152,8 +155,12 @@ class FlyBodyRuntime:
         self.sim = Simulation(active_world, timestep=FLIGHT_PHYSICS_TIMESTEP_S)
         self.sim.reset()
         self.timestep = float(self.sim.mj_model.opt.timestep)
+        self.mass_normalization = (
+            normalize_fly_mass(self.sim, self.fly) if normalize_canonical_mass else None
+        )
 
         self._all_dofs = list(self.fly.get_jointdofs_order())
+        self._dof_by_key = {self._dof_key(dof): dof for dof in self._all_dofs}
         self._actuated_dofs = list(
             self.fly.get_actuated_jointdofs_order(ActuatorType.POSITION)
         )
@@ -183,15 +190,21 @@ class FlyBodyRuntime:
             )
 
         body_order = self.fly.get_bodysegs_order()
-        self._thorax_index = next(
-            i for i, segment in enumerate(body_order) if segment.name == "c_thorax"
-        )
+        self._body_segment_index = {
+            segment.name: i for i, segment in enumerate(body_order)
+        }
+        self._thorax_index = self._body_segment_index["c_thorax"]
         self._time = 0.0
         self._initialize_episode_state()
+        self.compiled_biological_joint_ranges = compiled_joint_ranges(self.sim, self.fly)
 
     @staticmethod
     def _dof_key(dof) -> tuple[str, str, str]:
         return dof.parent.name, dof.child.name, dof.axis.value
+
+    @staticmethod
+    def _dof_name(dof) -> str:
+        return f"{dof.parent.name}-{dof.child.name}-{dof.axis.value}"
 
     def _root_freejoint_id(self) -> int:
         joint_types = np.asarray(self.sim.mj_model.jnt_type)
@@ -206,17 +219,53 @@ class FlyBodyRuntime:
     def _root_freejoint_qpos_address(self) -> int:
         return int(self.sim.mj_model.jnt_qposadr[self._root_freejoint_id()])
 
-    def _wing_state_addresses(self, dof) -> tuple[int, int]:
+    def _joint_state_addresses(self, dof) -> tuple[int, int]:
         joint_name = self.fly.jointdof_to_mjcfjoint[dof].name
         joint_id = mj.mj_name2id(
             self.sim.mj_model, mj.mjtObj.mjOBJ_JOINT, joint_name
         )
         if joint_id < 0:
-            raise RuntimeError(f"compiled FlyBody wing joint not found: {joint_name}")
+            raise RuntimeError(f"compiled FlyBody joint not found: {joint_name}")
         return (
             int(self.sim.mj_model.jnt_qposadr[joint_id]),
             int(self.sim.mj_model.jnt_dofadr[joint_id]),
         )
+
+    def _wing_state_addresses(self, dof) -> tuple[int, int]:
+        return self._joint_state_addresses(dof)
+
+    def joint_dof(self, name: str):
+        parts = name.split("-")
+        if len(parts) < 3:
+            raise KeyError(name)
+        key = ("-".join(parts[:-2]), parts[-2], parts[-1])
+        # FlyBody segment names themselves contain no hyphen today, but use a
+        # direct name scan so future naming does not silently select a wrong DOF.
+        for dof in self._all_dofs:
+            if self._dof_name(dof) == name:
+                return dof
+        raise KeyError(f"FlyBody biological DOF not found: {name}")
+
+    def joint_state_addresses(self, name: str) -> tuple[int, int]:
+        return self._joint_state_addresses(self.joint_dof(name))
+
+    def joint_range_rad(self, name: str) -> tuple[float, float]:
+        dof = self.joint_dof(name)
+        joint_name = self.fly.jointdof_to_mjcfjoint[dof].name
+        joint_id = mj.mj_name2id(self.sim.mj_model, mj.mjtObj.mjOBJ_JOINT, joint_name)
+        if joint_id < 0 or not bool(self.sim.mj_model.jnt_limited[joint_id]):
+            raise RuntimeError(f"FlyBody joint is not a limited biological hinge: {name}")
+        low, high = self.sim.mj_model.jnt_range[joint_id]
+        return float(low), float(high)
+
+    def body_segment_position_mm(self, name: str) -> np.ndarray:
+        try:
+            index = self._body_segment_index[name]
+        except KeyError as exc:
+            raise KeyError(f"FlyBody segment not found: {name}") from exc
+        return np.asarray(
+            self.sim.get_body_positions(self.fly.name)[index], dtype=np.float64
+        ).copy()
 
     def set_root_position_mm(
         self, position: np.ndarray | tuple[float, float, float]
