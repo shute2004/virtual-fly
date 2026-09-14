@@ -42,7 +42,8 @@ uv run python -m py_compile \
   scripts/embodiment/train_flyppy_curriculum.py \
   scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_body_viewer.py \
-  scripts/data/prepare_neural_viewer_graph.py
+  scripts/data/prepare_neural_viewer_graph.py \
+  scripts/analysis/export_flyppy_report.py
 
 if [ ! -f "$GROUPS" ]; then
   printf '\n== Generate neural boundary groups ==\n'
@@ -124,7 +125,7 @@ printf '\n== Flyppy persistent curriculum learning ==\n'
 printf 'live_viewer=separate-process command="bash scripts/dev/view_learning.sh"\n'
 # Normal runs keep one GPU/MuJoCo runtime for all episodes. Checkpointing is
 # intentionally sparse because a full CNS checkpoint includes ~25.6M synapses.
-exec uv run python scripts/embodiment/train_flyppy_curriculum.py \
+uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
@@ -133,3 +134,8 @@ exec uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --telemetry-stride 10 \
   --checkpoint-every 32 \
   "${FLYPPY_ARGS[@]}"
+
+printf '\n== Export compact Git report ==\n'
+uv run python scripts/analysis/export_flyppy_report.py
+printf 'report_md=reports/flyppy/latest.md\n'
+printf 'report_csv=reports/flyppy/latest.csv\n'
