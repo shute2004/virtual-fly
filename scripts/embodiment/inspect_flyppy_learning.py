@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Inspect a completed Flyppy run without advancing the neural simulation.
 
-The diagnostic reads the saved CNS checkpoint and trajectory only.  It reports
+The diagnostic reads the saved CNS checkpoint and trajectory only. It reports
 whether the learning chain actually existed at the end of the run:
 
     sensory/CNS activity -> eligibility
@@ -21,7 +21,9 @@ from pathlib import Path
 import numpy as np
 
 
-DEFAULT_EXPERIMENT = Path("artifacts/experiments/flyppy-v0")
+# Keep this aligned with flyppy_closed_loop.py. v0 is retained only as an old
+# experiment artifact and must not silently be inspected after v1 training.
+DEFAULT_EXPERIMENT = Path("artifacts/experiments/flyppy-v1")
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,7 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chunk-edges", type=int, default=1_000_000)
     parser.add_argument("--epsilon", type=float, default=1e-12)
     parser.add_argument("--weight-epsilon", type=float, default=1e-7)
-    parser.add_argument("--learning-rate", type=float, default=0.0005)
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=0.00001,
+        help="must match NeuralParams::default().learning_rate for predicted-update diagnostics",
+    )
     parser.add_argument("--synapse-scale", type=float, default=0.02)
     return parser.parse_args()
 
@@ -118,6 +125,9 @@ def main() -> int:
     snapshot_manifest = read_manifest(args.snapshot / "manifest.json")
     checkpoint = args.checkpoint or (args.experiment / "checkpoint")
     checkpoint_manifest = read_manifest(checkpoint / "manifest.json")
+
+    print(f"experiment={args.experiment}")
+    print(f"checkpoint={checkpoint}")
 
     neuron_count = int(snapshot_manifest["neuron_count"])
     edge_count = int(snapshot_manifest["edge_count"])
@@ -263,10 +273,11 @@ def main() -> int:
         diagnosis = "NO_ELIGIBILITY"
     elif overlap_edges == 0:
         diagnosis = "NO_MODULATION_ELIGIBILITY_OVERLAP"
-    elif predicted_update_over_monitor_threshold == 0:
-        diagnosis = "UPDATES_BELOW_MONITOR_THRESHOLD"
     elif changed_weights == 0:
-        diagnosis = "OVERLAP_EXISTS_BUT_WEIGHTS_UNCHANGED"
+        if predicted_update_over_monitor_threshold == 0:
+            diagnosis = "UPDATES_BELOW_MONITOR_THRESHOLD"
+        else:
+            diagnosis = "OVERLAP_EXISTS_BUT_WEIGHTS_UNCHANGED"
     else:
         diagnosis = "PLASTICITY_ACTIVE"
     print(f"diagnosis={diagnosis}")
