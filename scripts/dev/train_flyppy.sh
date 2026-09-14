@@ -37,11 +37,9 @@ unset VF_CURRICULUM_SPAWN_Z || true
 
 uv sync >/dev/null
 
-# This compiles the GPU runtime, bridge protocol and WGSL include path before a
-# long training launch. Runtime shader validation still happens when GPU starts.
 cargo check -q -p vf-runner --bin neural_bridge
 uv run python -m py_compile \
-  scripts/embodiment/train_flyppy_persistent.py \
+  scripts/embodiment/train_flyppy_curriculum.py \
   scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_body_viewer.py \
   scripts/data/prepare_neural_viewer_graph.py
@@ -124,10 +122,14 @@ fi
 
 printf '\n== Flyppy persistent curriculum learning ==\n'
 printf 'live_viewer=separate-process command="bash scripts/dev/view_learning.sh"\n'
-exec uv run python scripts/embodiment/train_flyppy_persistent.py \
+# Normal runs keep one GPU/MuJoCo runtime for all episodes. Checkpointing is
+# intentionally sparse because a full CNS checkpoint includes ~25.6M synapses.
+exec uv run python scripts/embodiment/train_flyppy_curriculum.py \
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
   --wing-motor-map "$WING_MOTOR_MAP" \
   --viewer-graph "$VIEWER_GRAPH" \
+  --telemetry-stride 10 \
+  --checkpoint-every 32 \
   "${FLYPPY_ARGS[@]}"
