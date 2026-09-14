@@ -22,7 +22,10 @@ hinge phase are explicitly calibrated bootstrap parameters.
 
 from __future__ import annotations
 
+import json
 import math
+import os
+from pathlib import Path
 
 import numpy as np
 
@@ -43,12 +46,32 @@ STEERING_STROKE_EFFECT = {
     "i1": -0.12,
 }
 
-# Offline causal replay of the first full MaleCNS -> muscle trajectory reproduced
-# the original floor collision exactly. Reducing either aggregate power or direct
-# steering to 0.9 was the closest single-parameter recovery. These values are
-# therefore calibrated body-interface parameters, not biological measurements.
+# Fallback calibration used when no run-specific preflight artifact is supplied.
+# These are body-interface values, not biological measurements.
 CALIBRATED_POWER_GAIN = 0.90
 CALIBRATED_STEERING_GAIN = 0.90
+CALIBRATED_SWAP_DLM_DVM_PHASE = True
+
+
+def _environment_calibration() -> dict[str, object]:
+    """Load one static preflight calibration for the process, if configured.
+
+    The path is deliberately supplied by the training launcher. Nothing in this
+    adapter searches prior episodes or changes gains during an episode, so this is
+    not an action decoder or adaptive controller.
+    """
+
+    raw = os.environ.get("VF_MOTOR_CALIBRATION")
+    if not raw:
+        return {}
+    path = Path(raw)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if int(payload.get("schema_version", 0)) != 1:
+        raise ValueError(f"unsupported motor calibration schema in {path}")
+    for key in ("power_gain", "steering_gain", "swap_dlm_dvm_phase"):
+        if key not in payload:
+            raise ValueError(f"motor calibration {path} is missing {key}")
+    return payload
 
 
 class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
@@ -59,13 +82,33 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
         *args,
         virtual_power_kp: float = FLIGHT_WING_POSITION_KP,
         virtual_power_kd: float = 0.08,
-        power_gain: float = CALIBRATED_POWER_GAIN,
-        steering_gain: float = CALIBRATED_STEERING_GAIN,
-        swap_dlm_dvm_phase: bool = True,
+        power_gain: float | None = None,
+        steering_gain: float | None = None,
+        swap_dlm_dvm_phase: bool | None = None,
         max_abs_torque: float = 2500.0,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
+        calibration = (
+            _environment_calibration()
+            if power_gain is None
+            or steering_gain is None
+            or swap_dlm_dvm_phase is None
+            else {}
+        )
+        if power_gain is None:
+            power_gain = float(calibration.get("power_gain", CALIBRATED_POWER_GAIN))
+        if steering_gain is None:
+            steering_gain = float(
+                calibration.get("steering_gain", CALIBRATED_STEERING_GAIN)
+            )
+        if swap_dlm_dvm_phase is None:
+            swap_dlm_dvm_phase = bool(
+                calibration.get(
+                    "swap_dlm_dvm_phase", CALIBRATED_SWAP_DLM_DVM_PHASE
+                )
+            )
+
         if virtual_power_kp <= 0.0 or virtual_power_kd < 0.0:
             raise ValueError("virtual muscle gains are invalid")
         if power_gain < 0.0 or steering_gain < 0.0 or max_abs_torque <= 0.0:
@@ -121,12 +164,9 @@ class FlyBodyMuscleAdapter(FlyBodyWingAdapter):
     ) -> float:
         # DLM and DVM are antagonistic asynchronous power-muscle groups. The
         # mapping to this abstract hinge oscillator is a calibrated coordinate
-        # convention, not a measured neural phase. Causal replay of the recorded
-        # MaleCNS motor trajectory showed that swapping the original assignment
-        # restored stable flight while retaining both biological power-muscle
-        # groups, whereas deleting DVM entirely also recovered but would be an
-        # unjustified biological ablation. Keep the reversible phase convention
-        # explicit so legacy trajectories can still be replayed exactly.
+        # convention, not a measured neural phase. Keep the convention explicit
+        # so a body-only preflight can choose it once before an episode without
+        # changing or decoding CNS activity online.
         positive_half_cycle = math.sin(phase) >= 0.0
         if self.swap_dlm_dvm_phase:
             activation = (
