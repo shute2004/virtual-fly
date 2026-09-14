@@ -53,6 +53,7 @@ class NeuralBridgeClient:
             raise NeuralBridgeError("failed to open neural bridge pipes")
         self._stdin = self._proc.stdin
         self._stdout = self._proc.stdout
+        self.last_step = 0
         self.ready = self._read_response()
         if self.ready.get("event") != "ready":
             self.close(force=True)
@@ -86,14 +87,7 @@ class NeuralBridgeClient:
             raise NeuralBridgeError(f"unexpected ping response: {response}")
 
     def reset_dynamics(self) -> None:
-        """Clear short-lived CNS state while preserving learned synaptic weights.
-
-        Episode boundaries reset membrane potential, activity events, refractory
-        counters, activity traces, dopamine modulation and eligibility traces.
-        Mutable synaptic weights are intentionally preserved, so learned changes
-        carry into the next episode without carrying crash transients with them.
-        """
-
+        """Clear short-lived CNS state while preserving learned synaptic weights."""
         response = self._request({"type": "reset_dynamics"})
         if response.get("event") != "dynamics_reset":
             raise NeuralBridgeError(f"unexpected dynamics reset response: {response}")
@@ -108,13 +102,7 @@ class NeuralBridgeClient:
         plasticity: bool = True,
         steps: int = 1,
     ) -> tuple[dict[str, dict], dict[int, bool]]:
-        """Advance the CNS and return optional group diagnostics + exact body spikes.
-
-        ``read_body`` is the target motor-boundary primitive: each requested
-        released MaleCNS body ID is returned independently. No population mean,
-        matrix decoder, or action value is computed by this method.
-        """
-
+        """Advance the CNS and return optional group diagnostics + exact body spikes."""
         response = self._request(
             {
                 "type": "step",
@@ -129,6 +117,7 @@ class NeuralBridgeClient:
                 "steps": int(steps),
             }
         )
+        self.last_step = int(response.get("step", self.last_step))
         groups = response.get("read", {})
         bodies = {
             int(item["body_id"]): bool(item["spike"])
@@ -164,12 +153,14 @@ class NeuralBridgeClient:
         response = self._request({"type": "save_checkpoint", "path": str(path)})
         if response.get("event") != "checkpoint_saved":
             raise NeuralBridgeError(f"unexpected state checkpoint response: {response}")
+        self.last_step = int(response.get("step", self.last_step))
         return response
 
     def load_checkpoint(self, path: Path) -> dict:
         response = self._request({"type": "load_checkpoint", "path": str(path)})
         if response.get("event") != "checkpoint_loaded":
             raise NeuralBridgeError(f"unexpected checkpoint load response: {response}")
+        self.last_step = int(response.get("step", self.last_step))
         return response
 
     def close(self, *, force: bool = False) -> None:
