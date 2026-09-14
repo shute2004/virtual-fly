@@ -28,11 +28,11 @@ class FlyppyWorld(FlatGroundWorld):
             if lateral_half_width_mm is None
             else float(lateral_half_width_mm)
         )
-        # Historical v1 visual wall half-thickness was 0.25 mm.  v2 uses the
-        # explicit task specification shared with the analytic gate geometry.
+        # Historical v1 visual wall half-thickness was 0.25 mm.  v2/v3 use the
+        # explicit versioned task specification shared with course geometry.
         wall_half = (
             course.gate_half_thickness_mm
-            if wall_thickness_mm is None and course.environment_version == "v2"
+            if wall_thickness_mm is None and course.environment_version in {"v2", "v3"}
             else 0.25 if wall_thickness_mm is None else float(wall_thickness_mm)
         )
         if lateral <= 0 or wall_half <= 0:
@@ -91,7 +91,7 @@ class FlyppyWorld(FlatGroundWorld):
         """Pair every FlyBody collision geom with gate/ceiling geoms.
 
         v1's historical world used legs/thorax/abdomen/head only.  Full-body
-        obstacle contact is intentional for v2 so a wing, haltere, antenna or
+        obstacle contact is intentional for v2/v3 so a wing, haltere, antenna or
         other articulated segment cannot visually pass through a gate without a
         physical collision event.
         """
