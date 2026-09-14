@@ -8,6 +8,7 @@ SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
+PRIOR_TRAJECTORY="$ROOT/artifacts/experiments/flyppy-v1/trajectory.jsonl"
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -46,6 +47,18 @@ uv run python scripts/embodiment/malecns_retina_smoke.py \
 printf '\n== Wing neuromuscular boundary smoke test ==\n'
 uv run python scripts/embodiment/wing_muscle_boundary_smoke.py \
   --motor-map "$WING_MOTOR_MAP"
+
+# If the previous stride-1 diagnostic trajectory is present, replay its exact
+# CNS-derived peripheral motor history through the *current* muscle calibration.
+# This is a body-layer regression test only; it neither advances nor resumes the
+# saved CNS. Fail closed before expensive learning if the known motor history is
+# still physically unstable after a body-interface calibration change.
+if [ -f "$PRIOR_TRAJECTORY" ]; then
+  printf '\n== Calibrated prior-motor replay preflight ==\n'
+  uv run python scripts/embodiment/calibrated_motor_replay_smoke.py \
+    --trajectory "$PRIOR_TRAJECTORY" \
+    --episode 0
+fi
 
 PYTHON_LAUNCHER=(uv run python)
 if [ "$(uname -s)" = "Darwin" ]; then
