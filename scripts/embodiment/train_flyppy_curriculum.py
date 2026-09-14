@@ -16,6 +16,17 @@ from pathlib import Path
 import shutil
 import time
 
+from virtual_fly.training.curriculum import (
+    AdaptiveCurriculumConfig,
+    BoundaryBandConfig,
+    SpawnCondition,
+    current_adaptive_condition,
+    current_boundary_condition,
+    load_state as load_curriculum_state,
+    record_adaptive_result,
+    record_boundary_result,
+)
+
 from flybody_muscle_adapter import FlyBodyMuscleAdapter
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
@@ -62,6 +73,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reward-current", type=float, default=2.0)
     parser.add_argument("--aversive-current", type=float, default=2.0)
     parser.add_argument("--reinforcement-steps", type=int, default=4)
+
+    parser.add_argument(
+        "--curriculum-mode",
+        choices=("adaptive", "boundary-band"),
+        default="adaptive",
+        help="episode-reset curriculum policy; never changes the CNS learning rule",
+    )
     parser.add_argument("--curriculum-start-x-mm", type=float, default=5.5)
     parser.add_argument("--curriculum-target-x-mm", type=float, default=0.0)
     parser.add_argument("--curriculum-x-step-mm", type=float, default=0.75)
@@ -72,53 +90,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--curriculum-speed-step-mm-s", type=float, default=25.0)
     parser.add_argument("--curriculum-max-easy-speed-mm-s", type=float, default=500.0)
     parser.add_argument("--curriculum-failure-x-step-mm", type=float, default=0.5)
+
+    # Boundary band discovered by the gate-2 fixed-condition drills:
+    # hard endpoint failed 24/24, easy endpoint succeeded 24/24.
+    parser.add_argument("--boundary-hard-x-mm", type=float, default=10.500)
+    parser.add_argument("--boundary-hard-z-mm", type=float, default=5.290)
+    parser.add_argument("--boundary-hard-speed-mm-s", type=float, default=350.0)
+    parser.add_argument("--boundary-easy-x-mm", type=float, default=10.625)
+    parser.add_argument("--boundary-easy-z-mm", type=float, default=5.3525)
+    parser.add_argument("--boundary-easy-speed-mm-s", type=float, default=356.25)
+    parser.add_argument("--boundary-batch-size", type=int, default=24)
+    parser.add_argument("--boundary-harden-success-rate", type=float, default=0.80)
+    parser.add_argument("--boundary-ease-success-rate", type=float, default=0.40)
+    parser.add_argument("--boundary-harden-x-step-mm", type=float, default=0.125)
+    parser.add_argument("--boundary-harden-z-step-mm", type=float, default=0.0625)
+    parser.add_argument("--boundary-harden-speed-step-mm-s", type=float, default=6.25)
+    parser.add_argument("--boundary-ease-x-step-mm", type=float, default=0.0625)
+    parser.add_argument("--boundary-ease-z-step-mm", type=float, default=0.03125)
+    parser.add_argument("--boundary-ease-speed-step-mm-s", type=float, default=3.125)
+
     parser.add_argument("--render", action="store_true", help="deprecated; use scripts/dev/view_flyppy.sh")
     parser.add_argument("--record-video", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--synapse-trace", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
-
-
-def move_toward(value: float, target: float, step: float) -> float:
-    if value < target:
-        return min(target, value + step)
-    if value > target:
-        return max(target, value - step)
-    return target
-
-
-def initial_state(args: argparse.Namespace, first_gate) -> dict[str, object]:
-    return {
-        "schema_version": 3,
-        "spawn_x_mm": float(args.curriculum_start_x_mm),
-        "spawn_z_mm": float(first_gate.center_z_mm),
-        "initial_speed_mm_s": float(args.curriculum_start_speed_mm_s),
-        "successful_first_gates": 0,
-        "consecutive_failures": 0,
-        "curriculum_episodes": 0,
-        "target_x_mm": float(args.curriculum_target_x_mm),
-        "target_z_mm": float(args.curriculum_target_z_mm),
-        "target_speed_mm_s": float(args.curriculum_target_speed_mm_s),
-        "curriculum_complete": False,
-    }
-
-
-def load_curriculum_state(path: Path, args: argparse.Namespace, first_gate, *, checkpoint_exists: bool) -> dict[str, object]:
-    if not checkpoint_exists or not path.exists():
-        return initial_state(args, first_gate)
-    try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return initial_state(args, first_gate)
-    if int(state.get("schema_version", 0)) not in (2, 3):
-        return initial_state(args, first_gate)
-    state["schema_version"] = 3
-    state.setdefault("spawn_x_mm", float(args.curriculum_start_x_mm))
-    state.setdefault("spawn_z_mm", float(first_gate.center_z_mm))
-    state.setdefault("initial_speed_mm_s", float(args.curriculum_start_speed_mm_s))
-    state.setdefault("successful_first_gates", 0)
-    state.setdefault("consecutive_failures", 0)
-    state.setdefault("curriculum_episodes", 0)
-    return state
 
 
 def save_json_atomic(path: Path, payload: dict[str, object]) -> None:
@@ -158,6 +152,57 @@ def deliver_reinforcement(brain: NeuralBridgeClient, group: str, current: float,
     brain.step(stimulate={group: current}, read=(), plasticity=True, steps=steps)
 
 
+def target_condition(args: argparse.Namespace) -> SpawnCondition:
+    return SpawnCondition(
+        args.curriculum_target_x_mm,
+        args.curriculum_target_z_mm,
+        args.curriculum_target_speed_mm_s,
+    )
+
+
+def adaptive_config(args: argparse.Namespace, first_gate) -> AdaptiveCurriculumConfig:
+    return AdaptiveCurriculumConfig(
+        target=target_condition(args),
+        x_step_mm=args.curriculum_x_step_mm,
+        z_step_mm=args.curriculum_z_step_mm,
+        speed_step_mm_s=args.curriculum_speed_step_mm_s,
+        max_easy_speed_mm_s=args.curriculum_max_easy_speed_mm_s,
+        failure_x_step_mm=args.curriculum_failure_x_step_mm,
+        first_gate_x_mm=float(first_gate.x_mm),
+        first_gate_z_mm=float(first_gate.center_z_mm),
+    )
+
+
+def boundary_config(args: argparse.Namespace) -> BoundaryBandConfig:
+    return BoundaryBandConfig(
+        hard=SpawnCondition(
+            args.boundary_hard_x_mm,
+            args.boundary_hard_z_mm,
+            args.boundary_hard_speed_mm_s,
+        ),
+        easy=SpawnCondition(
+            args.boundary_easy_x_mm,
+            args.boundary_easy_z_mm,
+            args.boundary_easy_speed_mm_s,
+        ),
+        target=target_condition(args),
+        batch_size=args.boundary_batch_size,
+        harden_success_rate=args.boundary_harden_success_rate,
+        ease_success_rate=args.boundary_ease_success_rate,
+        harden_step=SpawnCondition(
+            args.boundary_harden_x_step_mm,
+            args.boundary_harden_z_step_mm,
+            args.boundary_harden_speed_step_mm_s,
+        ),
+        ease_step=SpawnCondition(
+            args.boundary_ease_x_step_mm,
+            args.boundary_ease_z_step_mm,
+            args.boundary_ease_speed_step_mm_s,
+        ),
+        seed=args.seed,
+    )
+
+
 def validate(args: argparse.Namespace, first_gate) -> None:
     if args.episodes < 1:
         raise SystemExit("episodes must be >= 1")
@@ -167,8 +212,18 @@ def validate(args: argparse.Namespace, first_gate) -> None:
         raise SystemExit("trajectory/telemetry strides must be >= 1")
     if args.checkpoint_every < 1:
         raise SystemExit("checkpoint-every must be >= 1")
-    if args.curriculum_start_x_mm >= first_gate.x_mm:
+    if args.curriculum_mode == "adaptive" and args.curriculum_start_x_mm >= first_gate.x_mm:
         raise SystemExit("curriculum-start-x-mm must be before the first gate")
+    if args.curriculum_mode == "boundary-band":
+        if args.boundary_hard_x_mm >= first_gate.x_mm or args.boundary_easy_x_mm >= first_gate.x_mm:
+            raise SystemExit("boundary-band spawn x must be before the target gate")
+        try:
+            # Construction plus first condition validates all boundary parameters.
+            probe_state: dict[str, object] = {}
+            current_boundary_condition(probe_state, boundary_config(args))
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+
     positive = (
         args.photoreceptor_current_gain,
         args.reward_current,
@@ -206,7 +261,21 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
 
     checkpoint_exists = (checkpoint / "manifest.json").exists()
-    state = load_curriculum_state(state_path, args, first_gate, checkpoint_exists=checkpoint_exists)
+    start_condition = SpawnCondition(
+        args.curriculum_start_x_mm,
+        float(first_gate.center_z_mm),
+        args.curriculum_start_speed_mm_s,
+    )
+    state = load_curriculum_state(
+        state_path,
+        start=start_condition,
+        target=target_condition(args),
+        checkpoint_exists=checkpoint_exists,
+    )
+    state["curriculum_mode"] = args.curriculum_mode
+    adaptive = adaptive_config(args, first_gate)
+    boundary = boundary_config(args)
+
     start_episode = infer_next_episode(trajectory_path) if checkpoint_exists else 0
     trajectory_mode = "a" if checkpoint_exists else "w"
     viewer_ids = load_viewer_body_ids(args.viewer_graph)
@@ -231,7 +300,9 @@ def main() -> int:
         f"body_telemetry_stride={args.body_telemetry_stride}"
     )
     print(
-        "curriculum first_gate_x={:.3f} gate_center_z={:.3f} target=(x={:.3f},z={:.3f},vx={:.1f})".format(
+        "curriculum mode={} first_gate_x={:.3f} gate_center_z={:.3f} "
+        "target=(x={:.3f},z={:.3f},vx={:.1f})".format(
+            args.curriculum_mode,
             first_gate.x_mm,
             first_gate.center_z_mm,
             args.curriculum_target_x_mm,
@@ -260,9 +331,14 @@ def main() -> int:
 
             for local_episode in range(args.episodes):
                 episode = start_episode + local_episode
-                spawn_x = float(state["spawn_x_mm"])
-                spawn_z = float(state["spawn_z_mm"])
-                speed = float(state["initial_speed_mm_s"])
+                boundary_level: float | None = None
+                if args.curriculum_mode == "boundary-band":
+                    condition, boundary_level = current_boundary_condition(state, boundary)
+                else:
+                    condition = current_adaptive_condition(state)
+                spawn_x = float(condition.x_mm)
+                spawn_z = float(condition.z_mm)
+                speed = float(condition.speed_mm_s)
 
                 course.reset()
                 body.reset()
@@ -272,16 +348,34 @@ def main() -> int:
                 vision.reset_adaptation()
                 brain.reset_dynamics()
 
+                live_curriculum = {
+                    "mode": args.curriculum_mode,
+                    "spawn_x_mm": spawn_x,
+                    "spawn_z_mm": spawn_z,
+                    "initial_speed_mm_s": speed,
+                }
+                if boundary_level is not None:
+                    live_curriculum["boundary_ease_level"] = boundary_level
+                    live_curriculum["boundary_batch_number"] = int(
+                        state.get("boundary_batch_number", 0)
+                    )
                 publisher.publish_status(
                     running=True,
                     backend=backend_name,
                     episode=episode,
                     control_step=0,
-                    curriculum={"spawn_x_mm": spawn_x, "spawn_z_mm": spawn_z, "initial_speed_mm_s": speed},
+                    curriculum=live_curriculum,
                 )
+                level_text = "" if boundary_level is None else f" boundary_ease={boundary_level:.2f}"
                 print(
-                    "curriculum_episode={} spawn=(x={:.3f},z={:.3f}) initial_vx={:.1f}".format(
-                        int(state["curriculum_episodes"]), spawn_x, spawn_z, speed
+                    "curriculum_episode={} mode={} spawn=(x={:.3f},z={:.3f}) "
+                    "initial_vx={:.1f}{}".format(
+                        int(state["curriculum_episodes"]),
+                        args.curriculum_mode,
+                        spawn_x,
+                        spawn_z,
+                        speed,
+                        level_text,
                     )
                 )
 
@@ -365,6 +459,8 @@ def main() -> int:
                                     "collision": event.collision,
                                     "collision_reason": event.collision_reason,
                                     "finished": event.finished,
+                                    "curriculum_mode": args.curriculum_mode,
+                                    "boundary_ease_level": boundary_level,
                                 },
                                 separators=(",", ":"),
                             ) + "\n"
@@ -407,26 +503,13 @@ def main() -> int:
 
                 trajectory.flush()
                 state["curriculum_episodes"] = int(state["curriculum_episodes"]) + 1
-                if passed > 0:
-                    state["successful_first_gates"] = int(state.get("successful_first_gates", 0)) + 1
-                    state["consecutive_failures"] = 0
-                    state["spawn_x_mm"] = move_toward(spawn_x, args.curriculum_target_x_mm, args.curriculum_x_step_mm)
-                    state["spawn_z_mm"] = move_toward(spawn_z, args.curriculum_target_z_mm, args.curriculum_z_step_mm)
-                    state["initial_speed_mm_s"] = move_toward(speed, args.curriculum_target_speed_mm_s, args.curriculum_speed_step_mm_s)
+                batch_result = None
+                if args.curriculum_mode == "boundary-band":
+                    batch_result = record_boundary_result(state, boundary, success=passed > 0)
+                    # Expose the next scheduled condition in persisted/live state.
+                    current_boundary_condition(state, boundary)
                 else:
-                    state["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
-                    state["spawn_x_mm"] = min(float(first_gate.x_mm) - 1.0, spawn_x + args.curriculum_failure_x_step_mm)
-                    state["spawn_z_mm"] = move_toward(spawn_z, float(first_gate.center_z_mm), args.curriculum_z_step_mm)
-                    state["initial_speed_mm_s"] = min(args.curriculum_max_easy_speed_mm_s, speed + args.curriculum_speed_step_mm_s)
-
-                state["target_x_mm"] = float(args.curriculum_target_x_mm)
-                state["target_z_mm"] = float(args.curriculum_target_z_mm)
-                state["target_speed_mm_s"] = float(args.curriculum_target_speed_mm_s)
-                state["curriculum_complete"] = bool(
-                    math.isclose(float(state["spawn_x_mm"]), args.curriculum_target_x_mm, abs_tol=1e-9)
-                    and math.isclose(float(state["spawn_z_mm"]), args.curriculum_target_z_mm, abs_tol=1e-9)
-                    and math.isclose(float(state["initial_speed_mm_s"]), args.curriculum_target_speed_mm_s, abs_tol=1e-9)
-                )
+                    record_adaptive_result(state, adaptive, success=passed > 0)
 
                 result = {
                     "episode": episode,
@@ -442,6 +525,8 @@ def main() -> int:
                     "spawn_x_mm": spawn_x,
                     "spawn_z_mm": spawn_z,
                     "initial_speed_mm_s": speed,
+                    "curriculum_mode": args.curriculum_mode,
+                    "boundary_ease_level": boundary_level,
                 }
                 results.append(result)
                 print(
@@ -449,8 +534,21 @@ def main() -> int:
                         episode, step_count, passed, collision, finished, max_x, float(final_velocity[0])
                     )
                 )
+                if batch_result is not None:
+                    print(
+                        "boundary_batch successes={}/{} rate={:.3f} adjustment={} "
+                        "hard={} easy={}".format(
+                            batch_result["successes"],
+                            batch_result["attempts"],
+                            batch_result["success_rate"],
+                            batch_result["adjustment"],
+                            batch_result["hard"],
+                            batch_result["easy"],
+                        )
+                    )
                 print(
-                    "curriculum_result passed={} next_spawn=(x={:.3f},z={:.3f}) next_vx={:.1f} complete={}".format(
+                    "curriculum_result passed={} next_spawn=(x={:.3f},z={:.3f}) "
+                    "next_vx={:.1f} complete={}".format(
                         passed,
                         float(state["spawn_x_mm"]),
                         float(state["spawn_z_mm"]),
@@ -483,10 +581,11 @@ def main() -> int:
         curriculum=state,
     )
     summary = {
-        "schema_version": 7,
+        "schema_version": 8,
         "experiment": "flyppy_persistent_curriculum_individual_wing_mn",
         "backend": backend_name,
         "persistent_runtime": True,
+        "curriculum_mode": args.curriculum_mode,
         "episodes_this_run": args.episodes,
         "episode_start": start_episode,
         "episode_end": start_episode + args.episodes - 1,
