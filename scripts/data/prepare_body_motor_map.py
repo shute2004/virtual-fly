@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Build a fail-closed MaleCNS body-motor map for non-wing effectors.
 
-MANC supplies an exact ``target`` muscle annotation where a motor neuron has been
-identified.  This script converts only a small set of literature-supported
-muscle functions into physical FlyBody joint effects.  It is a peripheral
-anatomical map, not an action decoder: no environment state, reward, target
-trajectory or population-average neural activity enters the mapping.
+MaleCNS v1.0 does not require an explicit ``target`` muscle column for identified
+leg motor neurons.  The released ``type`` annotation itself carries the curated
+muscle-class identity (for example ``Ti flexor MN`` or ``Tr extensor MN``).
+This script therefore uses an explicit allow-list of exact released type names,
+matching the public MaleCNS locomotor extraction convention, and converts only
+those literature-grounded identities into FlyBody joint effects.
 
-Unknown or mechanically ambiguous targets remain in the output with
-``mechanical_status=unresolved`` and are excluded from actuation.
+Unknown or mechanically ambiguous neurons remain in the output with
+``mechanical_status=unresolved`` and are excluded from actuation.  No regex-based
+widening, graph-position inference, environment state, reward, target trajectory,
+or population-average activity is used to assign an effector.
 """
 
 from __future__ import annotations
@@ -17,7 +20,6 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
-import re
 
 import numpy as np
 import pandas as pd
@@ -29,11 +31,68 @@ LEG_SUBCLASS_TO_POSITION = {
     "hl": "h",  # hind / T3
 }
 
+# Exact released MaleCNS/MANC type names.  These are intentionally explicit
+# rather than fuzzy-matched.  The same leg-MN names are used by the public
+# MaleCNS locomotor extraction code and the MANC circuit literature.
+LEG_TYPE_EFFECTS: dict[str, tuple[str, str, str]] = {
+    "Ti flexor MN": (
+        "femur_tibia_pitch",
+        "flex",
+        "MaleCNS type: tibia flexor motor neuron",
+    ),
+    "Acc. ti flexor MN": (
+        "femur_tibia_pitch",
+        "flex",
+        "MaleCNS type: accessory tibia flexor motor neuron",
+    ),
+    "Ti extensor MN": (
+        "femur_tibia_pitch",
+        "extend",
+        "MaleCNS type: tibia extensor motor neuron",
+    ),
+    "Tr flexor MN": (
+        "coxa_femur_pitch",
+        "flex",
+        "MaleCNS type: trochanter flexor motor neuron",
+    ),
+    "Acc. tr flexor MN": (
+        "coxa_femur_pitch",
+        "flex",
+        "MaleCNS type: accessory trochanter flexor motor neuron",
+    ),
+    "Tr extensor MN": (
+        "coxa_femur_pitch",
+        "extend",
+        "MaleCNS type: trochanter extensor motor neuron",
+    ),
+    "Tergopleural/Pleural promotor MN": (
+        "thorax_coxa_yaw",
+        "protract",
+        "MANC type: tergopleural/pleural promotor rotates the leg forward",
+    ),
+    "Sternal anterior rotator MN": (
+        "thorax_coxa_yaw",
+        "protract",
+        "MANC type: sternal anterior rotator contributes forward rotation",
+    ),
+    "Sternal posterior rotator MN": (
+        "thorax_coxa_yaw",
+        "retract",
+        "MANC type: sternal posterior rotator provides opposing posterior rotation",
+    ),
+}
+
+# hDVM is the identified asynchronous haltere power muscle.  The literature
+# commonly labels its motor neuron hDVMn; keep only exact aliases rather than
+# interpreting every haltere-MN name as a power muscle.
+HALTERE_POWER_TYPES = frozenset({"hDVMn", "hDVM MN"})
+
 REFERENCE_URLS = [
     "https://elifesciences.org/articles/96084",
     "https://elifesciences.org/articles/106446",
     "https://pmc.ncbi.nlm.nih.gov/articles/PMC10312520/",
     "https://pmc.ncbi.nlm.nih.gov/articles/PMC11338719/",
+    "https://github.com/DenisSergeevitch/desktop-fly/blob/master/etl_malecns.py",
 ]
 
 
@@ -54,11 +113,6 @@ def text(row: pd.Series, name: str) -> str:
     return str(row[name]).strip()
 
 
-def norm(value: str) -> str:
-    value = value.lower().replace("–", "-").replace("—", "-")
-    return re.sub(r"[^a-z0-9]+", " ", value).strip()
-
-
 def resolved_side(row: pd.Series) -> str:
     for column in ("side", "somaSide", "rootSide"):
         value = text(row, column).upper()
@@ -67,47 +121,18 @@ def resolved_side(row: pd.Series) -> str:
     return ""
 
 
-def leg_effect(target: str) -> tuple[str, str, str] | None:
-    """Return (joint_role, action, evidence) for high-confidence leg muscles."""
-
-    t = norm(target)
-    # FlyBody's source joint classes call positive pitch ``extend_tibia`` and
-    # ``extend_femur``.  These antagonist assignments therefore have an explicit
-    # model-coordinate interpretation without guessing a world-space sign.
-    if ("tibia extensor" in t or "ti extensor" in t) and "flexor" not in t:
-        return "femur_tibia_pitch", "extend", "identified antagonist: tibia extensor"
-    if "tibia flexor" in t or "ti flexor" in t:
-        return "femur_tibia_pitch", "flex", "identified antagonist: tibia flexor"
-    if "trochanter extensor" in t:
-        return "coxa_femur_pitch", "extend", "identified antagonist: trochanter extensor"
-    if "trochanter flexor" in t or "sternotrochanter" in t:
-        return "coxa_femur_pitch", "flex", "identified antagonist: trochanter flexor"
-
-    # These thoracic muscles have explicit forward/backward functions in the
-    # MANC circuit paper. Runtime geometry determines the local joint sign, so
-    # side-specific coordinate conventions are not guessed here.
-    if (
-        "sternal anterior rotator" in t
-        or "tergopleural promotor" in t
-        or "tergoplural promotor" in t
-    ):
-        return "thorax_coxa_yaw", "protract", "literature: rotates/protracts leg forward"
-    if "sternal posterior rotator" in t:
-        return "thorax_coxa_yaw", "retract", "literature: opposing posterior rotation during stance"
-
-    # Pleural remotor/abductor has two mechanical components; femur reductor,
-    # long-tendon and distal tarsal muscles are not collapsed onto one FlyBody
-    # DOF without a moment-arm model.
-    return None
-
-
-def haltere_effect(target: str, type_name: str) -> tuple[str, str, str] | None:
-    t = norm(f"{target} {type_name}")
-    if "hdvm" in t or "haltere dorsal ventral" in t:
-        return "haltere_pitch", "power", "identified asynchronous hDVM power muscle"
-    # Haltere steering MN identities are useful and remain in the inventory, but
-    # published hDVM+hI1 co-activation does not isolate an hI1-only mechanical
-    # transfer function.  Do not manufacture one here.
+def haltere_effect(row: pd.Series) -> tuple[str, str, str] | None:
+    # Prefer the released MaleCNS type, but accept the exact MANC counterpart
+    # when the cross-dataset mapping rather than ``type`` carries the identity.
+    identities = {text(row, "type"), text(row, "mancType")}
+    identities.discard("")
+    if identities & HALTERE_POWER_TYPES:
+        matched = sorted(identities & HALTERE_POWER_TYPES)[0]
+        return (
+            "haltere_pitch",
+            "power",
+            f"identified asynchronous hDVM power motor neuron ({matched})",
+        )
     return None
 
 
@@ -131,33 +156,53 @@ def main() -> int:
         raise RuntimeError("no superclass=vnc_motor neurons found")
 
     records: list[dict[str, object]] = []
+    leg_types_seen: Counter[str] = Counter()
+    matched_leg_types: Counter[str] = Counter()
+
     for _, row in rows.iterrows():
         subclass = text(row, "subclass").lower()
         if subclass == "wm":
             # Wing MNs are already described by wing-motor-neurons-v0.json.
             continue
+
         target = text(row, "target")
         type_name = text(row, "type")
+        manc_type = text(row, "mancType")
         side = resolved_side(row)
         effect: tuple[str, str, str] | None = None
         leg_prefix = ""
+        identity_source = ""
 
-        if subclass in LEG_SUBCLASS_TO_POSITION and side in ("L", "R"):
-            effect = leg_effect(target)
-            leg_prefix = ("l" if side == "L" else "r") + LEG_SUBCLASS_TO_POSITION[subclass]
+        if subclass in LEG_SUBCLASS_TO_POSITION:
+            if type_name:
+                leg_types_seen[type_name] += 1
+            if side in ("L", "R") and type_name in LEG_TYPE_EFFECTS:
+                effect = LEG_TYPE_EFFECTS[type_name]
+                matched_leg_types[type_name] += 1
+                leg_prefix = ("l" if side == "L" else "r") + LEG_SUBCLASS_TO_POSITION[subclass]
+                identity_source = "type"
         elif subclass == "hm":
-            effect = haltere_effect(target, type_name)
+            effect = haltere_effect(row)
+            if effect:
+                identity_source = "type_or_mancType"
 
         record: dict[str, object] = {
             "body_id": int(row["bodyId"]),
             "type": type_name,
+            "manc_type": manc_type,
             "subclass": subclass,
             "side": side,
             "target": target,
             "leg_prefix": leg_prefix,
             "mechanical_status": "grounded" if effect else "unresolved",
         }
-        for column in ("flywireType", "instance", "nerve", "entryNerve", "exitNerve"):
+        for column in (
+            "flywireType",
+            "instance",
+            "nerve",
+            "entryNerve",
+            "exitNerve",
+        ):
             value = text(row, column)
             if value:
                 record[column] = value
@@ -168,11 +213,13 @@ def main() -> int:
                     "joint_role": joint_role,
                     "mechanical_action": action,
                     "mechanical_evidence": evidence,
+                    "identity_source": identity_source,
                 }
             )
         else:
             record["mechanical_note"] = (
-                "preserved in inventory but not actuated: exact peripheral mechanics are not grounded enough"
+                "preserved in inventory but not actuated: released identity is either "
+                "not in the exact grounded allow-list or its peripheral mechanics remain unresolved"
             )
         records.append(record)
 
@@ -184,24 +231,39 @@ def main() -> int:
     subclass_counts = Counter(str(row["subclass"]) for row in records)
     grounded_subclass = Counter(str(row["subclass"]) for row in grounded)
 
-    if not any(str(row["subclass"]) in LEG_SUBCLASS_TO_POSITION for row in grounded):
+    grounded_leg = [
+        row for row in grounded if str(row["subclass"]) in LEG_SUBCLASS_TO_POSITION
+    ]
+    if not grounded_leg:
+        observed = ", ".join(
+            f"{name!r}x{count}" for name, count in sorted(leg_types_seen.items())
+        )
         raise RuntimeError(
-            "no leg MN target names matched the conservative mechanical map; inspect released target annotations before widening rules"
+            "no exact released leg MN type matched the conservative mechanical map; "
+            f"observed leg types: {observed or '<none>'}"
         )
 
     payload = {
         "schema_version": 1,
         "dataset": "male-cns:v1.0",
         "purpose": (
-            "fail-closed inventory of non-wing MaleCNS motor neurons with a conservative subset mapped to FlyBody mechanics"
+            "fail-closed inventory of non-wing MaleCNS motor neurons with a conservative "
+            "subset mapped to FlyBody mechanics"
         ),
         "provenance": {
-            "neuron_and_target_identity": "observed: MaleCNS v1.0 annotations",
-            "leg_function": "literature: MANC leg MN target/function studies plus FlyBody joint coordinate definitions",
-            "haltere_function": (
-                "literature: hDVM is the asynchronous haltere power muscle; steering MN mechanical transfer remains unresolved"
+            "neuron_identity": "observed: MaleCNS v1.0 released type/subclass/side annotations",
+            "leg_mapping": (
+                "exact released MaleCNS type allow-list; names match the public MaleCNS "
+                "locomotor extraction and MANC motor-neuron nomenclature"
             ),
-            "unknown_policy": "unresolved targets are preserved but never converted into a body command",
+            "leg_function": (
+                "literature: identified MANC leg MN muscle classes plus FlyBody joint coordinate definitions"
+            ),
+            "haltere_function": (
+                "literature: hDVM is the asynchronous haltere power muscle; steering MN "
+                "mechanical transfer remains unresolved"
+            ),
+            "unknown_policy": "unresolved identities are preserved but never converted into a body command",
             "references": REFERENCE_URLS,
         },
         "counts": {
@@ -210,6 +272,7 @@ def main() -> int:
             "unresolved": status.get("unresolved", 0),
             "by_subclass": dict(sorted(subclass_counts.items())),
             "grounded_by_subclass": dict(sorted(grounded_subclass.items())),
+            "matched_leg_types": dict(sorted(matched_leg_types.items())),
         },
         "neurons": records,
     }
@@ -220,6 +283,7 @@ def main() -> int:
     print(f"body_motor_grounded={len(grounded)}")
     print(f"body_motor_unresolved={status.get('unresolved', 0)}")
     print(f"grounded_by_subclass={dict(sorted(grounded_subclass.items()))}")
+    print(f"matched_leg_types={dict(sorted(matched_leg_types.items()))}")
     print(f"wrote {args.output}")
     return 0
 
