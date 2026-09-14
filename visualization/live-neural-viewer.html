@@ -422,7 +422,7 @@ async function tick() {
 function configurePolling() {
   if (poll) clearInterval(poll);
   poll = null;
-  if (document.getElementById('follow').checked) poll = setInterval(tick, 120);
+  if (document.getElementById('follow').checked) poll = setInterval(tick, 34);
 }
 
 async function connect(force = false) {
