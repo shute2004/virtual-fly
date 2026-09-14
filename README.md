@@ -1,199 +1,183 @@
 # virtual-fly
 
-成体オスのショウジョウバエ（*Drosophila melanogaster*）の中枢神経系コネクトームを初期状態として、PC上で神経活動・神経修飾・シナプス可塑性を時間発展させ、仮想身体と閉ループ接続する研究・実装プロジェクトです。
+成体オスのショウジョウバエ（*Drosophila melanogaster*）のMaleCNSコネクトームを初期状態として、神経活動・神経修飾・局所シナプス可塑性を時間発展させ、FlyBody / MuJoCoの身体と閉ループ接続するプロジェクトです。
 
-最終目標は、仮想ショウジョウバエを Flappy Bird 型の環境に置き、感覚入力を神経刺激へ、行動結果を報酬系・嫌悪系への神経刺激へ変換し、外部の学習アルゴリズムを使わずに神経系自身の可塑性だけで行動が変化するかを検証することです。
+目標は、外部のANN・Transformer・Q学習・policy gradient・backpropなどで行動を学習させるのではなく、**MaleCNS自身の局所可塑性によって仮想ハエの行動が変化するか**を実装として確かめることです。
 
-## 重要な設計原則
+## 現在の正規経路
 
-- コネクトームは固定ネットワークではなく、`t = 0` の初期状態として扱う。
-- シナプスは固定しない。強化・弱化・形成・消失を扱える設計にする。
-- 既存のニューラルネットワーク、Transformer、誤差逆伝播、勾配降下、Q学習などを学習機構として導入しない。
-- 外部から与えるのは、可能な限り生物が受け取る形に対応した神経刺激と神経修飾刺激に限定する。
-- 行動は外部プログラムが決定せず、神経活動から運動系を経由して仮想身体に生じさせる。
-- 実測情報、文献から採用したモデル、便宜的な仮定を明確に区別する。
-- 既知の生物学的・物理的な局所過程を、同じ結果を返す外部の特徴抽出・集約アルゴリズムで置換しない。
-- 生物学的忠実度は段階的に上げる。最初から「完全再現」を前提にしない。
-
-## 現在の実装
-
-`feat/bootstrap-neural-runtime` では、MaleCNS v1.0 の166,700ニューロンと約2,558万のニューロン間接続を読み込み、CPU並列またはGPU computeで時間発展させる神経ランタイムを実装しています。最初の実データ学習として、`DA1_lPN` / `DL3_lPN` と `PAM08` / `PPL1` を用いた嗅覚連合学習を実装しています。
-
-`feat/flybody-flyppy-loop` では、その神経ランタイムを FlyBody / FlyGym / MuJoCo と接続し、最初の閉ループ Flyppy 実験まで進めています。
+現在のFlyppy学習経路は次です。
 
 ```text
 Flyppy physical world
       ↓
-FlyBody raw eye cameras
+FlyBody eye sensors
       ↓
-MaleCNS optic-lobe hex columns: local light sampling
+released MaleCNS R1-R6 body-ID current
       ↓
-current into corresponding released R1-R6 photoreceptor body IDs
+whole MaleCNS neural dynamics + local plasticity
       ↓
-MaleCNS runtime + local plasticity
+individual released wing motor-neuron spikes
       ↓
-DNg02 bilateral readout
+WingMusclePeriphery
       ↓
-FlyBody wing actuation
+individual motor-unit / muscle activation state
+      ↓
+FlyBodyMuscleAdapter physical wing torque
+      ↓
+FlyBody / MuJoCo
       ↓
 Flyppy physical world
 ```
 
-ゲート通過時は `PAM08` 候補群、衝突時は `PPL1` 候補群を刺激します。ゲームのゲート座標をCNSへ直接入力したり、外部プログラムから個々のシナプス重みを指定したりはしません。
+ゲート通過時は実際のreward DAN候補群へ電流を与え、衝突時はaversive DAN候補群へ電流を与えます。外部からscalar reward、Q値、target action、policy lossなどは与えません。
 
-視覚入力ではofficial `type == "R1-R6"` の各photoreceptorについて、`assignedOlHex1` / `assignedOlHex2` を持つL1/L2/L3へのreleased contact数をcolumn単位で合算し、最大contact columnをそのR1-R6のretinotopic位置として推定します。左右眼はR1-R6自身の `rootSide` を使用します。外部でT4/T5運動応答、edge、障害物位置、gap位置などを計算してCNSへ与える処理はありません。
+旧試作の **DNg02 population average → wing amplitude** 経路は現在の学習・評価には使いません。`scripts/embodiment/flybody_adapter.py` は旧診断用のlegacy adapterであり、現行 `FlyBodyMuscleAdapter` の親クラスではありません。共通のFlyBody/MuJoCo物理層は `scripts/embodiment/flybody_runtime.py` に分離されています。
 
-この境界で `observed` なのはMaleCNSのbody ID、official R1-R6 type、rootSide、released connectivity、L1/L2/L3のoptic-lobe hex座標です。R1-R6のcolumn位置はこれら実測配線からの `inferred`、FlyBody眼カメラ上へhex latticeを投影する幾何変換と局所受光量から外部電流へのscaleは現時点では `calibrated` な感覚変換境界です。空間情報を平均・poolingして意味情報へ変換する処理は行いません。
+## 設計原則
 
-また、一次資料上R1-R6はlaminaが撮像体積に完全には含まれないため本来数より過小に再構築されています。virtual-flyは欠損細胞を人工的に補完せず、released MaleCNSに存在するR1-R6だけを使用します。
+- MaleCNS snapshotは初期状態として扱い、学習中の可塑状態は別に保持する。
+- 外部ANN、Transformer、policy、action decoderを神経系へ付加しない。
+- 視覚入力はreleased R1-R6 body IDへ局所電流として与える。
+- 運動境界は個別wing motor neuron body IDを維持し、population averageで行動へ変換しない。
+- 報酬・嫌悪はDANへの神経刺激としてのみ与える。
+- episode resetでは学習済みweightを残し、膜電位・spike・refractory・trace・modulation・eligibilityなど短期状態を消す。
+- 未知の生物学を「飛ばすため」に推測で埋めない。
+- 実測・文献・推定・仮定・calibrationを区別する。
+- 3D viewerは観察専用で、学習プロセスへ状態を返さない。
 
-### FlyBody飛翔物理
-
-FlyGym 2.1.0の実験的FlyBody統合では、元FlyBodyに含まれる左右wingのMuJoCo fluid geometryが変換時に省略されています。Flyppyではこれを復元し、元FlyBody飛翔タスクに合わせてwing gain、stiffness / damping、50 µs physics timestep、空気密度・粘性の単位系も補正しています。
-
-Flyppyの各episodeはFlyBody公式飛翔条件を参考に47.5度のbody pitchから開始し、+X方向へ既定 `300 mm/s` の初速度を一度だけ与えます。その後の前進速度を外部から維持・補正する処理はありません。CNSから得たDNg02活動によるwing制御とMuJoCo物理だけで運動を継続します。
-
-`bash scripts/dev/embodiment.sh` では、retinotopic R1-R6視覚入力、復元したflight geometry・parameterがcompile後のMuJoCoモデルへ実際に入っていることに加え、同一初速度でwing fluidあり/なしを比較するflight envelopeも検証します。
+詳細な開発規約は [`AGENTS.md`](AGENTS.md) を参照してください。
 
 ## 初回セットアップ
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
 cd virtual-fly
-git switch feat/bootstrap-neural-runtime
+uv sync
 bash scripts/dev/bootstrap.sh
 ```
 
-MaleCNSの元データがすでに存在する場合は再ダウンロードしません。
+MaleCNSデータや生成済みartifactが存在する場合は可能な範囲で再利用します。
 
-## Flyppy閉ループ学習
+## 通常のFlyppy学習
 
-閉ループ実装ブランチへ切り替え、まず身体・神経接続の検証を実行します。
-
-```bash
-git switch feat/flybody-flyppy-loop
-git pull
-bash scripts/dev/embodiment.sh
-```
-
-これが通った後に学習を実行します。
-
-```bash
-bash scripts/dev/train_flyppy.sh
-```
-
-デフォルトは表示なしです。GPU backend、retinotopic R1-R6入力、FlyBody物理、局所可塑性、報酬・嫌悪刺激を使って学習を進めます。
-
-主な生成物:
-
-```text
-artifacts/experiments/flyppy-v0/
-├── trajectory.jsonl
-├── summary.json
-└── checkpoint/
-    ├── manifest.json
-    ├── membrane.f32le
-    ├── spikes.u32le
-    ├── refractory.u32le
-    ├── activity-trace.f32le
-    ├── modulation.f32le
-    ├── weights.f32le
-    └── eligibility.f32le
-```
-
-加えて、retinotopic入力の解決結果を以下へ保存します。
-
-```text
-artifacts/malecns-v1.0/retinotopic-vision-v1.json
-```
-
-checkpointはシナプス重みだけでなく、膜電位・spike・refractory・activity trace・neuromodulation・eligibilityまで含みます。既定では8 episodeごとと最終episodeに保存します。
-
-長く回す例:
-
-```bash
-bash scripts/dev/train_flyppy.sh --episodes 100
-```
-
-飛翔開始速度を変更する場合:
-
-```bash
-bash scripts/dev/train_flyppy.sh --initial-forward-speed-mm-s 250
-```
-
-これはepisode開始時の初期条件だけを変更し、継続的な前進制御は追加しません。
-
-保存済みCNSからさらに続ける場合:
+標準launcherはpersistent runtimeです。1つのPythonプロセス、1つのMuJoCo simulation、1つのMaleCNS GPU runtimeを複数episodeで使い続けます。
 
 ```bash
 bash scripts/dev/train_flyppy.sh \
-  --resume-checkpoint artifacts/experiments/flyppy-v0/checkpoint \
-  --episodes 100
+  --episodes 24 \
+  --trajectory-stride 10
 ```
 
-同じ実験ディレクトリへresumeするとtrajectoryは追記されます。身体・コースはepisode境界から再開し、CNS内部状態はcheckpointから継続します。
-
-### 3Dで身体を見る
-
-学習中のFlyBodyを3D表示したい場合だけ `--render` を付けます。
-
-```bash
-bash scripts/dev/train_flyppy.sh --render
-```
-
-動画として保存する場合:
-
-```bash
-bash scripts/dev/train_flyppy.sh --record-video artifacts/videos/flyppy
-```
-
-通常の学習速度を優先するときは、どちらも付けません。
-
-### シナプス変化を記録する
-
-神経可視化用に、エピソード単位でシナプス変化を抽出したい場合だけ `--synapse-trace` を付けます。全約2,558万重みを毎step読み戻すことはせず、低頻度で重みを取得して変化量の大きい接続だけ残します。
-
-```bash
-bash scripts/dev/train_flyppy.sh --synapse-trace --synapse-top-n 128
-```
-
-追加生成物:
+現在の実験ディレクトリは次です。
 
 ```text
-artifacts/experiments/flyppy-v0/synapse-snapshots.jsonl
+artifacts/experiments/flyppy-v1/
+├── curriculum-state.json
+├── trajectory.jsonl
+├── summary.json
+├── live/
+└── checkpoint/
 ```
 
-### 神経活動・シナプス変化を3Dで見る
+`artifacts/` は巨大・高頻度データ用でGitには含めません。GitHubで結果をレビューするため、学習終了時に自動で以下へ小さいレポートを書き出します。
 
-別ターミナルで以下を実行します。
+```text
+reports/flyppy/latest.md
+reports/flyppy/latest.csv
+```
+
+checkpointが存在する場合は自動で継続します。通常の継続学習で `--fresh` は使わないでください。
+
+## 現在の第2gate境界帯カリキュラム
+
+固定条件テストで次の鋭い境界が確認されています。
+
+```text
+難しい端: x=10.500, z=5.2900, vx=350.00  -> 24/24失敗
+易しい端: x=10.625, z=5.3525, vx=356.25  -> 24/24成功
+```
+
+次の学習では、この2点の間を5段階に分け、24episodeのbatch内で順序を決定論的にshuffleして提示します。
+
+```text
+ease level 0.00  難しい端  4回
+ease level 0.25             5回
+ease level 0.50             6回
+ease level 0.75             5回
+ease level 1.00  易しい端  4回
+```
+
+1episodeの成功/失敗ごとに条件を往復させず、24episode単位で成功率を見ます。
+
+- 成功率80%以上: 境界帯全体を少し難しくする。
+- 成功率40%以上80%未満: 同じ境界帯を継続する。
+- 成功率40%未満: 以前に学習済みの易しい側へ少し戻す。
+
+難化時は最終的な `x=9.0, z=5.0, vx=300` へ向かって帯域全体を移動します。
+
+実行:
 
 ```bash
-bash scripts/dev/view_neural.sh
+bash scripts/dev/train_flyppy_gate2_band.sh \
+  --episodes 24 \
+  --trajectory-stride 10
 ```
 
-localhost上のブラウザビューアはtrajectoryとsynapse snapshotを表示する開発用表示層です。表示用の集約値はCNSへの入力には使いません。
+これは第1gateを省略して第2gateだけを部分練習する段階です。第2gateが安定した後に、全gateを戻した連続飛行へ移行します。
 
-シナプスの3Dノード位置は現時点ではbody IDから決定論的に生成した模式配置であり、実際の解剖学的位置ではありません。MaleCNSの実形態・実シナプス座標を接続できた段階で表示層を置換します。
+## 3D学習viewer
 
-## 想定構成
+viewerは学習とは別プロセスです。
 
-- **神経系コア**: Rust。大規模疎グラフ、神経状態、可塑性、チェックポイントを担当する。
-- **科学実験・統合層**: Python。データ前処理、MuJoCo / FlyGym / FlyBody との接続、実験設定、解析を担当する。
-- **身体・物理**: FlyBody / FlyGym / MuJoCo。FlyGym 2.1.0で省略されたflight-only physicsは互換層で補う。
-- **可視化**: 通常はheadless。必要時だけ身体3D、動画、神経活動・シナプス変化の表示を有効化する。
-- **将来のWeb実行**: Rust コアを WASM / WebGPU へ展開し、明示的に参加した閲覧者のPCで仮想ハエを動かして実験データを収集する。
+```bash
+bash scripts/dev/view_learning.sh
+```
 
-## ドキュメント
+FlyBody姿勢は学習側から毎control step配信し、observer側でMuJoCoのgeneralized positionとして補間して約30fpsで描画します。MaleCNS活動telemetryは低頻度のままなので、viewerのために大規模neural readbackを毎step行いません。
+
+- FlyBody: メイン表示。ドラッグで回転、ホイールでズーム。
+- MaleCNS: 右下の模式3D小窓。`B` キーまたはcheckboxで非表示可能。
+- viewer操作・補間結果は学習へ返りません。
+
+## 凍結評価
+
+学習済みCNSとbaselineを比較する評価器も、学習と同じ個別MN→筋肉経路を使います。評価中はplasticityとreinforcementを無効にします。
+
+```bash
+uv run python scripts/embodiment/evaluate_flyppy.py \
+  --learned-checkpoint artifacts/experiments/flyppy-v1/checkpoint \
+  --episodes 4
+```
+
+baseline checkpointを指定しない場合は初期MaleCNS stateと比較します。
+
+## Pythonコード構成
+
+再利用する純粋ロジックは段階的に `src/virtual_fly/` packageへ移しています。現在、curriculum policyは次にあります。
+
+```text
+src/virtual_fly/training/curriculum.py
+```
+
+`scripts/` は最終的にCLI・データ生成・開発launcher中心へ薄くしていきます。現時点ではFlyGym/MuJoCo統合コードの一部がまだ `scripts/embodiment/` に残っています。
+
+## Rust neural core
+
+神経系コアはRustです。大規模疎グラフ、CPU/GPU time evolution、局所可塑性、checkpointを担当します。GPUは計算基盤として使用しますが、GPU上に別の学習policyを置くことはありません。
+
+現行GPU synapse scaleはwhole-CNS stability calibrationから取得し、launcherがartifactから読み込みます。
+
+## 主なドキュメント
 
 - [`docs/requirements.md`](docs/requirements.md) — 要件定義
 - [`docs/architecture.md`](docs/architecture.md) — システム設計
-- [`docs/scientific-model.md`](docs/scientific-model.md) — 神経系・可塑性モデルの考え方
+- [`docs/scientific-model.md`](docs/scientific-model.md) — 神経系・可塑性モデル
 - [`docs/experiments.md`](docs/experiments.md) — 実験設計
 - [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md) — データ来歴・再現性
 - [`docs/roadmap.md`](docs/roadmap.md) — 開発ロードマップ
 - [`docs/references.md`](docs/references.md) — 基礎資料・外部資産
-- [`docs/embodiment-v0.md`](docs/embodiment-v0.md) — 現在の身体・閉ループ・可視化・checkpoint実装
-- [`AGENTS.md`](AGENTS.md) — 開発エージェント向けプロジェクト規約
+- [`AGENTS.md`](AGENTS.md) — 開発エージェント向け規約
 
 ## ライセンス
 
