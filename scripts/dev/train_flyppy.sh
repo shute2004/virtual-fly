@@ -40,7 +40,8 @@ cargo check -q -p vf-runner --bin neural_bridge
 uv run python -m py_compile \
   scripts/embodiment/train_flyppy_curriculum.py \
   scripts/embodiment/live_telemetry.py \
-  scripts/embodiment/live_body_viewer.py
+  scripts/embodiment/live_body_viewer.py \
+  scripts/data/prepare_neural_viewer_graph.py
 
 if [ ! -f "$GROUPS" ]; then
   printf '\n== Generate neural boundary groups ==\n'
@@ -62,6 +63,18 @@ if [ ! -f "$RETINOTOPIC_MAP" ]; then
     --snapshot "$SNAPSHOT" \
     --output "$RETINOTOPIC_MAP" \
     --download
+fi
+
+# Static visualization metadata is generated once and then cached. No renderer,
+# browser, or viewer process is part of training; this only fixes which released
+# body IDs/connections may be observed if a viewer attaches later.
+if [ ! -f "$VIEWER_GRAPH" ]; then
+  printf '\n== Prepare cached neural observer graph ==\n'
+  uv run python scripts/data/prepare_neural_viewer_graph.py \
+    --snapshot "$SNAPSHOT" \
+    --groups "$GROUPS" \
+    --motor-map "$WING_MOTOR_MAP" \
+    --output "$VIEWER_GRAPH"
 fi
 
 CALIBRATION_SCHEMA=0
