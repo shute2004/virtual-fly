@@ -44,6 +44,9 @@ struct Params {
 
 const WORKGROUP_SIZE: u32 = 256u;
 const NT_DOPAMINE: u32 = 4u;
+const ACTIVITY_SILENT: u32 = 0u;
+const ACTIVITY_DEPOLARIZING: u32 = 1u;
+const ACTIVITY_HYPERPOLARIZING: u32 = 2u;
 
 fn linear_invocation_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
     // Workgroups are tiled over X then Y. The local workgroup is 256x1x1, so
@@ -57,6 +60,20 @@ fn nt_code(neuron: u32) -> u32 {
 
 fn is_dopamine(neuron: u32) -> bool {
     return nt_code(neuron) == NT_DOPAMINE;
+}
+
+fn activity_sign(event: u32) -> f32 {
+    switch event {
+        case ACTIVITY_DEPOLARIZING: {
+            return 1.0;
+        }
+        case ACTIVITY_HYPERPOLARIZING: {
+            return -1.0;
+        }
+        default: {
+            return 0.0;
+        }
+    }
 }
 
 // This transmitter->fast-sign mapping is an explicit bootstrap assumption.
@@ -96,14 +113,19 @@ fn neuron_step(
             break;
         }
         let pre = topology[params.pre_start + edge];
-        if spikes_prev[pre] != 0u {
+        let event_sign = activity_sign(spikes_prev[pre]);
+        if event_sign != 0.0 {
             if is_dopamine(pre) {
-                // PAM/PPL1/etc. are not assigned an external +1/-1 valence.
-                // They differ through their actual released connectivity.
-                let count = f32(topology[params.count_start + edge]);
-                dopaminergic_input += count * params.modulator_scale;
+                // Positive dopaminergic events represent released dopamine.
+                // A negative activity deviation is reduced release around an
+                // unmodelled baseline, not an externally assigned negative
+                // reward sign, so it does not inject negative modulation here.
+                if event_sign > 0.0 {
+                    let count = f32(topology[params.count_start + edge]);
+                    dopaminergic_input += count * params.modulator_scale;
+                }
             } else {
-                fast_current += fast_sign(pre) * synapses[edge].weight;
+                fast_current += fast_sign(pre) * synapses[edge].weight * event_sign;
             }
         }
         edge += 1u;
@@ -116,17 +138,21 @@ fn neuron_step(
     if old.refractory > 0u {
         next.membrane = params.reset;
         next.refractory = old.refractory - 1u;
-        spikes_next[post] = 0u;
+        spikes_next[post] = ACTIVITY_SILENT;
     } else {
         let membrane = old.membrane * params.membrane_decay + fast_current;
         if membrane >= params.threshold {
             next.membrane = params.reset;
             next.refractory = params.refractory_steps;
-            spikes_next[post] = 1u;
+            spikes_next[post] = ACTIVITY_DEPOLARIZING;
+        } else if membrane <= -params.threshold {
+            next.membrane = params.reset;
+            next.refractory = params.refractory_steps;
+            spikes_next[post] = ACTIVITY_HYPERPOLARIZING;
         } else {
             next.membrane = membrane;
             next.refractory = 0u;
-            spikes_next[post] = 0u;
+            spikes_next[post] = ACTIVITY_SILENT;
         }
     }
 
@@ -150,8 +176,8 @@ fn plasticity_step(
     }
 
     var syn = synapses[edge];
-    let local = neurons[pre].trace * f32(spikes_next[post])
-        - neurons[post].trace * f32(spikes_prev[pre]);
+    let local = neurons[pre].trace * activity_sign(spikes_next[post])
+        - neurons[post].trace * activity_sign(spikes_prev[pre]);
     syn.eligibility = syn.eligibility * params.eligibility_decay + local;
     syn.weight = clamp(
         syn.weight + params.learning_rate * neurons[post].modulation * syn.eligibility,
@@ -171,6 +197,6 @@ fn trace_step(
         return;
     }
     var state = neurons[neuron];
-    state.trace = state.trace * params.trace_decay + f32(spikes_next[neuron]);
+    state.trace = state.trace * params.trace_decay + activity_sign(spikes_next[neuron]);
     neurons[neuron] = state;
 }
