@@ -3,20 +3,25 @@
 
 This module deliberately does not detect motion, edges, obstacles, gap position, or
 any other visual feature outside the nervous system. Each inferred MaleCNS optical
-column samples one local point in the corresponding FlyBody eye image; that local
-light is converted to current for the released R1-R6 body IDs assigned to the
-column. All subsequent spatial/temporal integration is left to the MaleCNS network.
+column is associated with the nearest FlyBody ommatidium in a calibrated 2-D eye
+lattice seam; that local ommatidium intensity is converted to current for the
+released R1-R6 body IDs assigned to the column. All subsequent spatial/temporal
+integration is left to the MaleCNS network.
 
 Provenance boundaries:
 - R1-R6 identity, root side, lamina wiring and assignedOlHex coordinates:
   MaleCNS-derived map;
-- hex-lattice unrolling into the FlyBody eye camera: calibrated geometric seam;
-- local green-channel irradiance -> injected current gain: calibrated transduction seam.
+- MaleCNS hex-lattice -> FlyBody ommatidium-lattice registration:
+  calibrated geometric seam;
+- local ommatidium irradiance -> injected current gain:
+  calibrated transduction seam.
 
-The Flyppy world is achromatic, so one local rendered color channel is used as a
-local brightness proxy without combining spatial samples or extracting a visual
-feature. A future spectral/phototransduction model can replace only this local
-conversion without changing the retinotopic boundary.
+FlyBody already performs the raw-camera -> compound-eye conversion using its 721
+ommatidia per eye. Using those readouts is important: the raw camera image is an
+internal rendering surface and is not itself the compound-eye sensory output.
+The two FlyBody channels encode pale/yellow ommatidia; because the Flyppy world is
+achromatic, their local sum is used as a brightness proxy without spatial pooling
+or external feature extraction.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+from flygym.vision.retina import Retina
 
 
 EXPECTED_ASSIGNMENT_METHOD = (
@@ -94,10 +100,14 @@ class MaleCNSRetina:
                 {"hex1": h1, "hex2": h2, "body_ids": body_ids}
             )
 
+        retina = Retina()
+        self.flybody_ommatidia_per_eye = int(retina.num_ommatidia_per_eye)
+        ommatidia_uv = self._flybody_ommatidia_uv(retina.ommatidia_id_map)
         for side in ("L", "R"):
             if not self._columns_by_side[side]:
                 raise ValueError(f"retinotopic vision map has no {side} eye columns")
             self._attach_uv(self._columns_by_side[side])
+            self._attach_ommatidia(self._columns_by_side[side], ommatidia_uv)
 
     @staticmethod
     def _attach_uv(columns: list[dict[str, object]]) -> None:
@@ -119,16 +129,66 @@ class MaleCNSRetina:
             item["v"] = float(v_value)
 
     @staticmethod
-    def _eye_frames(sim, fly) -> dict[str, np.ndarray]:
-        frames = np.asarray(sim.get_raw_vision(fly.name))
+    def _flybody_ommatidia_uv(ommatidia_id_map: np.ndarray) -> np.ndarray:
+        """Return normalized centroids for FlyBody's numbered ommatidia.
+
+        `Retina.ommatidia_id_map` is the same hexagonal registration used by
+        FlyGym to convert rendered camera pixels into compound-eye readouts. We
+        use only its geometry here; no rendered pixels or task features enter the
+        registration.
+        """
+
+        ids = np.asarray(ommatidia_id_map, dtype=np.int64)
+        if ids.ndim != 2 or int(ids.max(initial=0)) < 1:
+            raise ValueError("FlyBody ommatidia id map is invalid")
+        height, width = ids.shape
+        flat_ids = ids.ravel()
+        valid = flat_ids > 0
+        positive_ids = flat_ids[valid]
+        n = int(positive_ids.max())
+        rows, cols = np.indices(ids.shape, dtype=np.float64)
+        counts = np.bincount(positive_ids, minlength=n + 1)[1:].astype(np.float64)
+        if np.any(counts <= 0.0):
+            raise ValueError("FlyBody ommatidia IDs are not contiguous")
+        row_sum = np.bincount(
+            positive_ids, weights=rows.ravel()[valid], minlength=n + 1
+        )[1:]
+        col_sum = np.bincount(
+            positive_ids, weights=cols.ravel()[valid], minlength=n + 1
+        )[1:]
+        center_row = row_sum / counts
+        center_col = col_sum / counts
+        u = center_col / max(1.0, float(width - 1))
+        v = 1.0 - center_row / max(1.0, float(height - 1))
+        return np.column_stack((u, v))
+
+    @staticmethod
+    def _attach_ommatidia(
+        columns: list[dict[str, object]], ommatidia_uv: np.ndarray
+    ) -> None:
+        # Both FlyBody eyes use the same Retina lattice template. Eye side is kept
+        # separate by the simulation camera/readout; no left/right averaging is
+        # performed. The nearest-neighbour registration is explicitly calibrated.
+        for item in columns:
+            point = np.asarray([float(item["u"]), float(item["v"])])
+            distance2 = np.sum((ommatidia_uv - point) ** 2, axis=1)
+            item["ommatidium_index"] = int(np.argmin(distance2))
+
+    @staticmethod
+    def _eye_readouts(sim, fly) -> dict[str, np.ndarray]:
+        readouts = np.asarray(sim.get_ommatidia_readouts(fly.name), dtype=np.float32)
         names = list(fly.eyecameraname_to_mjcfcamera.keys())
-        if len(names) != len(frames):
+        if readouts.ndim != 3 or readouts.shape[2] != 2:
             raise RuntimeError(
-                f"eye camera/frame mismatch: names={names}, frames={len(frames)}"
+                f"unexpected FlyBody ommatidia readout shape: {readouts.shape}"
+            )
+        if len(names) != len(readouts):
+            raise RuntimeError(
+                f"eye camera/readout mismatch: names={names}, eyes={len(readouts)}"
             )
         by_name = {
-            name: np.asarray(frame)
-            for name, frame in zip(names, frames, strict=True)
+            name: np.asarray(readout, dtype=np.float32)
+            for name, readout in zip(names, readouts, strict=True)
         }
         try:
             return {"L": by_name["l_eye_cam"], "R": by_name["r_eye_cam"]}
@@ -136,32 +196,34 @@ class MaleCNSRetina:
             raise RuntimeError(f"FlyBody eye camera names are unexpected: {names}") from exc
 
     @staticmethod
-    def _local_green(frame: np.ndarray, u: float, v: float) -> float:
-        if frame.ndim != 3 or frame.shape[2] < 2:
-            raise ValueError(f"expected RGB eye frame, got shape {frame.shape}")
-        height, width = frame.shape[:2]
-        # The orientation between MaleCNS hex axes and the FlyBody camera plane is
-        # part of the calibrated seam. No neighboring pixels are pooled here.
-        col = int(round(np.clip(u, 0.0, 1.0) * (width - 1)))
-        row = int(round((1.0 - np.clip(v, 0.0, 1.0)) * (height - 1)))
-        value = float(frame[row, col, 1])
-        if np.issubdtype(frame.dtype, np.integer):
-            value /= float(np.iinfo(frame.dtype).max)
+    def _local_achromatic(readouts: np.ndarray, ommatidium_index: int) -> float:
+        if not 0 <= ommatidium_index < len(readouts):
+            raise IndexError(
+                f"ommatidium index {ommatidium_index} outside 0..{len(readouts) - 1}"
+            )
+        # FlyGym places each ommatidium's intensity in one of two pale/yellow
+        # channels. Their local sum is therefore an achromatic per-ommatidium
+        # intensity, not spatial pooling or a computed visual feature.
+        value = float(np.sum(readouts[ommatidium_index], dtype=np.float64))
         return float(np.clip(value, 0.0, 1.0))
 
     def encode(self, sim, fly) -> RetinalDrive:
-        frames = self._eye_frames(sim, fly)
+        eyes = self._eye_readouts(sim, fly)
         body_currents: list[tuple[int, float]] = []
         active_columns = 0
         currents: list[float] = []
 
         for side in ("L", "R"):
-            frame = frames[side]
+            eye = eyes[side]
+            if len(eye) != self.flybody_ommatidia_per_eye:
+                raise RuntimeError(
+                    f"FlyBody {side} eye has {len(eye)} ommatidia; "
+                    f"expected {self.flybody_ommatidia_per_eye}"
+                )
             for column in self._columns_by_side[side]:
-                light = self._local_green(
-                    frame,
-                    float(column["u"]),
-                    float(column["v"]),
+                light = self._local_achromatic(
+                    eye,
+                    int(column["ommatidium_index"]),
                 )
                 current = light * self.current_gain
                 if current <= self.current_floor:
