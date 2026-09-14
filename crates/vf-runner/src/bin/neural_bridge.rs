@@ -255,7 +255,7 @@ fn write_error(stdout: &mut impl Write, error: impl std::fmt::Display) -> Result
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let snapshot = ConnectomeSnapshot::load(&args.snapshot)
+    let snapshot = ConnectomeSnapshot::load_dir(&args.snapshot)
         .with_context(|| format!("load MaleCNS snapshot from {}", args.snapshot.display()))?;
     let config: GroupConfigFile = serde_json::from_slice(
         &fs::read(&args.groups)
@@ -265,12 +265,13 @@ fn main() -> Result<()> {
     let groups = resolve_groups(&snapshot, config)?;
     let params = NeuralParams::default();
     let mut runtime = match args.backend {
-        Backend::Cpu => Runtime::Cpu(CpuRuntime::new(snapshot.clone(), params.clone())?),
-        Backend::Gpu => Runtime::Gpu(vf_neural::gpu::GpuRuntime::new(
-            snapshot.clone(),
-            params.clone(),
-        )?),
+        Backend::Cpu => Runtime::Cpu(CpuRuntime::new(snapshot.clone(), params)),
+        Backend::Gpu => Runtime::Gpu(vf_neural::gpu::GpuRuntime::new(&snapshot, params)?),
     };
+    // The numerical state deliberately contains only neural arrays. The monotonic
+    // simulation step belongs to the bridge/checkpoint protocol and is persisted
+    // in CheckpointManifest instead of being mixed into NeuralState.
+    let mut neural_step = 0u64;
 
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
@@ -325,8 +326,8 @@ fn main() -> Result<()> {
                     for (name, current) in stimulate {
                         match groups.get(&name) {
                             Some(group) => {
-                                stimuli.extend(group.indices.iter().copied().map(|index| Stimulus {
-                                    index,
+                                stimuli.extend(group.indices.iter().copied().map(|neuron| Stimulus {
+                                    neuron,
                                     current,
                                 }));
                             }
@@ -341,7 +342,7 @@ fn main() -> Result<()> {
                     if request_error.is_none() {
                         for (body_id, current) in stimulate_body {
                             match snapshot.index_of_body_id(body_id) {
-                                Some(index) => stimuli.push(Stimulus { index, current }),
+                                Some(neuron) => stimuli.push(Stimulus { neuron, current }),
                                 None => {
                                     request_error = Some(anyhow::anyhow!(
                                         "unknown stimulation body ID {body_id}"
@@ -360,6 +361,13 @@ fn main() -> Result<()> {
                             if let Err(error) = runtime.step(&stimuli, plasticity) {
                                 step_error = Some(error);
                                 break;
+                            }
+                            match neural_step.checked_add(1) {
+                                Some(next) => neural_step = next,
+                                None => {
+                                    step_error = Some(anyhow::anyhow!("neural step counter overflow"));
+                                    break;
+                                }
                             }
                         }
                         if let Some(error) = step_error {
@@ -419,7 +427,7 @@ fn main() -> Result<()> {
                                             &mut stdout,
                                             &StepResponse {
                                                 ok: true,
-                                                step: runtime.state()?.step,
+                                                step: neural_step,
                                                 read: readout,
                                                 read_body: body_readout,
                                             },
@@ -459,14 +467,19 @@ fn main() -> Result<()> {
             Request::SaveCheckpoint { path } => {
                 let result = (|| -> Result<()> {
                     let state = runtime.state()?;
-                    save_checkpoint(&path, &snapshot, &state)?;
+                    save_checkpoint(
+                        &path,
+                        &snapshot.manifest.dataset,
+                        neural_step,
+                        &state,
+                    )?;
                     write_json(
                         &mut stdout,
                         &StateCheckpointResponse {
                             ok: true,
                             event: "checkpoint_saved",
                             path: path.display().to_string(),
-                            step: state.step,
+                            step: neural_step,
                             neurons: snapshot.neuron_count(),
                             edges: snapshot.edge_count(),
                         },
@@ -480,15 +493,21 @@ fn main() -> Result<()> {
             }
             Request::LoadCheckpoint { path } => {
                 let result = (|| -> Result<()> {
-                    let state = load_checkpoint(&path, &snapshot)?;
+                    let (manifest, state) = load_checkpoint(
+                        &path,
+                        &snapshot.manifest.dataset,
+                        snapshot.neuron_count(),
+                        snapshot.edge_count(),
+                    )?;
                     runtime.load_state(&state)?;
+                    neural_step = manifest.step;
                     write_json(
                         &mut stdout,
                         &StateCheckpointResponse {
                             ok: true,
                             event: "checkpoint_loaded",
                             path: path.display().to_string(),
-                            step: state.step,
+                            step: neural_step,
                             neurons: snapshot.neuron_count(),
                             edges: snapshot.edge_count(),
                         },
