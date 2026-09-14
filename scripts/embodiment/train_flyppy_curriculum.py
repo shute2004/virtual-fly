@@ -16,7 +16,12 @@ from pathlib import Path
 import shutil
 import time
 
-from virtual_fly.physics import CANONICAL_FLY, FLYPPY_GEOMETRY
+from virtual_fly.physics import (
+    CANONICAL_FLY,
+    FLYBODY_V3,
+    FLYPPY_GEOMETRY,
+    FLYPPY_GEOMETRY_V3,
+)
 from virtual_fly.training.curriculum import (
     AdaptiveCurriculumConfig,
     BoundaryBandConfig,
@@ -30,6 +35,7 @@ from virtual_fly.training.curriculum import (
 
 from flybody_muscle_adapter import FlyBodyMuscleAdapter
 from flybody_neuromuscular_adapter import FlyBodyNeuromuscularAdapter
+from flybody_v3_adapter import FlyBodyV3NeuromuscularAdapter
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from live_telemetry import LiveTelemetryPublisher
@@ -62,9 +68,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trajectory-stride", type=int, default=10)
     parser.add_argument(
         "--environment-version",
-        choices=("v1", "v2"),
+        choices=("v1", "v2", "v3"),
         default="v1",
-        help="v1 preserves historical geometry; v2 uses the explicit canonical physical scale",
+        help=(
+            "v1 preserves historical geometry; v2 preserves the provisional physical "
+            "baseline; v3 uses the published FlyBody scale and source-equivalent flight frame"
+        ),
     )
     parser.add_argument(
         "--motor-boundary",
@@ -107,7 +116,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--curriculum-max-easy-speed-mm-s", type=float, default=500.0)
     parser.add_argument("--curriculum-failure-x-step-mm", type=float, default=0.5)
 
-    # Historical v1 gate-2 boundary band. v2 starts a new experiment and does
+    # Historical v1 gate-2 boundary band. v2/v3 start separate experiments and do
     # not reuse these values unless explicitly requested.
     parser.add_argument("--boundary-hard-x-mm", type=float, default=10.500)
     parser.add_argument("--boundary-hard-z-mm", type=float, default=5.290)
@@ -230,6 +239,8 @@ def validate(args: argparse.Namespace, first_gate) -> None:
         raise SystemExit("checkpoint-every must be >= 1")
     if args.motor_boundary == "whole-body" and not args.body_motor_map.exists():
         raise SystemExit(f"whole-body motor map not found: {args.body_motor_map}")
+    if args.environment_version == "v3" and args.motor_boundary != "whole-body":
+        raise SystemExit("Flyppy v3 currently requires --motor-boundary whole-body")
     if args.curriculum_mode == "adaptive" and args.curriculum_start_x_mm >= first_gate.x_mm:
         raise SystemExit("curriculum-start-x-mm must be before the first gate")
     if args.curriculum_mode == "boundary-band":
@@ -305,11 +316,18 @@ def main() -> int:
     publisher = LiveTelemetryPublisher(output)
 
     world = FlyppyWorld(course)
+    physical_model = FLYBODY_V3 if args.environment_version == "v3" else CANONICAL_FLY
     if args.motor_boundary == "whole-body":
-        body = FlyBodyNeuromuscularAdapter(
+        if args.environment_version == "v3":
+            body_cls = FlyBodyV3NeuromuscularAdapter
+            spawn_z = FLYPPY_GEOMETRY_V3.corridor_high_z_mm / 2.0
+        else:
+            body_cls = FlyBodyNeuromuscularAdapter
+            spawn_z = FLYPPY_GEOMETRY.corridor_high_z_mm / 2.0
+        body = body_cls(
             tethered=False,
             world=world,
-            spawn_position_mm=(0.0, 0.0, FLYPPY_GEOMETRY.corridor_high_z_mm / 2.0),
+            spawn_position_mm=(0.0, 0.0, spawn_z),
             initial_linear_velocity_mm_s=(0.0, 0.0, 0.0),
             enable_vision=True,
             enable_observer_camera=False,
@@ -338,8 +356,8 @@ def main() -> int:
         "first_gate_x={:.3f} gate_gap_mm={:.3f} corridor_height_mm={:.3f}".format(
             args.environment_version,
             args.motor_boundary,
-            CANONICAL_FLY.body_length_mm,
-            CANONICAL_FLY.total_mass_mg,
+            physical_model.body_length_mm,
+            physical_model.total_mass_mg,
             first_gate.x_mm,
             2.0 * first_gate.half_gap_mm,
             course.ceiling_z_mm - course.floor_z_mm,
@@ -466,7 +484,7 @@ def main() -> int:
 
                     physical_collision = (
                         world.physical_collision_reason(body.sim)
-                        if args.environment_version == "v2"
+                        if args.environment_version in {"v2", "v3"}
                         else None
                     )
                     event = course.update(
@@ -655,12 +673,13 @@ def main() -> int:
         curriculum=state,
     )
     physical_spec = {
-        "morphology": CANONICAL_FLY.morphology,
-        "body_length_mm": CANONICAL_FLY.body_length_mm,
-        "wing_length_mm": CANONICAL_FLY.wing_length_mm,
-        "total_mass_mg": CANONICAL_FLY.total_mass_mg,
-        "neural_sex": CANONICAL_FLY.neural_sex,
-        "morphology_sex": CANONICAL_FLY.morphology_sex,
+        "morphology": physical_model.morphology,
+        "body_length_mm": physical_model.body_length_mm,
+        "wing_length_mm": physical_model.wing_length_mm,
+        "total_mass_mg": physical_model.total_mass_mg,
+        "neural_sex": physical_model.neural_sex,
+        "morphology_sex": physical_model.morphology_sex,
+        "flight_physics_version": getattr(body, "flight_physics_version", "historical"),
         "mass_normalization": (
             body.mass_normalization.as_dict() if body.mass_normalization is not None else None
         ),
@@ -674,13 +693,15 @@ def main() -> int:
         "gate_gap_height_mm": 2.0 * first_gate.half_gap_mm,
         "gate_half_thickness_mm": first_gate.half_thickness_mm,
     }
+    if args.environment_version == "v3":
+        experiment_name = "flyppy_v3_source_equivalent_whole_body_curriculum"
+    elif args.environment_version == "v2" and args.motor_boundary == "whole-body":
+        experiment_name = "flyppy_v2_whole_body_physical_curriculum"
+    else:
+        experiment_name = "flyppy_persistent_curriculum_individual_wing_mn"
     summary = {
-        "schema_version": 9,
-        "experiment": (
-            "flyppy_v2_whole_body_physical_curriculum"
-            if args.environment_version == "v2" and args.motor_boundary == "whole-body"
-            else "flyppy_persistent_curriculum_individual_wing_mn"
-        ),
+        "schema_version": 10,
+        "experiment": experiment_name,
         "backend": backend_name,
         "persistent_runtime": True,
         "environment_version": args.environment_version,
