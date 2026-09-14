@@ -44,14 +44,20 @@ impl Default for NeuralParams {
             refractory_steps: 2,
             trace_decay: 0.95,
             eligibility_decay: 0.995,
-            learning_rate: 0.0005,
+            // Calibrated bootstrap value. The first whole-CNS Flyppy run with
+            // 5e-4 produced >1M changed edges and saturation at weight_max after
+            // only eight aversive events. This lower value keeps the same local
+            // rule while reducing per-event updates by a conservative factor.
+            learning_rate: 0.00001,
             // Numerical safety rail, not a biological measurement.
             weight_max: 1_000.0,
             modulator_decay: 0.98,
-            // Bootstrap scaling. These values are intentionally explicit and
-            // will be calibrated against whole-CNS activity after the first run.
             synapse_scale: 0.02,
-            modulator_scale: 0.005,
+            // Calibrated bootstrap value. The first whole-CNS Flyppy run with
+            // 0.005 produced modulation above 130 in the absence of visual
+            // input. Scaling by 1/100 places the observed peak near order unity
+            // without changing which released dopaminergic connections carry it.
+            modulator_scale: 0.00005,
         }
     }
 }
