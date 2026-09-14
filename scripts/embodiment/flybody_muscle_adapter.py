@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """FlyBody mechanics driven by individual-MN-derived peripheral muscle state.
 
-This is the current motor path. Released wing motor-neuron spikes feed
-``WingMusclePeriphery`` and the resulting motor-unit/muscle state produces
-physical torque on FlyBody wing DOFs. No DNg02 population decoder is used.
-
-FlyBody does not currently expose the anatomical Drosophila wing muscles, so
-peripheral muscle activations are converted to joint torque here rather than to
-an action or position command. The power-muscle path uses an autonomous thoracic
-wingbeat phase because DLM/DVM indirect flight muscles are asynchronous.
+Released wing motor-neuron spikes feed ``WingMusclePeriphery`` and the resulting
+motor-unit/muscle state produces physical torque on FlyBody wing DOFs.  The base
+class also exposes a per-physics-step hook for anatomically grounded non-wing
+muscles; the wing-only v1 path leaves that hook empty.
 """
 
 from __future__ import annotations
@@ -67,6 +63,15 @@ class FlyBodyMuscleAdapter(FlyBodyRuntime):
             for axis in ("yaw", "roll", "pitch")
         }
 
+    @staticmethod
+    def _wing_snapshot(state) -> PeripheralSnapshot:
+        if isinstance(state, PeripheralSnapshot):
+            return state
+        wing = getattr(state, "wing", None)
+        if isinstance(wing, PeripheralSnapshot):
+            return wing
+        raise TypeError("peripheral state does not expose a WingMusclePeriphery snapshot")
+
     def _neutralize_position_actuators(self) -> None:
         target = self._neutral_target.copy()
         for side in ("left", "right"):
@@ -104,13 +109,16 @@ class FlyBodyMuscleAdapter(FlyBodyRuntime):
             )
         return self.power_gain * activation
 
-    def step_muscles(
-        self, state: PeripheralSnapshot, *, physics_steps: int = 1
-    ) -> None:
+    def _apply_additional_muscle_torque(self, state, phase: float) -> dict[str, float]:
+        """Hook for grounded non-wing muscles; v1 wing-only path intentionally empty."""
+        return {}
+
+    def step_muscles(self, state, *, physics_steps: int = 1) -> None:
         if physics_steps < 1:
             raise ValueError("physics_steps must be >= 1")
-        if state.selected_motor_units < 1:
+        if int(getattr(state, "selected_motor_units", 0)) < 1:
             raise ValueError("peripheral state contains no motor units")
+        wing_state = self._wing_snapshot(state)
 
         for _ in range(physics_steps):
             phase = (2.0 * math.pi * self.wingbeat_hz * self._time) % (
@@ -123,9 +131,9 @@ class FlyBodyMuscleAdapter(FlyBodyRuntime):
 
             step_torque: dict[str, float] = {}
             for side in ("left", "right"):
-                power = self._power_activation(state, side, phase)
+                power = self._power_activation(wing_state, side, phase)
                 steering_yaw, steering_yaw_velocity = self._steering_stroke_offset(
-                    state, side, phase
+                    wing_state, side, phase
                 )
                 for axis in ("yaw", "roll", "pitch"):
                     actuator_index = self._wing_indices[(side, axis)]
@@ -153,6 +161,7 @@ class FlyBodyMuscleAdapter(FlyBodyRuntime):
                     self.sim.mj_data.qfrc_applied[qvel_address] += torque
                     step_torque[f"{side}:{axis}"] = torque
 
+            self._apply_additional_muscle_torque(state, phase)
             if not np.all(np.isfinite(self.sim.mj_data.qfrc_applied)):
                 raise RuntimeError("non-finite virtual-muscle torque")
             self.sim.step()
