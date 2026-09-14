@@ -25,7 +25,7 @@ struct Args {
     #[arg(
         long,
         value_delimiter = ',',
-        default_value = "0.00025,0.0005,0.001,0.002,0.004,0.006,0.008,0.012,0.016,0.02"
+        default_value = "0.00025,0.0005,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.01,0.012,0.016,0.02"
     )]
     synapse_scales: Vec<f32>,
 }
@@ -49,13 +49,18 @@ struct EventCount {
     positive: usize,
     hyperpolarizing: usize,
     total: usize,
+    downstream_positive: usize,
+    downstream_hyperpolarizing: usize,
+    downstream_total: usize,
 }
 
 #[derive(Debug, Serialize)]
 struct ScaleResult {
     synapse_scale: f32,
     events: Vec<EventCount>,
+    initial_direct_events: usize,
     propagated_after_input: bool,
+    peak_downstream_events: usize,
     final_total_events: usize,
     peak_total_events: usize,
     zero_tail: bool,
@@ -98,21 +103,40 @@ impl Runtime {
     }
 }
 
-fn event_count(step: usize, external_input: bool, spikes: &[u32]) -> EventCount {
-    let positive = spikes
-        .iter()
-        .filter(|&&event| event == ACTIVITY_DEPOLARIZING as u32)
-        .count();
-    let hyperpolarizing = spikes
-        .iter()
-        .filter(|&&event| event == ACTIVITY_HYPERPOLARIZING as u32)
-        .count();
+fn event_count(
+    step: usize,
+    external_input: bool,
+    spikes: &[u32],
+    stimulated: &[bool],
+) -> EventCount {
+    let mut positive = 0usize;
+    let mut hyperpolarizing = 0usize;
+    let mut downstream_positive = 0usize;
+    let mut downstream_hyperpolarizing = 0usize;
+
+    for (index, &event) in spikes.iter().enumerate() {
+        if event == ACTIVITY_DEPOLARIZING as u32 {
+            positive += 1;
+            if !stimulated[index] {
+                downstream_positive += 1;
+            }
+        } else if event == ACTIVITY_HYPERPOLARIZING as u32 {
+            hyperpolarizing += 1;
+            if !stimulated[index] {
+                downstream_hyperpolarizing += 1;
+            }
+        }
+    }
+
     EventCount {
         step,
         external_input,
         positive,
         hyperpolarizing,
         total: positive + hyperpolarizing,
+        downstream_positive,
+        downstream_hyperpolarizing,
+        downstream_total: downstream_positive + downstream_hyperpolarizing,
     }
 }
 
@@ -142,6 +166,7 @@ fn main() -> Result<()> {
     }
 
     let mut stimuli = Vec::with_capacity(body_stimuli.len());
+    let mut stimulated_mask = vec![false; snapshot.neuron_count()];
     for row in body_stimuli {
         if !row.current.is_finite() || row.current == 0.0 {
             bail!("stimulus for body {} is non-finite or zero", row.body_id);
@@ -149,6 +174,10 @@ fn main() -> Result<()> {
         let neuron = snapshot
             .index_of_body_id(row.body_id)
             .with_context(|| format!("unknown body ID {}", row.body_id))?;
+        if stimulated_mask[neuron] {
+            bail!("body ID {} is stimulated more than once", row.body_id);
+        }
+        stimulated_mask[neuron] = true;
         stimuli.push(Stimulus {
             neuron,
             current: row.current,
@@ -166,17 +195,39 @@ fn main() -> Result<()> {
 
         let mut events = Vec::with_capacity(args.zero_input_steps + 1);
         runtime.step(&stimuli)?;
-        events.push(event_count(0, true, &runtime.spikes()?));
+        events.push(event_count(
+            0,
+            true,
+            &runtime.spikes()?,
+            &stimulated_mask,
+        ));
         for step in 1..=args.zero_input_steps {
             runtime.step(&[])?;
-            events.push(event_count(step, false, &runtime.spikes()?));
+            events.push(event_count(
+                step,
+                false,
+                &runtime.spikes()?,
+                &stimulated_mask,
+            ));
         }
 
+        // Propagation means activity in a neuron that was NOT directly stimulated.
+        // This avoids mistaking recurrent activity of an R1-R6 cell itself for
+        // traversal of a released MaleCNS edge. Six zero-input steps are enough to
+        // cover the same propagation horizon used by the retinal smoke test.
+        let propagation_window = args.zero_input_steps.min(6);
         let propagated_after_input = events
             .iter()
             .skip(1)
-            .take(3)
-            .any(|sample| sample.total > 0);
+            .take(propagation_window)
+            .any(|sample| sample.downstream_total > 0);
+        let initial_direct_events = events.first().map_or(0, |sample| sample.total);
+        let peak_downstream_events = events
+            .iter()
+            .skip(1)
+            .map(|sample| sample.downstream_total)
+            .max()
+            .unwrap_or(0);
         let final_total_events = events.last().map_or(0, |sample| sample.total);
         let peak_total_events = events.iter().map(|sample| sample.total).max().unwrap_or(0);
         let zero_tail = events
@@ -187,7 +238,9 @@ fn main() -> Result<()> {
         results.push(ScaleResult {
             synapse_scale: scale,
             events,
+            initial_direct_events,
             propagated_after_input,
+            peak_downstream_events,
             final_total_events,
             peak_total_events,
             zero_tail,
