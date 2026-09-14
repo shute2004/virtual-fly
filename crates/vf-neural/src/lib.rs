@@ -1,5 +1,5 @@
 mod cpu;
-mod model;
+pub mod model;
 mod snapshot;
 mod state;
 
