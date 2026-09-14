@@ -18,8 +18,6 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   exit 2
 }
 
-# Normal development should get to learning quickly. Expensive invariants are
-# available explicitly when changing the relevant boundary/runtime code.
 FULL_PREFLIGHT="${VF_FULL_PREFLIGHT:-0}"
 FLYPPY_ARGS=()
 for arg in "$@"; do
@@ -35,8 +33,11 @@ unset VF_NEURAL_SYNAPSE_SCALE || true
 
 uv sync >/dev/null
 
-# Static/generated artifacts are cached. Rebuild only when absent. This avoids
-# spending most of each iteration regenerating the same MaleCNS boundary files.
+# The bridge compile is cheap and catches protocol changes such as episode-state
+# reset before launching a multi-minute training job.
+cargo check -q -p vf-runner --bin neural_bridge
+
+# Static/generated artifacts are cached. Rebuild only when absent.
 if [ ! -f "$GROUPS" ]; then
   printf '\n== Generate neural boundary groups ==\n'
   uv run python scripts/data/make_embodiment_groups.py \
@@ -68,12 +69,9 @@ except Exception:
     print(0)' "$NEURAL_CALIBRATION")"
 fi
 
-# Reuse the measured stable synapse scale during ordinary training. Recalibrate
-# once when the semantic schema changes; after that, ordinary runs go straight
-# to learning.
 if [ "$CALIBRATION_SCHEMA" != "$EXPECTED_NEURAL_CALIBRATION_SCHEMA" ] || [ "$FULL_PREFLIGHT" = "1" ]; then
   printf '\n== Whole-CNS pulse stability calibration ==\n'
-  cargo check -q -p vf-runner --bin neural_bridge --bin neural_stability_probe
+  cargo check -q -p vf-runner --bin neural_stability_probe
   uv run python scripts/embodiment/calibrate_neural_runtime.py \
     --snapshot "$SNAPSHOT" \
     --mapping "$RETINOTOPIC_MAP" \
