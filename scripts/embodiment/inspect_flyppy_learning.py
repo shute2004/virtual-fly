@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect a completed Flyppy run without advancing the neural simulation.
-
-The diagnostic reads the saved CNS checkpoint and trajectory only. It reports
-whether the learning chain actually existed at the end of the run:
-
-    sensory/CNS activity -> eligibility
-    DAN activity/connectivity -> postsynaptic modulation
-    eligibility + modulation on the same fast synapse -> possible weight update
-
-It also summarizes sampled individual wing-MN activity from trajectory.jsonl.
-No state is modified and no learning step is executed.
-"""
+"""Inspect a completed Flyppy run without advancing the neural simulation."""
 
 from __future__ import annotations
 
@@ -20,8 +9,10 @@ from pathlib import Path
 
 import numpy as np
 
-
 DEFAULT_EXPERIMENT = Path("artifacts/experiments/flyppy-v1")
+DEFAULT_NEURAL_CALIBRATION = Path(
+    "artifacts/embodiment/neural-runtime-calibration-v1.json"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,18 +34,52 @@ def parse_args() -> argparse.Namespace:
         "--learning-rate",
         type=float,
         default=0.00001,
-        help="must match NeuralParams::default().learning_rate for predicted-update diagnostics",
+        help="must match NeuralParams::default().learning_rate",
     )
-    parser.add_argument("--synapse-scale", type=float, default=0.02)
+    parser.add_argument(
+        "--synapse-scale",
+        type=float,
+        default=None,
+        help=(
+            "initial fast-synapse scale. By default read the task-independent "
+            "neural-runtime calibration artifact instead of assuming the old 0.02"
+        ),
+    )
+    parser.add_argument(
+        "--neural-calibration",
+        type=Path,
+        default=DEFAULT_NEURAL_CALIBRATION,
+    )
     return parser.parse_args()
 
 
-def read_manifest(path: Path) -> dict[str, object]:
+def read_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def memmap_for(directory: Path, filename: object, dtype: str) -> np.memmap:
     return np.memmap(directory / str(filename), dtype=dtype, mode="r")
+
+
+def resolve_synapse_scale(args: argparse.Namespace) -> tuple[float, str]:
+    if args.synapse_scale is not None:
+        value = float(args.synapse_scale)
+        source = "cli"
+    elif args.neural_calibration.exists():
+        calibration = read_json(args.neural_calibration)
+        if int(calibration.get("schema_version", 0)) not in (1, 2):
+            raise RuntimeError(
+                f"unsupported neural calibration schema: {args.neural_calibration}"
+            )
+        value = float(calibration["synapse_scale"])
+        source = str(args.neural_calibration)
+    else:
+        # Historical fallback for experiments created before runtime calibration.
+        value = 0.02
+        source = "historical_fallback_0.02"
+    if not np.isfinite(value) or value <= 0.0:
+        raise RuntimeError(f"invalid synapse scale {value} from {source}")
+    return value, source
 
 
 def summarize_trajectory(path: Path) -> dict[str, object]:
@@ -85,18 +110,19 @@ def summarize_trajectory(path: Path) -> dict[str, object]:
             records += 1
             episode = int(record.get("episode", -1))
             episodes.add(episode)
+
             motor = record.get("motor_periphery", {}) or {}
             spikes = int(motor.get("spikes", 0))
             active_units = int(motor.get("active_motor_units", 0))
             sampled_motor_spikes += spikes
             max_motor_spikes = max(max_motor_spikes, spikes)
             max_active_motor_units = max(max_active_motor_units, active_units)
+
             retinal = record.get("retinal_input", {}) or {}
             active_photo = int(retinal.get("active_photoreceptors", 0))
             max_active_photoreceptors = max(max_active_photoreceptors, active_photo)
             max_retinal_current = max(
-                max_retinal_current,
-                float(retinal.get("max_current", 0.0)),
+                max_retinal_current, float(retinal.get("max_current", 0.0))
             )
             if episode in first_record_seen:
                 retinal_after_startup.append(active_photo)
@@ -141,15 +167,19 @@ def main() -> int:
         raise SystemExit("chunk-edges must be >= 1")
     if args.epsilon < 0.0 or args.weight_epsilon < 0.0:
         raise SystemExit("epsilon values must be >= 0")
-    if args.learning_rate <= 0.0 or args.synapse_scale <= 0.0:
-        raise SystemExit("learning-rate and synapse-scale must be > 0")
+    if args.learning_rate <= 0.0:
+        raise SystemExit("learning-rate must be > 0")
 
-    snapshot_manifest = read_manifest(args.snapshot / "manifest.json")
+    synapse_scale, synapse_scale_source = resolve_synapse_scale(args)
+    snapshot_manifest = read_json(args.snapshot / "manifest.json")
     checkpoint = args.checkpoint or (args.experiment / "checkpoint")
-    checkpoint_manifest = read_manifest(checkpoint / "manifest.json")
+    checkpoint_manifest = read_json(checkpoint / "manifest.json")
 
     print(f"experiment={args.experiment}")
     print(f"checkpoint={checkpoint}")
+    print(
+        f"initial_synapse_scale={synapse_scale:.9g} source={synapse_scale_source}"
+    )
 
     neuron_count = int(snapshot_manifest["neuron_count"])
     edge_count = int(snapshot_manifest["edge_count"])
@@ -222,9 +252,8 @@ def main() -> int:
             np.count_nonzero(predicted_abs_update > args.weight_epsilon)
         )
 
-        initial = (
-            np.asarray(synapse_counts[start:end], dtype=np.float32)
-            * np.float32(args.synapse_scale)
+        initial = np.asarray(synapse_counts[start:end], dtype=np.float32) * np.float32(
+            synapse_scale
         )
         delta = np.asarray(weights[start:end], dtype=np.float32) - initial
         abs_delta = np.abs(delta)
@@ -265,9 +294,7 @@ def main() -> int:
     )
     print(
         "weights changed_gt_{:.1e}={} max_abs_delta={:.9g}".format(
-            args.weight_epsilon,
-            changed_weights,
-            max_abs_weight_delta,
+            args.weight_epsilon, changed_weights, max_abs_weight_delta
         )
     )
 
