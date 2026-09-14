@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """Sweep upstream FlyBody root pitch under exact measured wing kinematics.
 
-Calibration-only diagnostic.  This compiles TuragaLab/flybody's original
-``fruitfly.xml`` directly with the currently installed MuJoCo, enables only the
-source wing fluid geoms, imposes the official measured wing qpos/qvel exactly,
-and evaluates the resulting fluid generalized force for several root pitches.
+Calibration-only diagnostic. This compiles TuragaLab/flybody's original
+``fruitfly.xml`` directly with the currently installed MuJoCo, enables the source
+wing ellipsoid-fluid geoms, imposes the official measured wing qpos/qvel exactly,
+and evaluates fluid generalized force for several root pitches.
 
-The purpose is to distinguish a genuinely weak aerodynamic force from a force
-whose world-axis projection is wrong because the source flight pose was not
-reproduced.  FlyGym and virtual-fly body conversion are not involved.
+Two quantities are intentionally reported separately:
+
+* total active fluid force: the actual ``qfrc_fluid`` present in the source flight
+  model with wing ellipsoid fluid enabled;
+* incremental ellipsoid contribution: aero-on minus aero-off ``qfrc_fluid``.
+
+The distinction matters because the source XML already has non-zero air density and
+viscosity, so the aero-off model can still carry MuJoCo's ordinary inertia-based
+fluid force.
 """
 
 from __future__ import annotations
@@ -67,6 +73,18 @@ def set_state(
     mj.mj_forward(model, data)
 
 
+def _force_summary(force: np.ndarray, weight: float) -> dict[str, object]:
+    mean = np.mean(force, axis=0)
+    magnitude = float(np.linalg.norm(mean))
+    direction = mean / max(magnitude, 1e-30)
+    return {
+        "mean_force_g_cm_s2": mean.tolist(),
+        "mean_force_direction": direction.tolist(),
+        "force_magnitude_to_weight": magnitude / weight,
+        "vertical_support_ratio_to_weight": float(mean[2] / weight),
+    }
+
+
 def run_pitch(
     cycle: MeasuredWingbeatCycle,
     root_pitch_deg: float,
@@ -85,63 +103,50 @@ def run_pitch(
         raise RuntimeError("aero A/B mass mismatch")
 
     passive_delta: list[np.ndarray] = []
-    fluid_delta: list[np.ndarray] = []
+    off_fluid: list[np.ndarray] = []
+    on_fluid: list[np.ndarray] = []
     for i in range(phase_samples):
         phase = 2.0 * math.pi * i / phase_samples
         set_state(
-            off_model,
-            off_data,
-            cycle,
-            phase,
-            root_pitch_deg,
-            off_qpos,
-            off_dof,
-            off_wings,
+            off_model, off_data, cycle, phase, root_pitch_deg,
+            off_qpos, off_dof, off_wings,
         )
         set_state(
-            on_model,
-            on_data,
-            cycle,
-            phase,
-            root_pitch_deg,
-            on_qpos,
-            on_dof,
-            on_wings,
+            on_model, on_data, cycle, phase, root_pitch_deg,
+            on_qpos, on_dof, on_wings,
         )
+
         passive_delta.append(
             np.asarray(on_data.qfrc_passive[on_dof : on_dof + 3], dtype=np.float64)
             - np.asarray(off_data.qfrc_passive[off_dof : off_dof + 3], dtype=np.float64)
         )
-        # qfrc_fluid is non-zero in the source/off model as well because the world
-        # already has non-zero density/viscosity and MuJoCo can apply the ordinary
-        # inertia-based fluid model.  The isolated contribution of the explicitly
-        # enabled wing ellipsoid geoms is therefore aero-on minus aero-off here too.
-        fluid_delta.append(
-            np.asarray(on_data.qfrc_fluid[on_dof : on_dof + 3], dtype=np.float64)
-            - np.asarray(off_data.qfrc_fluid[off_dof : off_dof + 3], dtype=np.float64)
+        off_fluid.append(
+            np.asarray(off_data.qfrc_fluid[off_dof : off_dof + 3], dtype=np.float64).copy()
+        )
+        on_fluid.append(
+            np.asarray(on_data.qfrc_fluid[on_dof : on_dof + 3], dtype=np.float64).copy()
         )
 
     passive = np.asarray(passive_delta, dtype=np.float64)
-    fluid = np.asarray(fluid_delta, dtype=np.float64)
+    off_force = np.asarray(off_fluid, dtype=np.float64)
+    on_force = np.asarray(on_fluid, dtype=np.float64)
+    fluid_delta = on_force - off_force
+
     mean_passive = np.mean(passive, axis=0)
-    mean_fluid = np.mean(fluid, axis=0)
-    if not np.allclose(mean_passive, mean_fluid, rtol=1e-8, atol=1e-10):
+    mean_delta = np.mean(fluid_delta, axis=0)
+    if not np.allclose(mean_passive, mean_delta, rtol=1e-8, atol=1e-10):
         raise RuntimeError(
             "aero-on/off qfrc_passive delta disagrees with aero-on/off qfrc_fluid delta: "
-            f"passive={mean_passive.tolist()} fluid_delta={mean_fluid.tolist()}"
+            f"passive={mean_passive.tolist()} fluid_delta={mean_delta.tolist()}"
         )
 
     weight = mass * SOURCE_GRAVITY_CM_S2
-    magnitude_ratio = float(np.linalg.norm(mean_fluid) / weight)
-    vertical_ratio = float(mean_fluid[2] / weight)
-    direction = mean_fluid / max(np.linalg.norm(mean_fluid), 1e-30)
     return {
         "root_pitch_deg": float(root_pitch_deg),
         "mass_mg": mass * 1000.0,
-        "mean_fluid_force_g_cm_s2": mean_fluid.tolist(),
-        "mean_fluid_force_direction": direction.tolist(),
-        "force_magnitude_to_weight": magnitude_ratio,
-        "vertical_support_ratio_to_weight": vertical_ratio,
+        "baseline_inertia_fluid": _force_summary(off_force, weight),
+        "active_total_fluid": _force_summary(on_force, weight),
+        "incremental_wing_ellipsoid": _force_summary(fluid_delta, weight),
     }
 
 
@@ -177,29 +182,50 @@ def main() -> int:
         run_pitch(cycle, float(pitch), int(args.phase_samples))
         for pitch in args.root_pitches_deg
     ]
+
     for row in rows:
-        force = row["mean_fluid_force_g_cm_s2"]
+        total = row["active_total_fluid"]
+        incremental = row["incremental_wing_ellipsoid"]
+        baseline = row["baseline_inertia_fluid"]
+        force = total["mean_force_g_cm_s2"]
         print(
-            "upstream_orientation root_pitch={:+.1f} vertical_ratio={:+.3f} "
-            "magnitude_ratio={:.3f} force_xyz=[{:+.4f},{:+.4f},{:+.4f}]".format(
+            "upstream_orientation root_pitch={:+.1f} "
+            "total_vertical={:+.3f} total_magnitude={:.3f} "
+            "incremental_vertical={:+.3f} baseline_vertical={:+.3f} "
+            "total_force_xyz=[{:+.4f},{:+.4f},{:+.4f}]".format(
                 float(row["root_pitch_deg"]),
-                float(row["vertical_support_ratio_to_weight"]),
-                float(row["force_magnitude_to_weight"]),
-                float(force[0]),
-                float(force[1]),
-                float(force[2]),
+                float(total["vertical_support_ratio_to_weight"]),
+                float(total["force_magnitude_to_weight"]),
+                float(incremental["vertical_support_ratio_to_weight"]),
+                float(baseline["vertical_support_ratio_to_weight"]),
+                float(force[0]), float(force[1]), float(force[2]),
             )
         )
 
-    best_vertical = max(rows, key=lambda x: float(x["vertical_support_ratio_to_weight"]))
-    best_magnitude = max(rows, key=lambda x: float(x["force_magnitude_to_weight"]))
-    if float(best_magnitude["force_magnitude_to_weight"]) >= 0.70:
-        diagnosis = "AERO_FORCE_MAGNITUDE_NEAR_WEIGHT_BUT_ORIENTATION_MATTERS"
+    best_vertical = max(
+        rows,
+        key=lambda x: float(x["active_total_fluid"]["vertical_support_ratio_to_weight"]),
+    )
+    best_magnitude = max(
+        rows,
+        key=lambda x: float(x["active_total_fluid"]["force_magnitude_to_weight"]),
+    )
+    best_vertical_ratio = float(
+        best_vertical["active_total_fluid"]["vertical_support_ratio_to_weight"]
+    )
+    best_magnitude_ratio = float(
+        best_magnitude["active_total_fluid"]["force_magnitude_to_weight"]
+    )
+
+    if 0.70 <= best_vertical_ratio <= 1.30:
+        diagnosis = "UPSTREAM_TOTAL_FLUID_CAN_APPROXIMATELY_SUPPORT_WEIGHT"
+    elif best_magnitude_ratio >= 0.70:
+        diagnosis = "UPSTREAM_TOTAL_FLUID_MAGNITUDE_NEAR_WEIGHT_BUT_ORIENTATION_MATTERS"
     else:
-        diagnosis = "AERO_FORCE_MAGNITUDE_ITSELF_UNDER_WEIGHT"
+        diagnosis = "UPSTREAM_TOTAL_FLUID_MAGNITUDE_ITSELF_UNDER_WEIGHT"
 
     result = {
-        "schema_version": 2,
+        "schema_version": 3,
         "mujoco_version": getattr(mj, "__version__", "unknown"),
         "pattern": str(args.pattern),
         "phase_samples": int(args.phase_samples),
@@ -207,10 +233,11 @@ def main() -> int:
         "best_vertical_case": best_vertical,
         "best_magnitude_case": best_magnitude,
         "diagnosis": diagnosis,
-        "force_definition": (
-            "aero-on minus aero-off qfrc_fluid; the off/source model may already "
-            "carry ordinary inertia-based fluid force because density/viscosity are non-zero"
-        ),
+        "force_definition": {
+            "active_total_fluid": "qfrc_fluid in the source model with wing ellipsoid fluid enabled",
+            "baseline_inertia_fluid": "qfrc_fluid in the source model before enabling wing ellipsoid fluid",
+            "incremental_wing_ellipsoid": "active_total_fluid minus baseline_inertia_fluid",
+        },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
