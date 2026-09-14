@@ -208,7 +208,11 @@ fn resolve_groups(
     snapshot: &ConnectomeSnapshot,
     config: GroupConfigFile,
 ) -> Result<HashMap<String, Group>> {
-    if config.schema_version != 1 {
+    // Schema v2 only changes experiment/provenance metadata and keeps the
+    // executable `groups.{name}.body_ids` shape identical to v1. Accept both so
+    // older generated files remain usable while the current Flyppy setup can
+    // carry explicit reinforcement provenance without breaking the bridge.
+    if !matches!(config.schema_version, 1 | 2) {
         bail!("unsupported group config schema {}", config.schema_version);
     }
     if config.groups.is_empty() {
@@ -219,122 +223,17 @@ fn resolve_groups(
     for (name, group) in config.groups {
         let mut indices = Vec::with_capacity(group.body_ids.len());
         for body_id in group.body_ids {
-            let index = snapshot.index_of_body_id(body_id).with_context(|| {
-                format!("group {name}: body ID {body_id} not present in snapshot")
-            })?;
+            let index = snapshot
+                .index_of_body_id(body_id)
+                .with_context(|| format!("group {name:?} contains unknown body ID {body_id}"))?;
             indices.push(index);
         }
-        indices.sort_unstable();
-        indices.dedup();
         if indices.is_empty() {
-            bail!("group {name} resolved to zero neurons");
+            bail!("group {name:?} contains no body IDs");
         }
         groups.insert(name, Group { indices });
     }
     Ok(groups)
-}
-
-fn stimuli_from_groups(
-    groups: &HashMap<String, Group>,
-    requested: &HashMap<String, f32>,
-) -> Result<Vec<Stimulus>> {
-    let capacity = requested
-        .keys()
-        .filter_map(|name| groups.get(name))
-        .map(|group| group.indices.len())
-        .sum();
-    let mut stimuli = Vec::with_capacity(capacity);
-    for (name, current) in requested {
-        if !current.is_finite() {
-            bail!("stimulus current for group {name} is non-finite");
-        }
-        let group = groups
-            .get(name)
-            .with_context(|| format!("unknown stimulus group: {name}"))?;
-        stimuli.extend(group.indices.iter().copied().map(|neuron| Stimulus {
-            neuron,
-            current: *current,
-        }));
-    }
-    Ok(stimuli)
-}
-
-fn stimuli_from_body_ids(
-    snapshot: &ConnectomeSnapshot,
-    requested: &[(u64, f32)],
-) -> Result<Vec<Stimulus>> {
-    let mut stimuli = Vec::with_capacity(requested.len());
-    for &(body_id, current) in requested {
-        if !current.is_finite() {
-            bail!("stimulus current for body ID {body_id} is non-finite");
-        }
-        let neuron = snapshot
-            .index_of_body_id(body_id)
-            .with_context(|| format!("stimulus body ID {body_id} is not present in snapshot"))?;
-        stimuli.push(Stimulus { neuron, current });
-    }
-    Ok(stimuli)
-}
-
-fn read_groups(
-    groups: &HashMap<String, Group>,
-    names: &[String],
-    spikes: &[u32],
-) -> Result<HashMap<String, GroupReadout>> {
-    let mut result = HashMap::with_capacity(names.len());
-    for name in names {
-        let group = groups
-            .get(name)
-            .with_context(|| format!("unknown read group: {name}"))?;
-        let spike_count = group
-            .indices
-            .iter()
-            .filter(|&&index| spikes[index] != 0)
-            .count();
-        result.insert(
-            name.clone(),
-            GroupReadout {
-                spikes: spike_count,
-                neurons: group.indices.len(),
-                spike_fraction: spike_count as f32 / group.indices.len() as f32,
-            },
-        );
-    }
-    Ok(result)
-}
-
-fn read_bodies(
-    snapshot: &ConnectomeSnapshot,
-    body_ids: &[u64],
-    spikes: &[u32],
-) -> Result<Vec<BodyReadout>> {
-    let mut result = Vec::with_capacity(body_ids.len());
-    for &body_id in body_ids {
-        let index = snapshot
-            .index_of_body_id(body_id)
-            .with_context(|| format!("read body ID {body_id} is not present in snapshot"))?;
-        result.push(BodyReadout {
-            body_id,
-            spike: spikes[index] != 0,
-        });
-    }
-    Ok(result)
-}
-
-fn write_weights(path: &PathBuf, weights: &[f32]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create {}", parent.display()))?;
-        }
-    }
-    let mut file = fs::File::create(path)
-        .with_context(|| format!("failed to create {}", path.display()))?;
-    for &weight in weights {
-        file.write_all(&weight.to_le_bytes())?;
-    }
-    file.flush()?;
-    Ok(())
 }
 
 fn write_json<T: Serialize>(stdout: &mut impl Write, value: &T) -> Result<()> {
@@ -344,28 +243,38 @@ fn write_json<T: Serialize>(stdout: &mut impl Write, value: &T) -> Result<()> {
     Ok(())
 }
 
+fn write_error(stdout: &mut impl Write, error: impl std::fmt::Display) -> Result<()> {
+    write_json(
+        stdout,
+        &ErrorResponse {
+            ok: false,
+            error: error.to_string(),
+        },
+    )
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
-    let snapshot = ConnectomeSnapshot::load_dir(&args.snapshot)
-        .with_context(|| format!("failed to load snapshot {}", args.snapshot.display()))?;
+    let snapshot = ConnectomeSnapshot::load(&args.snapshot)
+        .with_context(|| format!("load MaleCNS snapshot from {}", args.snapshot.display()))?;
     let config: GroupConfigFile = serde_json::from_slice(
         &fs::read(&args.groups)
-            .with_context(|| format!("failed to read groups {}", args.groups.display()))?,
+            .with_context(|| format!("read group config from {}", args.groups.display()))?,
     )
-    .context("invalid group config JSON")?;
+    .with_context(|| format!("parse group config from {}", args.groups.display()))?;
     let groups = resolve_groups(&snapshot, config)?;
-
+    let params = NeuralParams::default();
     let mut runtime = match args.backend {
-        Backend::Cpu => Runtime::Cpu(CpuRuntime::new(snapshot.clone(), NeuralParams::default())),
+        Backend::Cpu => Runtime::Cpu(CpuRuntime::new(snapshot.clone(), params.clone())?),
         Backend::Gpu => Runtime::Gpu(vf_neural::gpu::GpuRuntime::new(
-            &snapshot,
-            NeuralParams::default(),
+            snapshot.clone(),
+            params.clone(),
         )?),
     };
 
     let stdin = io::stdin();
-    let mut stdout = io::BufWriter::new(io::stdout().lock());
-    let mut group_names = groups.keys().map(String::as_str).collect::<Vec<_>>();
+    let mut stdout = io::stdout().lock();
+    let mut group_names: Vec<&str> = groups.keys().map(String::as_str).collect();
     group_names.sort_unstable();
     write_json(
         &mut stdout,
@@ -379,7 +288,6 @@ fn main() -> Result<()> {
         },
     )?;
 
-    let mut step_counter = 0u64;
     for line in stdin.lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
@@ -388,95 +296,19 @@ fn main() -> Result<()> {
         let request = match serde_json::from_str::<Request>(&line) {
             Ok(request) => request,
             Err(error) => {
-                write_json(
-                    &mut stdout,
-                    &ErrorResponse {
-                        ok: false,
-                        error: format!("invalid request JSON: {error}"),
-                    },
-                )?;
+                write_error(&mut stdout, format!("invalid request: {error}"))?;
                 continue;
             }
         };
 
-        let result: Result<bool> = (|| match request {
-            Request::Ping => {
-                write_json(
-                    &mut stdout,
-                    &SimpleResponse {
-                        ok: true,
-                        event: "pong",
-                    },
-                )?;
-                Ok(true)
-            }
-            Request::SaveWeights { path } => {
-                let weights = runtime.weights()?;
-                write_weights(&path, &weights)?;
-                write_json(
-                    &mut stdout,
-                    &WeightCheckpointResponse {
-                        ok: true,
-                        event: "weights_saved",
-                        path: path.display().to_string(),
-                        weights: weights.len(),
-                    },
-                )?;
-                Ok(true)
-            }
-            Request::SaveCheckpoint { path } => {
-                let state = runtime.state()?;
-                let manifest = save_checkpoint(
-                    &path,
-                    &snapshot.manifest.dataset,
-                    step_counter,
-                    &state,
-                )?;
-                write_json(
-                    &mut stdout,
-                    &StateCheckpointResponse {
-                        ok: true,
-                        event: "checkpoint_saved",
-                        path: path.display().to_string(),
-                        step: manifest.step,
-                        neurons: manifest.neuron_count,
-                        edges: manifest.edge_count,
-                    },
-                )?;
-                Ok(true)
-            }
-            Request::LoadCheckpoint { path } => {
-                let (manifest, state) = load_checkpoint(
-                    &path,
-                    &snapshot.manifest.dataset,
-                    snapshot.neuron_count(),
-                    snapshot.edge_count(),
-                )?;
-                runtime.load_state(&state)?;
-                step_counter = manifest.step;
-                write_json(
-                    &mut stdout,
-                    &StateCheckpointResponse {
-                        ok: true,
-                        event: "checkpoint_loaded",
-                        path: path.display().to_string(),
-                        step: manifest.step,
-                        neurons: manifest.neuron_count,
-                        edges: manifest.edge_count,
-                    },
-                )?;
-                Ok(true)
-            }
-            Request::Quit => {
-                write_json(
-                    &mut stdout,
-                    &SimpleResponse {
-                        ok: true,
-                        event: "bye",
-                    },
-                )?;
-                Ok(false)
-            }
+        let result = match request {
+            Request::Ping => write_json(
+                &mut stdout,
+                &SimpleResponse {
+                    ok: true,
+                    event: "pong",
+                },
+            ),
             Request::Step {
                 stimulate,
                 stimulate_body,
@@ -486,59 +318,201 @@ fn main() -> Result<()> {
                 read_body,
             } => {
                 if steps == 0 {
-                    bail!("step request requires steps >= 1");
-                }
-                let mut stimuli = stimuli_from_groups(&groups, &stimulate)?;
-                stimuli.extend(stimuli_from_body_ids(&snapshot, &stimulate_body)?);
-                for _ in 0..steps {
-                    runtime.step(&stimuli, plasticity)?;
-                    step_counter += 1;
-                }
+                    write_error(&mut stdout, "steps must be >= 1")
+                } else {
+                    let mut stimuli = Vec::new();
+                    let mut request_error: Option<anyhow::Error> = None;
+                    for (name, current) in stimulate {
+                        match groups.get(&name) {
+                            Some(group) => {
+                                stimuli.extend(group.indices.iter().copied().map(|index| Stimulus {
+                                    index,
+                                    current,
+                                }));
+                            }
+                            None => {
+                                request_error = Some(anyhow::anyhow!(
+                                    "unknown stimulation group {name:?}"
+                                ));
+                                break;
+                            }
+                        }
+                    }
+                    if request_error.is_none() {
+                        for (body_id, current) in stimulate_body {
+                            match snapshot.index_of_body_id(body_id) {
+                                Some(index) => stimuli.push(Stimulus { index, current }),
+                                None => {
+                                    request_error = Some(anyhow::anyhow!(
+                                        "unknown stimulation body ID {body_id}"
+                                    ));
+                                    break;
+                                }
+                            }
+                        }
+                    }
 
-                let needs_spikes = !read.is_empty() || !read_body.is_empty();
-                let spikes = if needs_spikes {
-                    Some(runtime.spikes()?)
-                } else {
-                    None
-                };
-                let group_readout = if read.is_empty() {
-                    HashMap::new()
-                } else {
-                    read_groups(&groups, &read, spikes.as_deref().expect("spikes requested"))?
-                };
-                let body_readout = if read_body.is_empty() {
-                    Vec::new()
-                } else {
-                    read_bodies(
-                        &snapshot,
-                        &read_body,
-                        spikes.as_deref().expect("spikes requested"),
-                    )?
-                };
-
+                    if let Some(error) = request_error {
+                        write_error(&mut stdout, error)
+                    } else {
+                        let mut step_error: Option<anyhow::Error> = None;
+                        for _ in 0..steps {
+                            if let Err(error) = runtime.step(&stimuli, plasticity) {
+                                step_error = Some(error);
+                                break;
+                            }
+                        }
+                        if let Some(error) = step_error {
+                            write_error(&mut stdout, error)
+                        } else {
+                            match runtime.spikes() {
+                                Ok(spikes) => {
+                                    let mut readout = HashMap::new();
+                                    let mut read_error: Option<anyhow::Error> = None;
+                                    for name in read {
+                                        match groups.get(&name) {
+                                            Some(group) => {
+                                                let count = group
+                                                    .indices
+                                                    .iter()
+                                                    .filter(|&&index| spikes[index] != 0)
+                                                    .count();
+                                                readout.insert(
+                                                    name,
+                                                    GroupReadout {
+                                                        spikes: count,
+                                                        neurons: group.indices.len(),
+                                                        spike_fraction: count as f32
+                                                            / group.indices.len() as f32,
+                                                    },
+                                                );
+                                            }
+                                            None => {
+                                                read_error = Some(anyhow::anyhow!(
+                                                    "unknown read group {name:?}"
+                                                ));
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    let mut body_readout = Vec::with_capacity(read_body.len());
+                                    if read_error.is_none() {
+                                        for body_id in read_body {
+                                            match snapshot.index_of_body_id(body_id) {
+                                                Some(index) => body_readout.push(BodyReadout {
+                                                    body_id,
+                                                    spike: spikes[index] != 0,
+                                                }),
+                                                None => {
+                                                    read_error = Some(anyhow::anyhow!(
+                                                        "unknown read body ID {body_id}"
+                                                    ));
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if let Some(error) = read_error {
+                                        write_error(&mut stdout, error)
+                                    } else {
+                                        write_json(
+                                            &mut stdout,
+                                            &StepResponse {
+                                                ok: true,
+                                                step: runtime.state()?.step,
+                                                read: readout,
+                                                read_body: body_readout,
+                                            },
+                                        )
+                                    }
+                                }
+                                Err(error) => write_error(&mut stdout, error),
+                            }
+                        }
+                    }
+                }
+            }
+            Request::SaveWeights { path } => {
+                let result = (|| -> Result<()> {
+                    let weights = runtime.weights()?;
+                    let bytes: Vec<u8> = weights.iter().flat_map(|value| value.to_le_bytes()).collect();
+                    if let Some(parent) = path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::write(&path, bytes)?;
+                    write_json(
+                        &mut stdout,
+                        &WeightCheckpointResponse {
+                            ok: true,
+                            event: "weights_saved",
+                            path: path.display().to_string(),
+                            weights: weights.len(),
+                        },
+                    )?;
+                    Ok(())
+                })();
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
+                Ok(())
+            }
+            Request::SaveCheckpoint { path } => {
+                let result = (|| -> Result<()> {
+                    let state = runtime.state()?;
+                    save_checkpoint(&path, &snapshot, &state)?;
+                    write_json(
+                        &mut stdout,
+                        &StateCheckpointResponse {
+                            ok: true,
+                            event: "checkpoint_saved",
+                            path: path.display().to_string(),
+                            step: state.step,
+                            neurons: snapshot.neuron_count(),
+                            edges: snapshot.edge_count(),
+                        },
+                    )?;
+                    Ok(())
+                })();
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
+                Ok(())
+            }
+            Request::LoadCheckpoint { path } => {
+                let result = (|| -> Result<()> {
+                    let state = load_checkpoint(&path, &snapshot)?;
+                    runtime.load_state(&state)?;
+                    write_json(
+                        &mut stdout,
+                        &StateCheckpointResponse {
+                            ok: true,
+                            event: "checkpoint_loaded",
+                            path: path.display().to_string(),
+                            step: state.step,
+                            neurons: snapshot.neuron_count(),
+                            edges: snapshot.edge_count(),
+                        },
+                    )?;
+                    Ok(())
+                })();
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
+                Ok(())
+            }
+            Request::Quit => {
                 write_json(
                     &mut stdout,
-                    &StepResponse {
+                    &SimpleResponse {
                         ok: true,
-                        step: step_counter,
-                        read: group_readout,
-                        read_body: body_readout,
+                        event: "bye",
                     },
                 )?;
-                Ok(true)
+                break;
             }
-        })();
-
-        match result {
-            Ok(true) => {}
-            Ok(false) => break,
-            Err(error) => write_json(
-                &mut stdout,
-                &ErrorResponse {
-                    ok: false,
-                    error: format!("{error:#}"),
-                },
-            )?,
+        };
+        if let Err(error) = result {
+            write_error(&mut stdout, error)?;
         }
     }
     Ok(())
