@@ -48,8 +48,6 @@ def stable_unit(body_id: int, salt: str) -> float:
 
 
 def schematic_position(body_id: int, side: str, superclass: str) -> list[float]:
-    # Broad left/right separation and superclass bands make the graph readable;
-    # jitter is deterministic. This is intentionally not claimed as anatomy.
     side_norm = side.strip().upper()
     if side_norm == "L":
         x_base = -4.0
@@ -57,7 +55,10 @@ def schematic_position(body_id: int, side: str, superclass: str) -> list[float]:
         x_base = 4.0
     else:
         x_base = 0.0
-    band = (int.from_bytes(hashlib.blake2b(superclass.encode(), digest_size=2).digest(), "little") % 9) - 4
+    band = (
+        int.from_bytes(hashlib.blake2b(superclass.encode(), digest_size=2).digest(), "little")
+        % 9
+    ) - 4
     return [
         x_base + (stable_unit(body_id, "x") - 0.5) * 4.0,
         band * 1.25 + (stable_unit(body_id, "y") - 0.5) * 1.1,
@@ -84,8 +85,6 @@ def main() -> int:
     motor = json.loads(args.motor_map.read_text(encoding="utf-8"))
     required.update(int(row["body_id"]) for row in motor.get("neurons", []))
 
-    # Start with strongest released pairs. argpartition avoids sorting all 25M
-    # edges, then only the bounded candidate tail is sorted exactly.
     candidate_count = min(len(counts), max(args.max_edges * 8, 50_000))
     if candidate_count == len(counts):
         candidates = np.arange(len(counts), dtype=np.int64)
@@ -94,7 +93,8 @@ def main() -> int:
     candidates = candidates[np.argsort(counts[candidates], kind="stable")[::-1]]
     posts = np.searchsorted(row_offsets, candidates, side="right") - 1
 
-    selected: set[int] = {value for value in required if value in set(body_ids.tolist())}
+    available = {int(value) for value in body_ids.tolist()}
+    selected: set[int] = {value for value in required if value in available}
     selected_edges: list[tuple[int, int, int]] = []
     for edge_index, post_index in zip(candidates.tolist(), posts.tolist(), strict=True):
         pre_index = int(pre_indices[edge_index])
@@ -109,10 +109,7 @@ def main() -> int:
         if len(selected_edges) >= args.max_edges:
             break
 
-    # Guarantee required nodes even if boundary inventory exceeds the nominal
-    # node budget; losing the actual sensory/reward/motor boundary is worse than
-    # a modestly larger viewer graph.
-    selected.update(required)
+    selected.update(value for value in required if value in available)
 
     annotations = pd.read_feather(args.snapshot / manifest["annotations_file"])
     annotations = annotations.drop_duplicates("bodyId").set_index("bodyId")
@@ -149,7 +146,9 @@ def main() -> int:
         "edges": edges,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8"
+    )
     print(f"viewer_nodes={len(nodes)} viewer_edges={len(edges)}")
     print(f"viewer_graph={args.output}")
     return 0
