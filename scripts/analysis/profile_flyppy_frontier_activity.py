@@ -1,21 +1,10 @@
 #!/usr/bin/env python3
-"""Profile real Flyppy propagation-frontier sparsity without changing dynamics.
+"""Measure real Flyppy propagation-frontier sparsity without touching production state.
 
-The profiler copies production state into a temporary experiment and runs the
-actual Flyppy v3 body/retina/physics loop with population=1.  On a sparse set of
-normal control steps it asks the existing population bridge to return all MaleCNS
-events by temporarily expanding read_body to all released body IDs.  The normal
-trainer receives only its originally requested motor/viewer subset back.
-
-Frontier metrics are then computed offline from the canonical incoming CSR:
-
-  A      active presynaptic neurons
-  F      outgoing edges sourced by A
-  C      posts reached by at least one edge in F
-  I(C)   canonical incoming edges scanned for those candidate posts
-
-No neural kernel or production checkpoint is modified.  The deliberately large
-all-neuron readout exists only on sampled diagnostic steps.
+A diagnostic-only bridge uses the exact production frontier runtime but exposes a
+signed activity readback internally (both event codes 1 and 2 count as active).
+The bridge computes frontier statistics from shared CPU-side topology only when
+this profiler requests them. Normal production training does not use this path.
 """
 
 from __future__ import annotations
@@ -23,15 +12,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from statistics import mean, median
-
-import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 EMBODIMENT = ROOT / "scripts" / "embodiment"
@@ -43,7 +30,7 @@ DEFAULT_TEMP = Path("artifacts/profiles/flyppy-frontier-activity/run")
 DEFAULT_REPORT = Path("reports/flyppy/frontier_activity_profile.md")
 DEFAULT_SNAPSHOT = Path("artifacts/malecns-v1.0")
 DEFAULT_CALIBRATION = Path("artifacts/embodiment/neural-runtime-calibration-v1.json")
-P = 10_871_322
+P_EXPECTED = 10_871_322
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,20 +99,6 @@ def main() -> int:
     manifest = json.loads((snapshot_dir / "manifest.json").read_text(encoding="utf-8"))
     n = int(manifest["neuron_count"])
     e = int(manifest["edge_count"])
-    body_ids = np.memmap(snapshot_dir / manifest["body_ids_file"], dtype="<u8", mode="r")
-    row_offsets = np.memmap(snapshot_dir / manifest["row_offsets_file"], dtype="<u4", mode="r")
-    pre_indices = np.memmap(snapshot_dir / manifest["pre_indices_file"], dtype="<u4", mode="r")
-    if body_ids.size != n or row_offsets.size != n + 1 or pre_indices.size != e:
-        raise RuntimeError("snapshot dimensions do not match manifest")
-    all_body_ids = tuple(int(value) for value in body_ids)
-    indegree = np.diff(row_offsets.astype(np.int64, copy=False))
-
-    # Reused offline scratch.  This deliberately scans all E on the CPU only
-    # for sampled diagnostic states; it is not part of the neural runtime.
-    active_pre = np.zeros(n, dtype=np.bool_)
-    active_edge = np.empty(e, dtype=np.bool_)
-    prefix = np.empty(e + 1, dtype=np.uint32)
-    prefix[0] = 0
 
     before = tree_digest(checkpoint)
     if temp.exists():
@@ -139,44 +112,71 @@ def main() -> int:
     import train_flyppy_population as trainer
 
     BaseClient = bridge_module.PopulationNeuralBridgeClient
-    samples: list[dict[str, float | int]] = []
+    samples: list[dict[str, int | float]] = []
     normal_step_counter = 0
 
-    def analyze_events(events_by_body: dict[int, bool], neural_step: int, sample_index: int) -> None:
-        active_pre.fill(False)
-        # The bridge returns bool=True only for depolarizing events.  Motor-facing
-        # readout intentionally collapses the signed internal event code, so for
-        # frontier profiling we must recover both signs.  Therefore all-body
-        # readout alone is insufficient if hyperpolarizing events are present.
-        # Refuse to silently under-count; a signed diagnostic bridge is required.
-        raise RuntimeError(
-            "frontier profiler requires signed all-neuron events; current bridge read_body exposes only depolarizing bool"
-        )
-
     class ProfilingClient(BaseClient):
+        def __init__(self, *, snapshot: Path, groups: Path, slots: int = 1, repo_root: Path | None = None):
+            if slots < 1:
+                raise ValueError("slots must be >= 1")
+            root = repo_root or ROOT
+            command = [
+                "cargo", "run", "-q", "-p", "vf-runner",
+                "--bin", "population_frontier_profile_bridge", "--release", "--",
+                "--snapshot", str(snapshot),
+                "--groups", str(groups),
+                "--slots", str(slots),
+            ]
+            self._proc = subprocess.Popen(
+                command,
+                cwd=root,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=None,
+                text=True,
+                bufsize=1,
+            )
+            if self._proc.stdin is None or self._proc.stdout is None:
+                raise bridge_module.PopulationNeuralBridgeError("failed to open frontier profile bridge pipes")
+            self._stdin = self._proc.stdin
+            self._stdout = self._proc.stdout
+            self.last_step = 0
+            self.ready = self._read_response()
+            if self.ready.get("event") != "ready":
+                self.close(force=True)
+                raise bridge_module.PopulationNeuralBridgeError(
+                    f"unexpected frontier profile bridge startup response: {self.ready}"
+                )
+            self.global_weight_version = int(self.ready.get("global_weight_version", 0))
+            self.slots = int(self.ready.get("slots", slots))
+
+        def frontier_stats(self, slot: int) -> dict:
+            response = self._request({"type": "frontier_stats", "slot": int(slot)})
+            if response.get("event") != "frontier_stats":
+                raise bridge_module.PopulationNeuralBridgeError(
+                    f"unexpected frontier stats response: {response}"
+                )
+            return response
+
         def step_batch(self, slot_requests, *, plasticity: bool = True):
             nonlocal normal_step_counter
-            should_sample = normal_step_counter % args.sample_stride == 0
+            result = super().step_batch(slot_requests, plasticity=plasticity)
+            if normal_step_counter % args.sample_stride == 0:
+                stats = self.frontier_stats(0)
+                samples.append(
+                    {
+                        "sample": len(samples),
+                        "neural_step": self.last_step,
+                        "normal_step": normal_step_counter,
+                        "active_pre": int(stats["active_pre"]),
+                        "frontier_edges": int(stats["frontier_edges"]),
+                        "candidate_posts": int(stats["candidate_posts"]),
+                        "candidate_incoming_edges": int(stats["candidate_incoming_edges"]),
+                        "candidate_plastic_edges": int(stats["candidate_plastic_edges"]),
+                    }
+                )
             normal_step_counter += 1
-            if not should_sample:
-                return super().step_batch(slot_requests, plasticity=plasticity)
-
-            expanded = []
-            requested_by_slot: dict[int, tuple[int, ...]] = {}
-            for request in slot_requests:
-                item = dict(request)
-                slot = int(item["slot"])
-                requested = tuple(int(v) for v in item.get("read_body", ()))
-                requested_by_slot[slot] = requested
-                item["read_body"] = all_body_ids
-                expanded.append(item)
-            result = super().step_batch(expanded, plasticity=plasticity)
-            full = result.get(0, {})
-            analyze_events(full, self.last_step, len(samples))
-            return {
-                slot: {body_id: bool(result.get(slot, {}).get(body_id, False)) for body_id in requested}
-                for slot, requested in requested_by_slot.items()
-            }
+            return result
 
     trainer.PopulationNeuralBridgeClient = ProfilingClient
 
@@ -184,40 +184,19 @@ def main() -> int:
     try:
         sys.argv = [
             str(Path(trainer.__file__).resolve()),
-            "--episodes",
-            str(args.episodes),
-            "--population",
-            "1",
-            "--output-dir",
-            str(temp),
-            "--max-control-steps",
-            str(args.max_control_steps),
-            "--checkpoint-every",
-            str(args.episodes + 1),
-            "--trajectory-stride",
-            "1000000",
+            "--episodes", str(args.episodes),
+            "--population", "1",
+            "--snapshot", str(snapshot_dir),
+            "--groups", str(snapshot_dir / "embodiment-groups-v0.json"),
+            "--retinotopic-map", str(snapshot_dir / "retinotopic-vision-v1.json"),
+            "--wing-motor-map", str(snapshot_dir / "wing-motor-neurons-v0.json"),
+            "--body-motor-map", str(snapshot_dir / "body-motor-neurons-v0.json"),
+            "--output-dir", str(temp),
+            "--max-control-steps", str(args.max_control_steps),
+            "--checkpoint-every", str(args.episodes + 1),
+            "--trajectory-stride", "1000000",
         ]
         rc = int(trainer.main())
-    except RuntimeError as exc:
-        # Write an explicit blocked report instead of pretending the bool motor
-        # protocol can measure a signed 0/1/2 frontier correctly.
-        after = tree_digest(checkpoint)
-        lines = [
-            "# Flyppy propagation frontier activity profile",
-            "",
-            f"- generated_at_utc: {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
-            "- overall: BLOCKED",
-            "- production checkpoint modified: " + ("no" if before == after else "YES"),
-            f"- reason: {exc}",
-            "",
-            "The current population bridge converts internal 0/1/2 activity to a boolean motor-facing readout (`event == 1`). Hyperpolarizing events (2) also traverse outgoing edges, so treating the boolean readout as the complete active-presynaptic set would under-count the propagation frontier. The profiler intentionally refuses that invalid measurement.",
-            "",
-        ]
-        report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text("\n".join(lines), encoding="utf-8")
-        print(f"frontier_activity_profile={report}")
-        print("frontier_activity_profile=BLOCKED_SIGNED_EVENT_API_REQUIRED")
-        return 2
     finally:
         sys.argv = old_argv
 
@@ -229,13 +208,15 @@ def main() -> int:
     if not samples:
         raise RuntimeError("frontier profiler produced no samples")
 
-    # This path becomes reachable once the bridge exposes signed events.
+    p = int(P_EXPECTED)
     active_counts = [int(s["active_pre"]) for s in samples]
     frontier_edges = [int(s["frontier_edges"]) for s in samples]
     candidate_posts = [int(s["candidate_posts"]) for s in samples]
     candidate_incoming = [int(s["candidate_incoming_edges"]) for s in samples]
-    current_work = [int(s["frontier_edges"]) + int(s["candidate_incoming_edges"]) + P for s in samples]
-    old_work = e + P
+    candidate_plastic = [int(s["candidate_plastic_edges"]) for s in samples]
+    propagation_touch = [a + b for a, b in zip(frontier_edges, candidate_incoming)]
+    current_work = [touch + p for touch in propagation_touch]
+    old_work = e + p
 
     lines = [
         "# Flyppy propagation frontier activity profile",
@@ -247,17 +228,22 @@ def main() -> int:
         f"- production checkpoint digest: `{before}`",
         f"- N: {n:,}",
         f"- E: {e:,}",
-        f"- P: {P:,}",
+        f"- P: {p:,}",
+        f"- episodes: {args.episodes}",
+        f"- max control steps / episode: {args.max_control_steps}",
+        f"- sample stride: {args.sample_stride}",
         f"- samples: {len(samples)}",
         "",
         "## Aggregate frontier density",
         "",
         f"- active pre mean: {mean(active_counts):,.1f} ({pct(mean(active_counts), n):.4f}% of N)",
+        f"- active pre median: {median(active_counts):,.1f}",
         f"- active pre max: {max(active_counts):,} ({pct(max(active_counts), n):.4f}% of N)",
         f"- active outgoing F mean: {mean(frontier_edges):,.1f} ({pct(mean(frontier_edges), e):.4f}% of E)",
         f"- candidate posts C mean: {mean(candidate_posts):,.1f} ({pct(mean(candidate_posts), n):.4f}% of N)",
         f"- candidate incoming I(C) mean: {mean(candidate_incoming):,.1f} ({pct(mean(candidate_incoming), e):.4f}% of E)",
-        f"- propagation edge-touch mean F+I(C): {mean([a+b for a,b in zip(frontier_edges,candidate_incoming)]):,.1f} ({pct(mean([a+b for a,b in zip(frontier_edges,candidate_incoming)]), e):.4f}% of E)",
+        f"- propagation edge-touch F+I(C) mean: {mean(propagation_touch):,.1f} ({pct(mean(propagation_touch), e):.4f}% of E)",
+        f"- candidate-post plastic edges mean: {mean(candidate_plastic):,.1f} ({pct(mean(candidate_plastic), p):.4f}% of P)",
         "",
         "## Current total edge-work proxy",
         "",
@@ -266,13 +252,26 @@ def main() -> int:
         f"- current/previous mean edge-work ratio: {mean(current_work) / old_work:.6f}",
         f"- implied reduction: {old_work / mean(current_work):.3f}x",
         "",
-        "Plasticity still scans all P every neural step, so this ratio deliberately includes that remaining dense cost. It is the basis for deciding whether the next optimization should be a live plasticity frontier.",
+        "The candidate-post plastic-edge count is not itself a valid plasticity live set: eligibility and dopamine modulation can remain causally live after the immediate propagation frontier moves on. It is reported only as a structural bound/signal for the next live-plasticity analysis.",
         "",
+        "## Samples",
+        "",
+        "| sample | neural step | normal step | active pre | F outgoing | C posts | I(C) incoming | plastic under C |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
+    for item in samples:
+        lines.append(
+            "| {sample} | {neural_step} | {normal_step} | {active_pre:,} | {frontier_edges:,} | {candidate_posts:,} | {candidate_incoming_edges:,} | {candidate_plastic_edges:,} |".format(**item)
+        )
+    lines.append("")
+
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines), encoding="utf-8")
     print(f"frontier_activity_profile={report}")
     print("production_checkpoint_modified=false")
+    print(f"samples={len(samples)}")
+    print(f"mean_propagation_edge_fraction={mean(propagation_touch) / e:.8f}")
+    print(f"mean_total_edge_work_ratio={mean(current_work) / old_work:.8f}")
     return 0
 
 
