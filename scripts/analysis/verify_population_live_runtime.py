@@ -4,9 +4,10 @@
 Read-only with respect to the production Flyppy experiment. It checks:
 
 1. synthetic per-step full-state bitwise parity against the dense reference,
-2. real MaleCNS all-neuron event parity on every step and final full-state parity,
-3. asynchronous shared-weight stale-rebase smoke semantics,
-4. production checkpoint digest stability.
+2. two-slot parity when only one slot receives extra plasticity teaching steps,
+3. real MaleCNS all-neuron event parity on every step and final full-state parity,
+4. asynchronous shared-weight stale-rebase smoke semantics,
+5. production checkpoint digest stability.
 
 No production training is performed.
 """
@@ -105,6 +106,18 @@ def main() -> int:
             ],
         ),
         run_stage(
+            "two-slot async teaching parity",
+            [
+                "cargo",
+                "test",
+                "-p",
+                "vf-neural",
+                "live_plasticity_bitmap_preserves_idle_slot_across_async_teaching_steps",
+                "--",
+                "--nocapture",
+            ],
+        ),
+        run_stage(
             "real MaleCNS live-runtime parity",
             [
                 "cargo",
@@ -147,14 +160,14 @@ def main() -> int:
         "",
         "## Contract",
         "",
-        "Propagation uses outgoing adjacency only to discover candidate posts; actual current accumulation preserves original incoming-CSR order. Plasticity uses a two-bitmap eager live set: every edge with non-zero incoming eligibility remains live, and edges whose current local term can become non-zero are added before applying the unchanged eligibility/weight/transaction equations. No lazy decay approximation is used.",
+        "Propagation uses outgoing adjacency only to discover candidate posts; actual current accumulation preserves original incoming-CSR order. Plasticity uses an eager live bitmap: every edge with non-zero incoming eligibility remains live, and edges whose current local term can become non-zero are added before applying the unchanged eligibility/weight/transaction equations. The two physical bitmap buffers are mirrored after every active plasticity step so slots that are idle during another slot's extra teaching steps preserve their frontier exactly. No lazy decay approximation is used.",
         "",
         "## Expected structural cost",
         "",
         "- MaleCNS PlasticFastGraph P: 10,871,322 edges",
         "- dense plasticity dispatch: P edge invocations / active slot / neural step",
         "- live bitmap dispatch: ceil(P/32) = 339,729 word invocations / active slot / neural step, plus equation work only for live bits",
-        "- two live bitmaps: about 2.59 MiB / slot",
+        "- two mirrored live bitmaps: about 2.59 MiB / slot",
         "",
         "## Verification stages",
         "",
