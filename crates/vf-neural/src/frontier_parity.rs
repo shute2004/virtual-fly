@@ -22,20 +22,8 @@ fn params() -> NeuralParams {
     }
 }
 
-fn assert_f32_bits_eq(label: &str, left: &[f32], right: &[f32]) {
-    assert_eq!(left.len(), right.len(), "{label} length mismatch");
-    for (index, (&a, &b)) in left.iter().zip(right).enumerate() {
-        assert_eq!(
-            a.to_bits(),
-            b.to_bits(),
-            "{label}[{index}] mismatch: {a:?} vs {b:?}",
-        );
-    }
-}
-
-#[test]
-fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
-    let snapshot = ConnectomeSnapshot::from_edges(
+fn snapshot() -> ConnectomeSnapshot {
+    ConnectomeSnapshot::from_edges(
         7,
         &[
             EdgeInput { pre: 0, post: 5, synapse_count: 50 },
@@ -58,8 +46,55 @@ fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
             nt::ACETYLCHOLINE,
         ],
     )
-    .unwrap();
+    .unwrap()
+}
 
+fn assert_f32_bits_eq(label: &str, left: &[f32], right: &[f32]) {
+    assert_eq!(left.len(), right.len(), "{label} length mismatch");
+    for (index, (&a, &b)) in left.iter().zip(right).enumerate() {
+        assert_eq!(
+            a.to_bits(),
+            b.to_bits(),
+            "{label}[{index}] mismatch: {a:?} vs {b:?}",
+        );
+    }
+}
+
+fn assert_slot_eq(
+    label: &str,
+    reference: &ReferenceRuntime,
+    frontier: &FrontierRuntime,
+    slot: usize,
+) {
+    let a = reference.debug_slot_state(slot).unwrap();
+    let b = frontier.debug_slot_state(slot).unwrap();
+    assert_f32_bits_eq(&format!("{label}.membrane"), &a.membrane, &b.membrane);
+    assert_f32_bits_eq(&format!("{label}.trace"), &a.trace, &b.trace);
+    assert_f32_bits_eq(&format!("{label}.modulation"), &a.modulation, &b.modulation);
+    assert_eq!(a.refractory, b.refractory, "{label}.refractory mismatch");
+    assert_eq!(a.spikes, b.spikes, "{label}.spikes mismatch");
+    assert_f32_bits_eq(&format!("{label}.plastic_weight"), &a.plastic_weight, &b.plastic_weight);
+    assert_f32_bits_eq(&format!("{label}.eligibility"), &a.eligibility, &b.eligibility);
+    assert_f32_bits_eq(
+        &format!("{label}.transaction_shift"),
+        &a.transaction_shift,
+        &b.transaction_shift,
+    );
+    assert_f32_bits_eq(
+        &format!("{label}.transaction_lo"),
+        &a.transaction_lo,
+        &b.transaction_lo,
+    );
+    assert_f32_bits_eq(
+        &format!("{label}.transaction_hi"),
+        &a.transaction_hi,
+        &b.transaction_hi,
+    );
+}
+
+#[test]
+fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
+    let snapshot = snapshot();
     let mut reference = ReferenceRuntime::new(&snapshot, params(), 1).unwrap();
     let mut frontier = FrontierRuntime::new(&snapshot, params(), 1).unwrap();
     let read_indices = (0..snapshot.neuron_count()).collect::<Vec<_>>();
@@ -92,19 +127,7 @@ fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
             .step_batch_with_read(&by_slot, &active, &read_indices, true)
             .unwrap();
         assert_eq!(reference_events, frontier_events, "spike mismatch at step {step}");
-
-        let a = reference.debug_slot_state(0).unwrap();
-        let b = frontier.debug_slot_state(0).unwrap();
-        assert_f32_bits_eq("membrane", &a.membrane, &b.membrane);
-        assert_f32_bits_eq("trace", &a.trace, &b.trace);
-        assert_f32_bits_eq("modulation", &a.modulation, &b.modulation);
-        assert_eq!(a.refractory, b.refractory, "refractory mismatch at step {step}");
-        assert_eq!(a.spikes, b.spikes, "debug spike mismatch at step {step}");
-        assert_f32_bits_eq("plastic_weight", &a.plastic_weight, &b.plastic_weight);
-        assert_f32_bits_eq("eligibility", &a.eligibility, &b.eligibility);
-        assert_f32_bits_eq("transaction_shift", &a.transaction_shift, &b.transaction_shift);
-        assert_f32_bits_eq("transaction_lo", &a.transaction_lo, &b.transaction_lo);
-        assert_f32_bits_eq("transaction_hi", &a.transaction_hi, &b.transaction_hi);
+        assert_slot_eq(&format!("step{step}"), &reference, &frontier, 0);
     }
 
     reference.commit_and_restart_slot(0).unwrap();
@@ -112,4 +135,70 @@ fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
     let reference_weights = reference.global_weights().unwrap();
     let frontier_weights = frontier.global_weights().unwrap();
     assert_f32_bits_eq("committed_global_weight", &reference_weights, &frontier_weights);
+}
+
+#[test]
+fn live_plasticity_bitmap_preserves_idle_slot_across_async_teaching_steps() {
+    let snapshot = snapshot();
+    let mut reference = ReferenceRuntime::new(&snapshot, params(), 2).unwrap();
+    let mut frontier = FrontierRuntime::new(&snapshot, params(), 2).unwrap();
+    let read_indices = (0..2 * snapshot.neuron_count()).collect::<Vec<_>>();
+
+    // Establish non-zero trace/eligibility in both slots.
+    let both_active = [true, true];
+    let first = [
+        vec![
+            Stimulus { neuron: 0, current: 1.2 },
+            Stimulus { neuron: 2, current: 1.2 },
+        ],
+        vec![
+            Stimulus { neuron: 0, current: 1.2 },
+            Stimulus { neuron: 2, current: 1.2 },
+        ],
+    ];
+    let a = reference
+        .step_batch_with_read(&first, &both_active, &read_indices, true)
+        .unwrap();
+    let b = frontier
+        .step_batch_with_read(&first, &both_active, &read_indices, true)
+        .unwrap();
+    assert_eq!(a, b);
+
+    let second = [vec![Stimulus { neuron: 5, current: 1.2 }], vec![Stimulus { neuron: 5, current: 1.2 }]];
+    reference
+        .step_batch_with_read(&second, &both_active, &read_indices, true)
+        .unwrap();
+    frontier
+        .step_batch_with_read(&second, &both_active, &read_indices, true)
+        .unwrap();
+    assert_slot_eq("before_async.slot0", &reference, &frontier, 0);
+    assert_slot_eq("before_async.slot1", &reference, &frontier, 1);
+
+    // Slot 0 receives extra plasticity-enabled teaching steps while slot 1 is
+    // idle. A process-global bitmap phase must not discard slot 1's live set.
+    let only_zero = [true, false];
+    let teaching = [vec![Stimulus { neuron: 2, current: 1.2 }], vec![]];
+    for step in 0..3 {
+        reference
+            .step_batch_with_read(&teaching, &only_zero, &read_indices, true)
+            .unwrap();
+        frontier
+            .step_batch_with_read(&teaching, &only_zero, &read_indices, true)
+            .unwrap();
+        assert_slot_eq(&format!("async{step}.slot0"), &reference, &frontier, 0);
+        assert_slot_eq(&format!("async{step}.slot1"), &reference, &frontier, 1);
+    }
+
+    // Resume both slots and verify the previously idle slot evolves exactly as
+    // the dense reference from its preserved eligibility state.
+    let resume = [vec![], vec![Stimulus { neuron: 2, current: 1.2 }]];
+    let a = reference
+        .step_batch_with_read(&resume, &both_active, &read_indices, true)
+        .unwrap();
+    let b = frontier
+        .step_batch_with_read(&resume, &both_active, &read_indices, true)
+        .unwrap();
+    assert_eq!(a, b);
+    assert_slot_eq("resume.slot0", &reference, &frontier, 0);
+    assert_slot_eq("resume.slot1", &reference, &frontier, 1);
 }
