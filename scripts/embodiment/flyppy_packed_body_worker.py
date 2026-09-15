@@ -2,22 +2,25 @@
 """Packed process-isolated Flyppy body workers.
 
 A small number of spawned processes each own several fully independent FlyBody
-slots.  Every MuJoCo model, eye renderer, retinal state, peripheral state, and
-course state remains slot-local.  Slots inside one worker are executed
-sequentially on that worker's main thread; different workers run concurrently.
+slots.  Every MuJoCo model, retinal state, peripheral state, and course state
+remains slot-local.  Slots inside one worker are executed sequentially on that
+worker's main thread; different workers run concurrently.
 
 The parent owns the shared MaleCNS runtime.  The IPC boundary is unchanged:
 
     child -> parent: retinal body currents
     parent -> child: individual motor-neuron spikes
 
-This avoids one Python/MuJoCo process per fly while preserving the exact physical
-and learning semantics used by the one-process-per-fly runtime.
+By default the child keeps the FlyGym raster compound-eye oracle.  Setting
+``VF_FLYPPY_VISION_MODE=direct-ray`` switches only the sensory acquisition step
+to the image-free weighted ``mj_multiRay`` implementation.  The existing
+MaleCNS adaptation/transduction path is reused unchanged.
 """
 
 from __future__ import annotations
 
 import multiprocessing as mp
+import os
 from pathlib import Path
 import traceback
 from types import SimpleNamespace
@@ -53,6 +56,32 @@ def _worker_args(config: dict[str, Any]) -> SimpleNamespace:
     )
 
 
+def _vision_config() -> tuple[str, int]:
+    mode = os.environ.get("VF_FLYPPY_VISION_MODE", "raster").strip().lower()
+    aliases = {
+        "raster": "raster",
+        "flygym": "raster",
+        "reference": "raster",
+        "direct": "direct-ray",
+        "ray": "direct-ray",
+        "direct-ray": "direct-ray",
+    }
+    try:
+        resolved = aliases[mode]
+    except KeyError as exc:
+        raise ValueError(
+            "VF_FLYPPY_VISION_MODE must be raster or direct-ray"
+        ) from exc
+    raw_rays = os.environ.get("VF_FLYPPY_OMMATIDIA_RAYS", "7").strip()
+    try:
+        rays = int(raw_rays)
+    except ValueError as exc:
+        raise ValueError("VF_FLYPPY_OMMATIDIA_RAYS must be a positive integer") from exc
+    if rays < 1:
+        raise ValueError("VF_FLYPPY_OMMATIDIA_RAYS must be a positive integer")
+    return resolved, rays
+
+
 def _worker_main(
     connection,
     slot_ids: tuple[int, ...],
@@ -64,12 +93,25 @@ def _worker_main(
         # main thread. This avoids the macOS native crash seen with renderer
         # calls from Python worker threads.
         import train_flyppy_population as trainer
+        from direct_ommatidia_sensor import DirectOmmatidialSensor
         from virtual_fly.training.curriculum import SpawnCondition
 
         slots = {
             slot_id: trainer.make_slot(_worker_args(config), slot_id)
             for slot_id in slot_ids
         }
+        vision_mode, rays_per_ommatidium = _vision_config()
+        direct_sensors = (
+            {
+                slot_id: DirectOmmatidialSensor(
+                    slot.vision,
+                    rays_per_ommatidium=rays_per_ommatidium,
+                )
+                for slot_id, slot in slots.items()
+            }
+            if vision_mode == "direct-ray"
+            else {}
+        )
         body_ids = {
             slot_id: tuple(int(value) for value in slot.periphery.body_ids)
             for slot_id, slot in slots.items()
@@ -89,6 +131,8 @@ def _worker_main(
                     "slot_ids": slot_ids,
                     "body_ids": body_ids,
                     "control_dt_s": control_dt_s,
+                    "vision_mode": vision_mode,
+                    "vision_rays_per_ommatidium": rays_per_ommatidium,
                 },
             )
         )
@@ -130,7 +174,14 @@ def _worker_main(
                 replies: dict[int, dict[str, Any]] = {}
                 for slot_id in tuple(int(value) for value in payload):
                     slot = slots[slot_id]
-                    retinal = slot.vision.encode(slot.body.sim, slot.body.fly)
+                    if vision_mode == "direct-ray":
+                        eyes = direct_sensors[slot_id].read_eye_readouts(
+                            slot.body.sim,
+                            slot.body.fly,
+                        )
+                        retinal = slot.vision.encode_from_eye_readouts(eyes)
+                    else:
+                        retinal = slot.vision.encode(slot.body.sim, slot.body.fly)
                     replies[slot_id] = {
                         "body_currents": retinal.body_currents,
                         "active_photoreceptors": int(retinal.active_photoreceptors),
@@ -253,6 +304,10 @@ class PackedFlyppyBodyProcess:
             for key, values in payload["body_ids"].items()
         }
         self.control_dt_s = float(payload["control_dt_s"])
+        self.vision_mode = str(payload.get("vision_mode", "raster"))
+        self.vision_rays_per_ommatidium = int(
+            payload.get("vision_rays_per_ommatidium", 7)
+        )
 
     def _recv(self, phase: str):
         if not self.connection.poll(self.timeout_s):
