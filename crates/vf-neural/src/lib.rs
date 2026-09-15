@@ -17,7 +17,12 @@ pub mod gpu;
 #[path = "gpu_population_reference_debug.rs"]
 pub mod gpu_population_reference;
 
+// gpu_population_live wraps the frontier runtime and deliberately retains a few
+// dense-P entry points/pipelines for parity/debug reuse. They are intentionally
+// unreachable from the production hot path, so suppress dead-code warnings for
+// this module only rather than deleting the numerical reference machinery.
 #[cfg(feature = "gpu")]
+#[allow(dead_code)]
 #[path = "gpu_population_live.rs"]
 pub mod gpu_population;
 
