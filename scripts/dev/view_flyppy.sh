@@ -12,6 +12,7 @@ WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPECTED_VIEWER_GRAPH_SCHEMA=3
 NATIVE_BODY_WINDOW="${VF_NATIVE_BODY_WINDOW:-0}"
+VIEWER_ENVIRONMENT_VERSION="${VF_VIEWER_ENVIRONMENT_VERSION:-}"
 
 if [ "$#" -gt 0 ]; then
   EXPERIMENT="$1"
@@ -80,6 +81,9 @@ if [ "$(uname -s)" = "Darwin" ]; then
   BODY_LAUNCHER=(uv run mjpython)
 fi
 BODY_ARGS=(--experiment "$EXPERIMENT")
+if [ -n "$VIEWER_ENVIRONMENT_VERSION" ]; then
+  BODY_ARGS+=(--environment-version "$VIEWER_ENVIRONMENT_VERSION")
+fi
 if [ "$NATIVE_BODY_WINDOW" = "1" ]; then
   BODY_ARGS+=(--native-window)
 fi
