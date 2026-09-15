@@ -13,7 +13,7 @@ use vf_neural::{
 #[derive(Debug, Parser)]
 #[command(
     name = "population-frontier-malecns-parity",
-    about = "Compare dense-incoming and outgoing-frontier population runtimes on real MaleCNS"
+    about = "Compare dense reference and sparse population runtime on real MaleCNS"
 )]
 struct Args {
     #[arg(long, default_value = "artifacts/malecns-v1.0")]
@@ -29,6 +29,8 @@ struct ResultJson {
     chosen_post: usize,
     chosen_dopamine_pre: usize,
     steps_compared: usize,
+    all_neuron_events_compared_each_step: bool,
+    final_full_neuron_state_compared: bool,
     full_plastic_state_compared: bool,
     committed_global_weights_compared: bool,
     bitwise_equal: bool,
@@ -63,21 +65,6 @@ fn assert_f32_bits_eq(label: &str, left: &[f32], right: &[f32]) -> Result<()> {
     Ok(())
 }
 
-fn compare_neurons(reference: &ReferenceRuntime, frontier: &FrontierRuntime, step: usize) -> Result<()> {
-    let a = reference.debug_neuron_state(0)?;
-    let b = frontier.debug_neuron_state(0)?;
-    assert_f32_bits_eq(&format!("step{step}.membrane"), &a.membrane, &b.membrane)?;
-    assert_f32_bits_eq(&format!("step{step}.trace"), &a.trace, &b.trace)?;
-    assert_f32_bits_eq(&format!("step{step}.modulation"), &a.modulation, &b.modulation)?;
-    if a.refractory != b.refractory {
-        bail!("step{step}.refractory mismatch");
-    }
-    if a.spikes != b.spikes {
-        bail!("step{step}.spikes mismatch");
-    }
-    Ok(())
-}
-
 fn main() -> Result<()> {
     let args = Args::parse();
     let snapshot = ConnectomeSnapshot::load_dir(&args.snapshot)
@@ -101,6 +88,7 @@ fn main() -> Result<()> {
     let mut reference = ReferenceRuntime::new(&snapshot, params(), 1)?;
     let mut frontier = FrontierRuntime::new(&snapshot, params(), 1)?;
     let active = [true];
+    let read_all = (0..snapshot.neuron_count()).collect::<Vec<_>>();
     let sequence = [
         vec![Stimulus { neuron: pre, current: 2.0 }],
         vec![
@@ -117,18 +105,30 @@ fn main() -> Result<()> {
         vec![],
     ];
 
+    // Compare every released neuron's signed 0/1/2 event on every step. This
+    // keeps the per-step contract strong without adding a production-only full
+    // internal-state readback API to the live runtime.
     for (step, stimuli) in sequence.iter().enumerate() {
         let by_slot = [stimuli.clone()];
-        reference.step_batch_with_read(&by_slot, &active, &[], true)?;
-        frontier.step_batch_with_read(&by_slot, &active, &[], true)?;
-        compare_neurons(&reference, &frontier, step)?;
+        let reference_events = reference
+            .step_batch_with_read(&by_slot, &active, &read_all, true)?;
+        let frontier_events = frontier
+            .step_batch_with_read(&by_slot, &active, &read_all, true)?;
+        if reference_events != frontier_events {
+            bail!("all-neuron event mismatch at step {step}");
+        }
     }
 
-    // Read the large P-backed arrays once, after the fixed trajectory, so the
-    // probe validates the complete causally relevant plastic state without
-    // turning every parity step into a hundreds-of-MiB diagnostic transfer.
+    // Read the large state arrays once after the fixed trajectory. This checks
+    // all causally relevant neuron/plastic state bitwise while avoiding repeated
+    // hundreds-of-MiB diagnostic transfers.
     let a = reference.debug_slot_state(0)?;
     let b = frontier.debug_slot_state(0)?;
+    assert_f32_bits_eq("membrane", &a.membrane, &b.membrane)?;
+    assert_f32_bits_eq("trace", &a.trace, &b.trace)?;
+    assert_f32_bits_eq("modulation", &a.modulation, &b.modulation)?;
+    if a.refractory != b.refractory { bail!("final refractory mismatch"); }
+    if a.spikes != b.spikes { bail!("final spike mismatch"); }
     assert_f32_bits_eq("plastic_weight", &a.plastic_weight, &b.plastic_weight)?;
     assert_f32_bits_eq("eligibility", &a.eligibility, &b.eligibility)?;
     assert_f32_bits_eq("transaction_shift", &a.transaction_shift, &b.transaction_shift)?;
@@ -151,6 +151,8 @@ fn main() -> Result<()> {
             chosen_post: post,
             chosen_dopamine_pre: dopamine_pre,
             steps_compared: sequence.len(),
+            all_neuron_events_compared_each_step: true,
+            final_full_neuron_state_compared: true,
             full_plastic_state_compared: true,
             committed_global_weights_compared: true,
             bitwise_equal: true,
