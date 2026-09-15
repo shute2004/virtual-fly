@@ -106,6 +106,14 @@ class FlyBodyRuntime:
         add_flight_position_actuators(self.fly, list(skeleton.iter_jointdofs()))
         self.fly.add_tendons()
         self.fly.add_tendon_actuators()
+
+        # FlyGym intentionally keeps FlyBody visual materials opt-in.  Training
+        # builds enable compound-eye vision, so leave those models untouched to
+        # avoid changing sensory input.  Detached observers and non-sensory
+        # diagnostics can safely render the official FlyBody Drosophila visuals.
+        if not self.vision_enabled:
+            self.fly.colorize()
+
         if self.wing_aerodynamics_enabled:
             add_flight_wing_aerodynamics(self.fly)
         if self.vision_enabled:
