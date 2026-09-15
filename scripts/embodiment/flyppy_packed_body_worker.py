@@ -13,8 +13,10 @@ The parent owns the shared MaleCNS runtime.  The IPC boundary is unchanged:
 
 By default the child keeps the FlyGym raster compound-eye oracle.  Setting
 ``VF_FLYPPY_VISION_MODE=direct-ray`` switches only the sensory acquisition step
-to the image-free weighted ``mj_multiRay`` implementation.  The existing
-MaleCNS adaptation/transduction path is reused unchanged.
+to the image-free weighted ``mj_multiRay`` implementation.  The direct ray path
+excludes each eye camera's owner body so the camera marker cannot self-occlude
+the receptor rays.  The existing MaleCNS adaptation/transduction path is reused
+unchanged.
 """
 
 from __future__ import annotations
@@ -93,7 +95,9 @@ def _worker_main(
         # main thread. This avoids the macOS native crash seen with renderer
         # calls from Python worker threads.
         import train_flyppy_population as trainer
-        from direct_ommatidia_sensor import DirectOmmatidialSensor
+        from direct_ommatidia_sensor_bodyexclude import (
+            BodyExcludedDirectOmmatidialSensor,
+        )
         from virtual_fly.training.curriculum import SpawnCondition
 
         slots = {
@@ -103,7 +107,7 @@ def _worker_main(
         vision_mode, rays_per_ommatidium = _vision_config()
         direct_sensors = (
             {
-                slot_id: DirectOmmatidialSensor(
+                slot_id: BodyExcludedDirectOmmatidialSensor(
                     slot.vision,
                     rays_per_ommatidium=rays_per_ommatidium,
                 )
