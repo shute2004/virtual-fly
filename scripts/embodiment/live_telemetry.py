@@ -17,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import time
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -44,8 +45,6 @@ def _filesystem_identity(path: Path) -> bytes:
             except OSError:
                 parent = current.parent
                 if parent == current:
-                    # Extremely defensive fallback for an unusable path. Normal
-                    # viewer/trainer callers always have an existing ancestor.
                     return b"path\0" + os.fsencode(os.path.abspath(os.fspath(candidate)))
                 missing.append(current.name)
                 current = parent
@@ -98,8 +97,6 @@ class LiveTelemetryPublisher:
         on_demand: bool = True,
         lease_timeout_s: float = 2.0,
     ) -> None:
-        # lease_timeout_s remains accepted for API compatibility with older
-        # probes/callers. Stream lifetime now defines the lease directly.
         del lease_timeout_s
         switch = enabled if isinstance(enabled, ViewerDemandSwitch) else None
         self.always_enabled = switch.always if switch is not None else bool(enabled)
@@ -112,6 +109,15 @@ class LiveTelemetryPublisher:
         self._clients: list[socket.socket] = []
         self._requested_last_poll = False
         self._latest_status: dict[str, Any] | None = None
+
+        # requested() is called from the production control loop and again from
+        # individual publish helpers. Polling the kernel on every call is
+        # unnecessary while no observer is attached. A 50 ms cache keeps attach
+        # and detach latency interactive while reducing idle socket syscalls to
+        # at most 20 polling rounds/s.
+        self._demand_poll_interval_s = 0.05
+        self._last_demand_poll_s = float("-inf")
+        self._cached_active = self.always_enabled
 
         # A new run must never inherit an old run's apparent live state.
         for name in ("status.json", "body.json", "neural.json", "fly.png"):
@@ -142,6 +148,7 @@ class LiveTelemetryPublisher:
             except OSError:
                 pass
         self._clients.clear()
+        self._cached_active = self.always_enabled
 
         listener = self._listener
         self._listener = None
@@ -218,9 +225,13 @@ class LiveTelemetryPublisher:
         if self.always_enabled:
             active = True
         else:
-            self._accept_clients()
-            self._prune_clients()
-            active = bool(self._clients)
+            now = time.monotonic()
+            if now - self._last_demand_poll_s >= self._demand_poll_interval_s:
+                self._accept_clients()
+                self._prune_clients()
+                self._cached_active = bool(self._clients)
+                self._last_demand_poll_s = now
+            active = self._cached_active
 
         # publish_status() is normally called before a viewer exists. Materialize
         # the cached status immediately when the first viewer connects.
