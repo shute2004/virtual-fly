@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Serve the detached learning viewer and accept read-only observer camera input.
+"""Serve the detached learning viewer and request telemetry while it is open.
 
-This server never talks to the training process. Browser camera gestures are
+The viewer remains independent from training. It sends only a tiny local lease
+heartbeat to the trainer's Unix datagram control socket. Training generates body
+and neural snapshots only while that lease is alive. Browser camera gestures are
 written atomically under ``<experiment>/live/camera.json`` and are consumed only
 by ``live_body_viewer.py``'s separate MuJoCo renderer.
 """
@@ -14,6 +16,10 @@ import json
 import math
 import os
 from pathlib import Path
+import socket
+import threading
+
+from live_telemetry import viewer_control_socket_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,6 +47,43 @@ def finite_number(payload: dict, key: str) -> float:
     if not math.isfinite(value):
         raise ValueError(f"{key} must be finite")
     return value
+
+
+class ViewerTelemetryLease:
+    """Heartbeat a running trainer without owning or blocking it."""
+
+    def __init__(self, experiment: Path, *, interval_s: float = 0.4) -> None:
+        self.target = viewer_control_socket_path(experiment)
+        self.interval_s = float(interval_s)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="flyppy-viewer-telemetry-lease",
+            daemon=True,
+        )
+
+    @staticmethod
+    def _send(target: Path, payload: bytes) -> None:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
+                client.sendto(payload, str(target))
+        except OSError:
+            # The viewer may be opened before training. The next heartbeat will
+            # connect automatically once the trainer's control socket exists.
+            pass
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            self._send(self.target, b"watch")
+            self._stop.wait(self.interval_s)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=max(1.0, self.interval_s * 3.0))
+        self._send(self.target, b"stop")
 
 
 def make_handler(root: Path, camera_path: Path):
@@ -101,21 +144,26 @@ def main() -> int:
     if not 1 <= args.port <= 65535:
         raise SystemExit("port must be in 1..65535")
     root = args.root.resolve()
-    camera_path = (root / args.experiment / "live" / "camera.json").resolve()
+    experiment = (root / args.experiment).resolve()
+    camera_path = experiment / "live" / "camera.json"
     try:
-        camera_path.relative_to(root)
+        experiment.relative_to(root)
     except ValueError as exc:
         raise SystemExit("experiment path must be inside viewer root") from exc
 
     handler = make_handler(root, camera_path)
     server = ThreadingHTTPServer((args.bind, args.port), handler)
+    lease = ViewerTelemetryLease(experiment)
+    lease.start()
     print(f"viewer_server=http://{args.bind}:{args.port}")
     print(f"observer_camera={camera_path}")
+    print(f"telemetry_request={lease.target}")
     try:
         server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
         pass
     finally:
+        lease.close()
         server.server_close()
     return 0
 
