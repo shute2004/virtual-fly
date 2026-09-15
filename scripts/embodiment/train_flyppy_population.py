@@ -165,8 +165,8 @@ def validate(args: argparse.Namespace, first_gate) -> None:
         raise SystemExit("episodes must be >= 1")
     if args.population < 1:
         raise SystemExit("population must be >= 1")
-    if args.population > 8:
-        raise SystemExit("population > 8 is intentionally blocked until M1 memory/throughput profiling justifies it")
+    if args.population > 32:
+        raise SystemExit("population > 32 exceeds the GPU runtime active-mask limit")
     if not 0 <= args.telemetry_slot < args.population:
         raise SystemExit("telemetry-slot must identify an existing population slot")
     if args.max_control_steps < 1 or args.physics_steps < 1:
