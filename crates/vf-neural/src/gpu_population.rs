@@ -7,6 +7,7 @@ use wgpu::util::DeviceExt;
 use crate::{ConnectomeSnapshot, NeuralParams, NeuralState, Stimulus};
 
 const WORKGROUP_SIZE: u32 = 256;
+const MAX_ACTIVE_MASK_SLOTS: usize = 32;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -41,8 +42,8 @@ struct ParamsGpu {
     pre_start: u32,
     post_start: u32,
     count_start: u32,
+    meta_start: u32,
     refractory_steps: u32,
-    _pad_u0: u32,
     membrane_decay: f32,
     threshold: f32,
     reset: f32,
@@ -61,9 +62,9 @@ struct ParamsGpu {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ControlGpu {
     slot: u32,
+    active_mask: u32,
     _pad0: u32,
     _pad1: u32,
-    _pad2: u32,
 }
 
 pub struct GpuPopulationRuntime {
@@ -73,13 +74,9 @@ pub struct GpuPopulationRuntime {
     neuron_count: usize,
     edge_count: usize,
     slot_count: usize,
-    params: NeuralParams,
     external_cpu: Vec<f32>,
-    active_cpu: Vec<u32>,
     _topology_buffer: wgpu::Buffer,
-    _meta_buffer: wgpu::Buffer,
     external_buffer: wgpu::Buffer,
-    active_buffer: wgpu::Buffer,
     neuron_state_buffer: wgpu::Buffer,
     synapse_state_buffer: wgpu::Buffer,
     transaction_buffer: wgpu::Buffer,
@@ -101,7 +98,11 @@ pub struct GpuPopulationRuntime {
 }
 
 impl GpuPopulationRuntime {
-    pub fn new(snapshot: &ConnectomeSnapshot, params: NeuralParams, slot_count: usize) -> Result<Self> {
+    pub fn new(
+        snapshot: &ConnectomeSnapshot,
+        params: NeuralParams,
+        slot_count: usize,
+    ) -> Result<Self> {
         pollster::block_on(Self::new_async(snapshot, params, slot_count))
     }
 
@@ -113,22 +114,45 @@ impl GpuPopulationRuntime {
         if slot_count == 0 {
             bail!("population runtime requires at least one slot");
         }
+        if slot_count > MAX_ACTIVE_MASK_SLOTS {
+            bail!(
+                "population runtime currently supports at most {MAX_ACTIVE_MASK_SLOTS} slots"
+            );
+        }
         if snapshot.neuron_count() > u32::MAX as usize
             || snapshot.edge_count() > u32::MAX as usize
-            || slot_count > u32::MAX as usize
         {
-            bail!("population GPU runtime requires u32-sized dimensions");
+            bail!("population GPU runtime requires u32-sized neuron/edge dimensions");
         }
-        let total_neurons = snapshot
-            .neuron_count()
+
+        let n = snapshot.neuron_count();
+        let m = snapshot.edge_count();
+        let total_neurons = n
             .checked_mul(slot_count)
             .context("population neuron-state size overflow")?;
-        let total_edges = snapshot
-            .edge_count()
+        let total_edges = m
             .checked_mul(slot_count)
             .context("population synapse-state size overflow")?;
         if total_neurons > u32::MAX as usize || total_edges > u32::MAX as usize {
             bail!("population GPU runtime flattened dimensions exceed u32");
+        }
+
+        let row_len = snapshot.row_offsets.len();
+        let pre_start = row_len;
+        let post_start = pre_start
+            .checked_add(m)
+            .context("population topology offset overflow")?;
+        let count_start = post_start
+            .checked_add(m)
+            .context("population topology offset overflow")?;
+        let meta_start = count_start
+            .checked_add(m)
+            .context("population topology offset overflow")?;
+        let topology_len = meta_start
+            .checked_add(n)
+            .context("population topology size overflow")?;
+        if topology_len > u32::MAX as usize {
+            bail!("population topology buffer indexing exceeds u32");
         }
 
         let instance = wgpu::Instance::new(
@@ -156,23 +180,13 @@ impl GpuPopulationRuntime {
             .await
             .context("failed to create population GPU device")?;
 
-        let n = snapshot.neuron_count();
-        let m = snapshot.edge_count();
-        let row_len = snapshot.row_offsets.len() as u32;
-        let pre_start = row_len;
-        let post_start = pre_start + m as u32;
-        let count_start = post_start + m as u32;
-
-        let mut topology = Vec::with_capacity(snapshot.row_offsets.len() + 3 * m);
+        let mut topology = Vec::with_capacity(topology_len);
         topology.extend_from_slice(&snapshot.row_offsets);
         topology.extend_from_slice(&snapshot.pre_indices);
         topology.extend_from_slice(&snapshot.edge_posts);
         topology.extend_from_slice(&snapshot.synapse_counts);
-        let metadata = snapshot
-            .neurotransmitters
-            .iter()
-            .map(|&value| value as u32)
-            .collect::<Vec<_>>();
+        topology.extend(snapshot.neurotransmitters.iter().map(|&value| value as u32));
+
         let global_weights = snapshot
             .synapse_counts
             .iter()
@@ -181,14 +195,8 @@ impl GpuPopulationRuntime {
 
         let topology_buffer = create_storage_init(
             &device,
-            "vf population topology",
+            "vf population topology+metadata",
             bytemuck::cast_slice(&topology),
-            false,
-        );
-        let meta_buffer = create_storage_init(
-            &device,
-            "vf population metadata",
-            bytemuck::cast_slice(&metadata),
             false,
         );
         let global_weight_buffer = create_storage_init(
@@ -197,23 +205,28 @@ impl GpuPopulationRuntime {
             bytemuck::cast_slice(&global_weights),
             true,
         );
-
         let neuron_state_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vf population neuron state"),
             size: byte_size::<NeuronStateGpu>(total_neurons),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let synapse_state_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vf population synapse state"),
             size: byte_size::<SynapseStateGpu>(total_edges),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let transaction_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vf population plasticity transaction"),
             size: byte_size::<TransactionStateGpu>(total_edges),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let zero_spikes = vec![0u32; total_neurons];
@@ -236,23 +249,16 @@ impl GpuPopulationRuntime {
             bytemuck::cast_slice(&external_cpu),
             true,
         );
-        let active_cpu = vec![0u32; slot_count];
-        let active_buffer = create_storage_init(
-            &device,
-            "vf population active slots",
-            bytemuck::cast_slice(&active_cpu),
-            true,
-        );
 
         let params_gpu = ParamsGpu {
             neuron_count: n as u32,
             edge_count: m as u32,
             slot_count: slot_count as u32,
-            pre_start,
-            post_start,
-            count_start,
+            pre_start: pre_start as u32,
+            post_start: post_start as u32,
+            count_start: count_start as u32,
+            meta_start: meta_start as u32,
             refractory_steps: params.refractory_steps,
-            _pad_u0: 0,
             membrane_decay: params.membrane_decay,
             threshold: params.threshold,
             reset: params.reset,
@@ -281,17 +287,15 @@ impl GpuPopulationRuntime {
             label: Some("vf population bind group layout"),
             entries: &[
                 storage_layout(0, true),
-                storage_layout(1, true),
-                storage_layout(2, false),
-                storage_layout(3, true),
-                storage_layout(4, false),
-                storage_layout(5, true),
+                storage_layout(1, false),
+                storage_layout(2, true),
+                storage_layout(3, false),
+                storage_layout(4, true),
+                storage_layout(5, false),
                 storage_layout(6, false),
                 storage_layout(7, false),
-                storage_layout(8, false),
-                storage_layout(9, true),
-                uniform_layout(10),
-                uniform_layout(11),
+                uniform_layout(8),
+                uniform_layout(9),
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -324,7 +328,6 @@ impl GpuPopulationRuntime {
             &device,
             &layout,
             &topology_buffer,
-            &meta_buffer,
             &neuron_state_buffer,
             &spikes_a,
             &spikes_b,
@@ -332,7 +335,6 @@ impl GpuPopulationRuntime {
             &synapse_state_buffer,
             &transaction_buffer,
             &global_weight_buffer,
-            &active_buffer,
             &params_buffer,
             &control_buffer,
             "vf population a->b",
@@ -341,7 +343,6 @@ impl GpuPopulationRuntime {
             &device,
             &layout,
             &topology_buffer,
-            &meta_buffer,
             &neuron_state_buffer,
             &spikes_b,
             &spikes_a,
@@ -349,7 +350,6 @@ impl GpuPopulationRuntime {
             &synapse_state_buffer,
             &transaction_buffer,
             &global_weight_buffer,
-            &active_buffer,
             &params_buffer,
             &control_buffer,
             "vf population b->a",
@@ -388,13 +388,9 @@ impl GpuPopulationRuntime {
             neuron_count: n,
             edge_count: m,
             slot_count,
-            params,
             external_cpu,
-            active_cpu,
             _topology_buffer: topology_buffer,
-            _meta_buffer: meta_buffer,
             external_buffer,
-            active_buffer,
             neuron_state_buffer,
             synapse_state_buffer,
             transaction_buffer,
@@ -474,12 +470,13 @@ impl GpuPopulationRuntime {
         read_flat_indices: &[usize],
         plasticity: bool,
     ) -> Result<Vec<u32>> {
-        self.prepare_step(stimuli_by_slot, active_slots)?;
+        let active_mask = self.prepare_step(stimuli_by_slot, active_slots)?;
         for &index in read_flat_indices {
             if index >= self.slot_count * self.neuron_count {
                 bail!("population read index {index} is out of range");
             }
         }
+        self.write_control(0, active_mask);
 
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let neuron_dispatch = dispatch_grid((self.slot_count * self.neuron_count) as u32, max_groups)?;
@@ -490,26 +487,22 @@ impl GpuPopulationRuntime {
         };
 
         let current = self.current_is_b;
-        let bind_group = if current { &self.bind_group_ba } else { &self.bind_group_ab };
+        let bind_group = if current {
+            &self.bind_group_ba
+        } else {
+            &self.bind_group_ab
+        };
         let next_spikes = if current { &self.spikes_a } else { &self.spikes_b };
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vf population neural+gather encoder"),
         });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("vf population neural step"),
-                timestamp_writes: None,
-            });
-            pass.set_bind_group(0, bind_group, &[]);
-            pass.set_pipeline(&self.neuron_pipeline);
-            pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
-            if let Some((x, y)) = edge_dispatch {
-                pass.set_pipeline(&self.plasticity_pipeline);
-                pass.dispatch_workgroups(x, y, 1);
-            }
-            pass.set_pipeline(&self.trace_pipeline);
-            pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
-        }
+        self.encode_neural_step(
+            &mut encoder,
+            bind_group,
+            neuron_dispatch,
+            edge_dispatch,
+            plasticity,
+        );
 
         if read_flat_indices.is_empty() {
             self.queue.submit([encoder.finish()]);
@@ -518,7 +511,7 @@ impl GpuPopulationRuntime {
         }
 
         let indices = read_flat_indices.iter().map(|&v| v as u32).collect::<Vec<_>>();
-        let byte_size = byte_size::<u32>(indices.len());
+        let read_bytes = exact_byte_size::<u32>(indices.len());
         let index_buffer = device_storage_init(
             &self.device,
             "vf population gather indices",
@@ -526,13 +519,13 @@ impl GpuPopulationRuntime {
         );
         let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vf population gather output"),
-            size: byte_size,
+            size: read_bytes,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
         let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vf population gather staging"),
-            size: byte_size,
+            size: read_bytes,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -540,9 +533,18 @@ impl GpuPopulationRuntime {
             label: Some("vf population gather bind group"),
             layout: &self.spike_gather_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: next_spikes.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: index_buffer.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: output_buffer.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: next_spikes.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: index_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: output_buffer.as_entire_binding(),
+                },
             ],
         });
         let gather_dispatch = dispatch_grid(indices.len() as u32, max_groups)?;
@@ -555,7 +557,7 @@ impl GpuPopulationRuntime {
             pass.set_pipeline(&self.spike_gather_pipeline);
             pass.dispatch_workgroups(gather_dispatch.0, gather_dispatch.1, 1);
         }
-        encoder.copy_buffer_to_buffer(&output_buffer, 0, &staging, 0, byte_size);
+        encoder.copy_buffer_to_buffer(&output_buffer, 0, &staging, 0, read_bytes);
         self.queue.submit([encoder.finish()]);
         self.current_is_b = !self.current_is_b;
         self.map_staging::<u32>(&staging)
@@ -571,7 +573,8 @@ impl GpuPopulationRuntime {
         if steps == 0 {
             bail!("population neural steps must be >= 1");
         }
-        self.prepare_step(stimuli_by_slot, active_slots)?;
+        let active_mask = self.prepare_step(stimuli_by_slot, active_slots)?;
+        self.write_control(0, active_mask);
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let neuron_dispatch = dispatch_grid((self.slot_count * self.neuron_count) as u32, max_groups)?;
         let edge_dispatch = if plasticity && self.edge_count > 0 {
@@ -584,22 +587,18 @@ impl GpuPopulationRuntime {
         });
         let mut current = self.current_is_b;
         for _ in 0..steps {
-            let bind_group = if current { &self.bind_group_ba } else { &self.bind_group_ab };
-            {
-                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some("vf population repeated neural step"),
-                    timestamp_writes: None,
-                });
-                pass.set_bind_group(0, bind_group, &[]);
-                pass.set_pipeline(&self.neuron_pipeline);
-                pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
-                if let Some((x, y)) = edge_dispatch {
-                    pass.set_pipeline(&self.plasticity_pipeline);
-                    pass.dispatch_workgroups(x, y, 1);
-                }
-                pass.set_pipeline(&self.trace_pipeline);
-                pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
-            }
+            let bind_group = if current {
+                &self.bind_group_ba
+            } else {
+                &self.bind_group_ab
+            };
+            self.encode_neural_step(
+                &mut encoder,
+                bind_group,
+                neuron_dispatch,
+                edge_dispatch,
+                plasticity,
+            );
             current = !current;
         }
         self.queue.submit([encoder.finish()]);
@@ -609,14 +608,18 @@ impl GpuPopulationRuntime {
 
     pub fn commit_and_restart_slot(&mut self, slot: usize) -> Result<()> {
         self.validate_slot(slot)?;
-        self.write_control_slot(slot);
+        self.write_control(slot, 0);
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let edge_dispatch = dispatch_grid(self.edge_count as u32, max_groups)?;
         let neuron_dispatch = dispatch_grid(self.neuron_count as u32, max_groups)?;
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vf population commit+restart encoder"),
         });
-        let bind_group = if self.current_is_b { &self.bind_group_ba } else { &self.bind_group_ab };
+        let bind_group = if self.current_is_b {
+            &self.bind_group_ba
+        } else {
+            &self.bind_group_ab
+        };
         if self.edge_count > 0 {
             {
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -644,14 +647,18 @@ impl GpuPopulationRuntime {
 
     pub fn restart_slot(&mut self, slot: usize) -> Result<()> {
         self.validate_slot(slot)?;
-        self.write_control_slot(slot);
+        self.write_control(slot, 0);
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let edge_dispatch = dispatch_grid(self.edge_count as u32, max_groups)?;
         let neuron_dispatch = dispatch_grid(self.neuron_count as u32, max_groups)?;
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vf population restart slot encoder"),
         });
-        let bind_group = if self.current_is_b { &self.bind_group_ba } else { &self.bind_group_ab };
+        let bind_group = if self.current_is_b {
+            &self.bind_group_ba
+        } else {
+            &self.bind_group_ab
+        };
         if self.edge_count > 0 {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("vf population restart slot synapses"),
@@ -674,6 +681,31 @@ impl GpuPopulationRuntime {
         Ok(())
     }
 
+    fn encode_neural_step(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_group: &wgpu::BindGroup,
+        neuron_dispatch: (u32, u32),
+        edge_dispatch: Option<(u32, u32)>,
+        plasticity: bool,
+    ) {
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("vf population neural step"),
+            timestamp_writes: None,
+        });
+        pass.set_bind_group(0, bind_group, &[]);
+        pass.set_pipeline(&self.neuron_pipeline);
+        pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
+        if plasticity {
+            if let Some((x, y)) = edge_dispatch {
+                pass.set_pipeline(&self.plasticity_pipeline);
+                pass.dispatch_workgroups(x, y, 1);
+            }
+        }
+        pass.set_pipeline(&self.trace_pipeline);
+        pass.dispatch_workgroups(neuron_dispatch.0, neuron_dispatch.1, 1);
+    }
+
     fn encode_reset_slot_neurons(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -690,7 +722,11 @@ impl GpuPopulationRuntime {
         }
     }
 
-    fn prepare_step(&mut self, stimuli_by_slot: &[Vec<Stimulus>], active_slots: &[bool]) -> Result<()> {
+    fn prepare_step(
+        &mut self,
+        stimuli_by_slot: &[Vec<Stimulus>],
+        active_slots: &[bool],
+    ) -> Result<u32> {
         if stimuli_by_slot.len() != self.slot_count || active_slots.len() != self.slot_count {
             bail!(
                 "population step requires exactly {} slot payloads",
@@ -698,12 +734,12 @@ impl GpuPopulationRuntime {
             );
         }
         self.external_cpu.fill(0.0);
-        self.active_cpu.fill(0);
+        let mut active_mask = 0u32;
         for slot in 0..self.slot_count {
             if !active_slots[slot] {
                 continue;
             }
-            self.active_cpu[slot] = 1;
+            active_mask |= 1u32 << slot;
             let base = slot * self.neuron_count;
             for stimulus in &stimuli_by_slot[slot] {
                 if stimulus.neuron >= self.neuron_count {
@@ -717,12 +753,7 @@ impl GpuPopulationRuntime {
             0,
             bytemuck::cast_slice(&self.external_cpu),
         );
-        self.queue.write_buffer(
-            &self.active_buffer,
-            0,
-            bytemuck::cast_slice(&self.active_cpu),
-        );
-        Ok(())
+        Ok(active_mask)
     }
 
     fn validate_slot(&self, slot: usize) -> Result<()> {
@@ -732,12 +763,12 @@ impl GpuPopulationRuntime {
         Ok(())
     }
 
-    fn write_control_slot(&self, slot: usize) {
+    fn write_control(&self, slot: usize, active_mask: u32) {
         let control = ControlGpu {
             slot: slot as u32,
+            active_mask,
             _pad0: 0,
             _pad1: 0,
-            _pad2: 0,
         };
         self.queue.write_buffer(
             &self.control_buffer,
@@ -786,7 +817,7 @@ impl GpuPopulationRuntime {
         if count == 0 {
             return Ok(Vec::new());
         }
-        let size = byte_size::<T>(count);
+        let size = exact_byte_size::<T>(count);
         let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vf population readback staging"),
             size,
@@ -804,6 +835,10 @@ impl GpuPopulationRuntime {
 
 fn byte_size<T>(count: usize) -> u64 {
     (count.max(1) * std::mem::size_of::<T>()) as u64
+}
+
+fn exact_byte_size<T>(count: usize) -> u64 {
+    (count * std::mem::size_of::<T>()) as u64
 }
 
 fn dispatch_grid(item_count: u32, max_groups_per_dimension: u32) -> Result<(u32, u32)> {
@@ -884,7 +919,6 @@ fn create_population_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     topology: &wgpu::Buffer,
-    metadata: &wgpu::Buffer,
     neurons: &wgpu::Buffer,
     spikes_prev: &wgpu::Buffer,
     spikes_next: &wgpu::Buffer,
@@ -892,7 +926,6 @@ fn create_population_bind_group(
     synapses: &wgpu::Buffer,
     transactions: &wgpu::Buffer,
     global_weights: &wgpu::Buffer,
-    active: &wgpu::Buffer,
     params: &wgpu::Buffer,
     control: &wgpu::Buffer,
     label: &'static str,
@@ -901,18 +934,46 @@ fn create_population_bind_group(
         label: Some(label),
         layout,
         entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: topology.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 1, resource: metadata.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 2, resource: neurons.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 3, resource: spikes_prev.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 4, resource: spikes_next.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 5, resource: external.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 6, resource: synapses.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 7, resource: transactions.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 8, resource: global_weights.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 9, resource: active.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 10, resource: params.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 11, resource: control.as_entire_binding() },
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: topology.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: neurons.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: spikes_prev.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: spikes_next.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: external.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: synapses.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: transactions.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: global_weights.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 8,
+                resource: params.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 9,
+                resource: control.as_entire_binding(),
+            },
         ],
     })
 }
@@ -923,6 +984,9 @@ mod tests {
 
     #[test]
     fn population_dispatch_tiles_two_malecns_edge_sets() {
-        assert_eq!(dispatch_grid(2 * 25_582_938, 65_535).unwrap(), (65_535, 4));
+        assert_eq!(
+            dispatch_grid(2 * 25_582_938, 65_535).unwrap(),
+            (65_535, 4)
+        );
     }
 }
