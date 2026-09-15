@@ -32,16 +32,43 @@ def viewer_control_socket_path(experiment_dir: Path) -> Path:
     return Path("/tmp") / f"virtual-fly-viewer-{token}.sock"
 
 
+class ViewerDemandSwitch:
+    """Bool-like trainer switch driven by a detached viewer lease.
+
+    Before the publisher is bound this is truthy only so the trainer can preload
+    the immutable viewer-graph body-ID list once. No snapshot or telemetry work
+    happens at that stage. After binding, every boolean check reflects the live
+    viewer lease (or an explicit always-on telemetry request).
+    """
+
+    def __init__(self, *, always: bool = False) -> None:
+        self.always = bool(always)
+        self._publisher: LiveTelemetryPublisher | None = None
+
+    def bind(self, publisher: LiveTelemetryPublisher) -> None:
+        self._publisher = publisher
+
+    def __bool__(self) -> bool:
+        if self._publisher is None:
+            return True
+        return self.always or self._publisher.requested()
+
+    def __str__(self) -> str:
+        return "always" if self.always else "viewer-demand"
+
+
 class LiveTelemetryPublisher:
     def __init__(
         self,
         experiment_dir: Path,
         *,
-        enabled: bool = False,
+        enabled: bool | ViewerDemandSwitch = False,
         on_demand: bool = True,
         lease_timeout_s: float = 2.0,
     ) -> None:
-        self.always_enabled = bool(enabled)
+        switch = enabled if isinstance(enabled, ViewerDemandSwitch) else None
+        self.always_enabled = switch.always if switch is not None else bool(enabled)
+        self.enabled = self.always_enabled
         self.on_demand = bool(on_demand)
         self.lease_timeout_s = float(lease_timeout_s)
         if self.lease_timeout_s <= 0.0:
@@ -63,6 +90,9 @@ class LiveTelemetryPublisher:
                 self.close()
                 raise
 
+        if switch is not None:
+            switch.bind(self)
+
     def close(self) -> None:
         control = self._control
         self._control = None
@@ -76,6 +106,12 @@ class LiveTelemetryPublisher:
                 self.control_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def requested(self) -> bool:
         """Poll viewer control packets and return whether observation is active."""
