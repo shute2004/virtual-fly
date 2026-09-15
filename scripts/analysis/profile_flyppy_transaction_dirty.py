@@ -168,7 +168,7 @@ def main() -> int:
 
     summary_path = temp / "summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {}
-    results = list(summary.get("results", []))
+    results = list(summary.get("episode_results", []))
     for index, sample in enumerate(samples):
         if index < len(results):
             result = results[index]
