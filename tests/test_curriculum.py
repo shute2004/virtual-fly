@@ -6,6 +6,7 @@ import unittest
 from virtual_fly.training.curriculum import (
     BoundaryBandConfig,
     SpawnCondition,
+    boundary_condition_for_attempt,
     current_boundary_condition,
     record_boundary_result,
 )
@@ -45,6 +46,106 @@ class BoundaryBandCurriculumTests(unittest.TestCase):
         band = state["boundary_band"]
         self.assertEqual(band["last_adjustment"], "hold")
         self.assertAlmostEqual(band["last_batch_success_rate"], 0.5)
+
+    def test_async_launch_schedule_is_independent_of_completion_order(self) -> None:
+        launched_state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        levels = [
+            boundary_condition_for_attempt(launched_state, config(), attempt)[1]
+            for attempt in range(24)
+        ]
+        self.assertEqual(
+            Counter(levels),
+            Counter({0.0: 4, 0.25: 5, 0.5: 6, 0.75: 5, 1.0: 4}),
+        )
+
+        outcomes = [(index, index < 12) for index in range(24)]
+        state_a = dict(launched_state)
+        state_a["boundary_band"] = dict(launched_state["boundary_band"])
+        state_b = dict(launched_state)
+        state_b["boundary_band"] = dict(launched_state["boundary_band"])
+        for attempt, success in outcomes:
+            record_boundary_result(
+                state_a,
+                config(),
+                success=success,
+                attempt_index=attempt,
+            )
+        for attempt, success in reversed(outcomes):
+            record_boundary_result(
+                state_b,
+                config(),
+                success=success,
+                attempt_index=attempt,
+            )
+
+        band_a = state_a["boundary_band"]
+        band_b = state_b["boundary_band"]
+        self.assertEqual(band_a["last_adjustment"], "hold")
+        self.assertEqual(band_b["last_adjustment"], "hold")
+        self.assertEqual(band_a["last_batch_success_rate"], 0.5)
+        self.assertEqual(band_b["last_batch_success_rate"], 0.5)
+        self.assertEqual(band_a["hard"], band_b["hard"])
+        self.assertEqual(band_a["easy"], band_b["easy"])
+        self.assertEqual(state_a["successful_first_gates"], state_b["successful_first_gates"])
+        self.assertEqual(state_a["consecutive_failures"], 0)
+        self.assertEqual(state_b["consecutive_failures"], 0)
+
+    def test_boundary_attempt_index_must_stay_inside_current_batch(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        with self.assertRaises(ValueError):
+            boundary_condition_for_attempt(state, config(), 24)
+
+    def test_explicit_attempt_identity_prevents_duplicate_recording(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        record_boundary_result(
+            state,
+            config(),
+            success=True,
+            attempt_index=7,
+        )
+        band = state["boundary_band"]
+        self.assertEqual(band["attempts_in_batch"], 1)
+        self.assertEqual(band["completed_attempt_indices"], [7])
+        with self.assertRaises(ValueError):
+            record_boundary_result(
+                state,
+                config(),
+                success=False,
+                attempt_index=7,
+            )
+
+    def test_group_weighting_prevents_fast_group_from_dominating_batch(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        completed = None
+        # One slow group succeeds once while one fast group contributes 23
+        # failures.  Raw episode rate is 1/24, but equal-group aggregation is
+        # (1.0 + 0.0) / 2 = 0.5 and therefore holds this band.
+        for attempt in range(24):
+            completed = record_boundary_result(
+                state,
+                config(),
+                success=attempt == 0,
+                attempt_index=attempt,
+                group=0 if attempt == 0 else 1,
+            )
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["aggregation"], "equal_group_mean")
+        self.assertAlmostEqual(completed["raw_success_rate"], 1 / 24)
+        self.assertAlmostEqual(completed["success_rate"], 0.5)
+        self.assertEqual(completed["group_success_rates"], {"0": 1.0, "1": 0.0})
+        self.assertEqual(completed["adjustment"], "hold")
 
     def test_high_success_shifts_whole_band_toward_target(self) -> None:
         state: dict[str, object] = {

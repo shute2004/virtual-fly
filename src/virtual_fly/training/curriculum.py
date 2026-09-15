@@ -250,7 +250,13 @@ def ensure_boundary_state(
             "batch_number": 0,
             "attempts_in_batch": 0,
             "successes_in_batch": 0,
+            "completed_attempt_indices": [],
+            "group_attempts": {},
+            "group_successes": {},
             "last_batch_success_rate": None,
+            "last_batch_raw_success_rate": None,
+            "last_batch_group_success_rates": {},
+            "last_batch_aggregation": "episode_mean",
             "last_adjustment": "initialized",
             "harder_shifts": 0,
             "easier_shifts": 0,
@@ -261,6 +267,18 @@ def ensure_boundary_state(
         # Preserve any progress while adding the new fail-safe range.
         payload.setdefault("recovery_hard", _condition_dict(recovery_hard))
         payload.setdefault("recovery_easy", _condition_dict(recovery_easy))
+        # Historical sequential boundary-band states only stored a count.  Their
+        # consumed attempts were necessarily the prefix [0, attempts), so that
+        # prefix is an exact migration to explicit attempt identities.
+        payload.setdefault(
+            "completed_attempt_indices",
+            list(range(int(payload.get("attempts_in_batch", 0)))),
+        )
+        payload.setdefault("group_attempts", {})
+        payload.setdefault("group_successes", {})
+        payload.setdefault("last_batch_raw_success_rate", payload.get("last_batch_success_rate"))
+        payload.setdefault("last_batch_group_success_rates", {})
+        payload.setdefault("last_batch_aggregation", "episode_mean")
     return payload
 
 
@@ -298,14 +316,29 @@ def _interpolate(hard: SpawnCondition, easy: SpawnCondition, ease_level: float) 
     )
 
 
-def current_boundary_condition(
-    state: MutableMapping[str, Any], config: BoundaryBandConfig
+def boundary_condition_for_attempt(
+    state: MutableMapping[str, Any],
+    config: BoundaryBandConfig,
+    attempt_index: int,
 ) -> tuple[SpawnCondition, float]:
+    """Return one fixed condition from the current boundary batch.
+
+    ``attempt_index`` is a launch index, not a completion counter.  Keeping the
+    two concepts separate lets an asynchronous population launch the complete
+    batch up front while ``record_boundary_result`` later receives outcomes in
+    any completion order.  The band itself is adjusted only after all outcomes
+    in the batch have been recorded.
+    """
+
     payload = ensure_boundary_state(state, config)
+    attempt = int(attempt_index)
+    if attempt < 0 or attempt >= config.batch_size:
+        raise ValueError(
+            f"boundary attempt_index must be in [0, {config.batch_size - 1}], got {attempt}"
+        )
     batch_number = int(payload["batch_number"])
-    attempt = int(payload["attempts_in_batch"])
     levels = _shuffled_levels(config.batch_size, config.seed, batch_number)
-    level = levels[attempt % len(levels)]
+    level = levels[attempt]
     hard = _condition_from_dict(payload["hard"])
     easy = _condition_from_dict(payload["easy"])
     condition = _interpolate(hard, easy, level)
@@ -318,6 +351,20 @@ def current_boundary_condition(
     state["target_z_mm"] = float(config.target.z_mm)
     state["target_speed_mm_s"] = float(config.target.speed_mm_s)
     return condition, level
+
+
+def current_boundary_condition(
+    state: MutableMapping[str, Any], config: BoundaryBandConfig
+) -> tuple[SpawnCondition, float]:
+    payload = ensure_boundary_state(state, config)
+    completed = {int(value) for value in payload.get("completed_attempt_indices", [])}
+    attempt = next(
+        (index for index in range(config.batch_size) if index not in completed),
+        config.batch_size,
+    )
+    if attempt >= config.batch_size:
+        raise RuntimeError("boundary batch has no remaining condition before adjustment")
+    return boundary_condition_for_attempt(state, config, attempt)
 
 
 def _harden(condition: SpawnCondition, config: BoundaryBandConfig) -> SpawnCondition:
@@ -358,23 +405,76 @@ def record_boundary_result(
     config: BoundaryBandConfig,
     *,
     success: bool,
+    attempt_index: int | None = None,
+    group: int | str | None = None,
 ) -> dict[str, Any] | None:
     payload = ensure_boundary_state(state, config)
+    completed_indices = {
+        int(value) for value in payload.get("completed_attempt_indices", [])
+    }
+    if attempt_index is None:
+        attempt = next(
+            (index for index in range(config.batch_size) if index not in completed_indices),
+            config.batch_size,
+        )
+    else:
+        attempt = int(attempt_index)
+    if attempt < 0 or attempt >= config.batch_size:
+        raise ValueError(
+            f"boundary attempt_index must be in [0, {config.batch_size - 1}], got {attempt}"
+        )
+    if attempt in completed_indices:
+        raise ValueError(f"boundary attempt {attempt} was already recorded")
+    completed_indices.add(attempt)
+
     if success:
         state["successful_first_gates"] = int(state.get("successful_first_gates", 0)) + 1
-        state["consecutive_failures"] = 0
-    else:
-        state["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
+    # ``consecutive_failures`` belongs to the historical per-episode adaptive
+    # policy.  In an asynchronous population its value would depend on worker
+    # completion order, so boundary-band deliberately keeps it neutral and uses
+    # only commutative batch counters for difficulty updates.
+    state["consecutive_failures"] = 0
 
-    payload["attempts_in_batch"] = int(payload["attempts_in_batch"]) + 1
+    payload["completed_attempt_indices"] = sorted(completed_indices)
+    payload["attempts_in_batch"] = len(completed_indices)
     if success:
         payload["successes_in_batch"] = int(payload["successes_in_batch"]) + 1
+    if group is not None:
+        key = str(group)
+        group_attempts = dict(payload.get("group_attempts", {}))
+        group_successes = dict(payload.get("group_successes", {}))
+        group_attempts[key] = int(group_attempts.get(key, 0)) + 1
+        if success:
+            group_successes[key] = int(group_successes.get(key, 0)) + 1
+        else:
+            group_successes.setdefault(key, int(group_successes.get(key, 0)))
+        payload["group_attempts"] = group_attempts
+        payload["group_successes"] = group_successes
 
     completed: dict[str, Any] | None = None
     if int(payload["attempts_in_batch"]) >= config.batch_size:
         attempts = int(payload["attempts_in_batch"])
         successes = int(payload["successes_in_batch"])
-        rate = successes / attempts
+        raw_rate = successes / attempts
+        group_attempts = {
+            str(key): int(value)
+            for key, value in dict(payload.get("group_attempts", {})).items()
+            if int(value) > 0
+        }
+        group_successes = {
+            str(key): int(value)
+            for key, value in dict(payload.get("group_successes", {})).items()
+        }
+        group_rates = {
+            key: group_successes.get(key, 0) / count
+            for key, count in sorted(group_attempts.items())
+        }
+        if group_rates:
+            rate = sum(group_rates.values()) / len(group_rates)
+            aggregation = "equal_group_mean"
+        else:
+            rate = raw_rate
+            aggregation = "episode_mean"
         hard = _condition_from_dict(payload["hard"])
         easy = _condition_from_dict(payload["easy"])
         recovery_hard = _condition_from_dict(payload["recovery_hard"])
@@ -395,14 +495,23 @@ def record_boundary_result(
         payload["hard"] = _condition_dict(hard)
         payload["easy"] = _condition_dict(easy)
         payload["last_batch_success_rate"] = float(rate)
+        payload["last_batch_raw_success_rate"] = float(raw_rate)
+        payload["last_batch_group_success_rates"] = group_rates
+        payload["last_batch_aggregation"] = aggregation
         payload["last_adjustment"] = adjustment
         payload["batch_number"] = int(payload["batch_number"]) + 1
         payload["attempts_in_batch"] = 0
         payload["successes_in_batch"] = 0
+        payload["completed_attempt_indices"] = []
+        payload["group_attempts"] = {}
+        payload["group_successes"] = {}
         completed = {
             "successes": successes,
             "attempts": attempts,
             "success_rate": rate,
+            "raw_success_rate": raw_rate,
+            "group_success_rates": group_rates,
+            "aggregation": aggregation,
             "adjustment": adjustment,
             "hard": _condition_dict(hard),
             "easy": _condition_dict(easy),

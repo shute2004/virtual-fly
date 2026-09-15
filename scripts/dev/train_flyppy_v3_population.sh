@@ -20,6 +20,30 @@ POPULATION_REQUEST="${VF_FLYPPY_POPULATION:-auto}"
 AUTO_POPULATION="${VF_FLYPPY_AUTO_POPULATION:-4}"
 EPISODES="${VF_FLYPPY_EPISODES:-24}"
 
+# Production curriculum is batch-based.  The older adaptive policy changed
+# difficulty after every asynchronously completed episode, so short failing
+# slots could move the spawn condition before slower successful slots finished.
+# Boundary-band freezes one 24-attempt condition set, updates only at the batch
+# boundary, and equal-weights per-slot/course-seed success rates for the update.
+CURRICULUM_MODE="${VF_FLYPPY_CURRICULUM_MODE:-boundary-band}"
+BOUNDARY_BATCH_SIZE="${VF_FLYPPY_BOUNDARY_BATCH_SIZE:-24}"
+case "$CURRICULUM_MODE" in
+  adaptive|boundary-band)
+    ;;
+  *)
+    echo "VF_FLYPPY_CURRICULUM_MODE must be adaptive or boundary-band" >&2
+    exit 2
+    ;;
+esac
+[[ "$BOUNDARY_BATCH_SIZE" =~ ^[1-9][0-9]*$ ]] || {
+  echo "VF_FLYPPY_BOUNDARY_BATCH_SIZE must be an integer >= 5" >&2
+  exit 2
+}
+if [ "$BOUNDARY_BATCH_SIZE" -lt 5 ]; then
+  echo "VF_FLYPPY_BOUNDARY_BATCH_SIZE must be >= 5" >&2
+  exit 2
+fi
+
 # Production vision is image-free by default.  K=13 was selected against the
 # uncompressed direct receptive-field integral: light r=0.9990 and MaleCNS
 # current r=0.9904, while the end-to-end learning benchmark ran 1.606x faster
@@ -142,8 +166,8 @@ uv run python -m py_compile \
   scripts/analysis/export_flyppy_population_report.py
 
 BODY_PROCESS_REQUEST="${VF_FLYPPY_BODY_PROCESSES:-auto}"
-printf 'shared_weight_population=%s population_request=%s episodes=%s experiment=%s synapse_scale=%s body_runtime=packed body_processes=%s vision=%s rays_per_ommatidium=%s framebuffer=%s\n' \
-  "$POPULATION" "$POPULATION_REQUEST" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST" "$VISION_MODE" "$OMMATIDIA_RAYS" "$([ "$VISION_MODE" = "raster" ] && printf true || printf false)"
+printf 'shared_weight_population=%s population_request=%s episodes=%s experiment=%s synapse_scale=%s body_runtime=packed body_processes=%s curriculum=%s boundary_batch=%s vision=%s rays_per_ommatidium=%s framebuffer=%s\n' \
+  "$POPULATION" "$POPULATION_REQUEST" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST" "$CURRICULUM_MODE" "$BOUNDARY_BATCH_SIZE" "$VISION_MODE" "$OMMATIDIA_RAYS" "$([ "$VISION_MODE" = "raster" ] && printf true || printf false)"
 
 TRAIN_ARGS=(
   uv run python scripts/embodiment/train_flyppy_population_packed.py
@@ -156,6 +180,8 @@ TRAIN_ARGS=(
   --body-motor-map "$BODY_MOTOR_MAP"
   --viewer-graph "$VIEWER_GRAPH"
   --output-dir "$EXPERIMENT"
+  --curriculum-mode "$CURRICULUM_MODE"
+  --boundary-batch-size "$BOUNDARY_BATCH_SIZE"
 )
 if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
   TRAIN_ARGS+=(--telemetry)

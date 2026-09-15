@@ -31,9 +31,12 @@ from population_neural_bridge_client import PopulationNeuralBridgeClient
 from virtual_fly.physics import FLYBODY_V3
 from virtual_fly.training.curriculum import (
     SpawnCondition,
+    boundary_condition_for_attempt,
     current_adaptive_condition,
+    ensure_boundary_state,
     load_state as load_curriculum_state,
     record_adaptive_result,
+    record_boundary_result,
 )
 
 
@@ -60,6 +63,8 @@ class ProcessSlotState:
     last_retinal: dict[str, Any] | None = None
     last_motor: dict[str, Any] | None = None
     last_body_spikes: dict[int, bool] | None = None
+    boundary_ease_level: float | None = None
+    boundary_attempt_index: int | None = None
 
 
 def worker_config(args) -> dict[str, object]:
@@ -80,6 +85,8 @@ def reset_slot(
     episode: int,
     source_weight_version: int,
     condition: SpawnCondition,
+    boundary_ease_level: float | None = None,
+    boundary_attempt_index: int | None = None,
 ) -> None:
     slot.active = True
     slot.episode = int(episode)
@@ -97,6 +104,8 @@ def reset_slot(
     slot.max_z_mm = float("-inf")
     slot.reward_events = 0
     slot.aversive_events = 0
+    slot.boundary_ease_level = boundary_ease_level
+    slot.boundary_attempt_index = boundary_attempt_index
     slot.last_retinal = None
     slot.last_motor = None
     slot.last_body_spikes = {}
@@ -110,7 +119,12 @@ def reset_slot(
     slot.final_velocity = tuple(float(value) for value in initial["velocity"])
 
 
-def result_for_slot(slot: ProcessSlotState, commit: dict[str, object]) -> dict[str, object]:
+def result_for_slot(
+    slot: ProcessSlotState,
+    commit: dict[str, object],
+    *,
+    curriculum_mode: str = "adaptive",
+) -> dict[str, object]:
     return {
         "episode": slot.episode,
         "slot": slot.slot,
@@ -132,8 +146,9 @@ def result_for_slot(slot: ProcessSlotState, commit: dict[str, object]) -> dict[s
         "initial_speed_mm_s": slot.initial_speed_mm_s,
         "environment_version": "v3",
         "motor_boundary": "whole-body",
-        "curriculum_mode": "adaptive",
-        "boundary_ease_level": None,
+        "curriculum_mode": curriculum_mode,
+        "boundary_ease_level": slot.boundary_ease_level,
+        "boundary_attempt_index": slot.boundary_attempt_index,
         "reward_events": slot.reward_events,
         "aversive_events": slot.aversive_events,
     }
@@ -176,10 +191,21 @@ def main() -> int:
         target=reference.target_condition(args),
         checkpoint_exists=checkpoint_exists,
     )
-    state["curriculum_mode"] = "adaptive"
+    state["curriculum_mode"] = args.curriculum_mode
     state["environment_version"] = "v3"
     state["motor_boundary"] = "whole-body"
     adaptive = reference.adaptive_config(args, first_gate)
+    boundary = (
+        reference.population_boundary_config(args, first_gate, state)
+        if args.curriculum_mode == "boundary-band"
+        else None
+    )
+    boundary_issued_attempts: set[int] = set()
+    if boundary is not None:
+        ensure_boundary_state(state, boundary)
+        # This field is meaningful only to the historical adaptive policy. Keep
+        # it neutral once an experiment switches to asynchronous batch updates.
+        state["consecutive_failures"] = 0
 
     population_state: dict[str, object] = {}
     if checkpoint_exists and population_state_path.exists():
@@ -250,18 +276,56 @@ def main() -> int:
                         f"global_weight_version={brain.global_weight_version}"
                     )
 
-                for slot in slots:
+                def launch_slot(slot: ProcessSlotState) -> bool:
+                    """Launch one episode without letting async completion order pick difficulty."""
+
+                    nonlocal launched
                     if launched >= args.episodes:
-                        break
+                        return False
+                    ease_level: float | None = None
+                    attempt_index: int | None = None
+                    if boundary is None:
+                        condition = current_adaptive_condition(state)
+                    else:
+                        payload = ensure_boundary_state(state, boundary)
+                        completed_attempts = {
+                            int(value)
+                            for value in payload.get("completed_attempt_indices", [])
+                        }
+                        attempt_index = next(
+                            (
+                                attempt
+                                for attempt in range(boundary.batch_size)
+                                if attempt not in completed_attempts
+                                and attempt not in boundary_issued_attempts
+                            ),
+                            None,
+                        )
+                        if attempt_index is None:
+                            return False
+                        condition, ease_level = boundary_condition_for_attempt(
+                            state,
+                            boundary,
+                            attempt_index,
+                        )
+                        boundary_issued_attempts.add(attempt_index)
                     episode = start_episode + launched
                     reset_slot(
                         slot,
                         by_slot[slot.slot],
                         episode=episode,
                         source_weight_version=brain.global_weight_version,
-                        condition=current_adaptive_condition(state),
+                        condition=condition,
+                        boundary_ease_level=ease_level,
+                        boundary_attempt_index=attempt_index,
                     )
                     launched += 1
+                    return True
+
+                for slot in slots:
+                    if launched >= args.episodes:
+                        break
+                    launch_slot(slot)
 
                 publisher.publish_status(
                     running=True,
@@ -411,7 +475,9 @@ def main() -> int:
                                         "finished": bool(act["finished"]),
                                         "environment_version": "v3",
                                         "motor_boundary": "whole-body",
-                                        "curriculum_mode": "adaptive",
+                                        "curriculum_mode": args.curriculum_mode,
+                                        "boundary_ease_level": slot.boundary_ease_level,
+                                        "boundary_attempt_index": slot.boundary_attempt_index,
                                     },
                                     separators=(",", ":"),
                                 )
@@ -471,12 +537,47 @@ def main() -> int:
                         )
                         completed += 1
                         state["curriculum_episodes"] = int(state["curriculum_episodes"]) + 1
-                        record_adaptive_result(
-                            state,
-                            adaptive,
-                            success=slot.passed_gates > 0,
+                        batch_completed = None
+                        if boundary is None:
+                            record_adaptive_result(
+                                state,
+                                adaptive,
+                                success=slot.passed_gates > 0,
+                            )
+                        else:
+                            if slot.boundary_attempt_index is None:
+                                raise RuntimeError(
+                                    "boundary-band slot completed without an attempt index"
+                                )
+                            batch_completed = record_boundary_result(
+                                state,
+                                boundary,
+                                success=slot.passed_gates > 0,
+                                attempt_index=slot.boundary_attempt_index,
+                                group=slot.slot,
+                            )
+                            if batch_completed is not None:
+                                # Every condition in the old band has now produced
+                                # an outcome.  The next band can reuse attempt IDs.
+                                boundary_issued_attempts.clear()
+                                print(
+                                    "boundary_batch_complete success={}/{} rate={:.3f} raw_rate={:.3f} "
+                                    "aggregation={} adjustment={} hard={} easy={}".format(
+                                        batch_completed["successes"],
+                                        batch_completed["attempts"],
+                                        batch_completed["success_rate"],
+                                        batch_completed["raw_success_rate"],
+                                        batch_completed["aggregation"],
+                                        batch_completed["adjustment"],
+                                        batch_completed["hard"],
+                                        batch_completed["easy"],
+                                    )
+                                )
+                        result = result_for_slot(
+                            slot,
+                            commit,
+                            curriculum_mode=args.curriculum_mode,
                         )
-                        result = result_for_slot(slot, commit)
                         results.append(result)
                         commit_record = {
                             "commit_seq": int(commit["commit_weight_version"]),
@@ -495,6 +596,9 @@ def main() -> int:
                             "spawn_x_mm": slot.spawn_x_mm,
                             "spawn_z_mm": slot.spawn_z_mm,
                             "initial_speed_mm_s": slot.initial_speed_mm_s,
+                            "curriculum_mode": args.curriculum_mode,
+                            "boundary_ease_level": slot.boundary_ease_level,
+                            "boundary_attempt_index": slot.boundary_attempt_index,
                         }
                         commit_log.write(
                             json.dumps(commit_record, separators=(",", ":")) + "\n"
@@ -529,21 +633,27 @@ def main() -> int:
                                     "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
                                     "weight_averaging": False,
                                     "body_runtime": "process-isolated",
+                                    "curriculum_mode": args.curriculum_mode,
                                 },
                             )
 
-                        if launched < args.episodes:
-                            episode = start_episode + launched
-                            reset_slot(
-                                slot,
-                                by_slot[slot.slot],
-                                episode=episode,
-                                source_weight_version=brain.global_weight_version,
-                                condition=current_adaptive_condition(state),
-                            )
-                            launched += 1
+                        if boundary is None and launched < args.episodes:
+                            launch_slot(slot)
                         else:
                             slot.active = False
+
+                    if boundary is not None and launched < args.episodes:
+                        # Fill every currently idle slot from the fixed schedule
+                        # for this batch.  Once all batch conditions have been
+                        # launched, fast-failing slots remain idle until the last
+                        # outstanding old-band outcome arrives; this is the small
+                        # throughput cost that removes completion-order bias.
+                        for idle_slot in slots:
+                            if launched >= args.episodes:
+                                break
+                            if idle_slot.active:
+                                continue
+                            launch_slot(idle_slot)
 
                 saved_state = brain.save_checkpoint(checkpoint)
                 reference.save_json_atomic(state_path, state)
@@ -556,6 +666,7 @@ def main() -> int:
                         "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
                         "weight_averaging": False,
                         "body_runtime": "process-isolated",
+                        "curriculum_mode": args.curriculum_mode,
                     },
                 )
                 final_global_version = brain.global_weight_version
@@ -598,7 +709,7 @@ def main() -> int:
             "gate_gap_height_mm": 2.0 * first_gate.half_gap_mm,
             "gate_half_thickness_mm": first_gate.half_thickness_mm,
         },
-        "curriculum_mode": "adaptive",
+        "curriculum_mode": args.curriculum_mode,
         "episodes_this_run": args.episodes,
         "episode_start": start_episode,
         "episode_end": start_episode + args.episodes - 1,
