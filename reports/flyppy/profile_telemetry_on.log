@@ -1,4 +1,5 @@
 === Flyppy P0 telemetry=on ===
+using production VF_NEURAL_SYNAPSE_SCALE=0.005
 Error: read group config from artifacts/malecns-v1.0/embodiment-groups-v0.json
 
 Caused by:
