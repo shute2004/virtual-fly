@@ -78,6 +78,7 @@ enum Request {
         #[serde(default = "default_one")]
         steps: usize,
     },
+    TransactionStats { slot: usize },
     CommitSlot {
         slot: usize,
         source_weight_version: u64,
@@ -97,6 +98,7 @@ struct ReadyResponse<'a> {
     slots: usize,
     neurons: usize,
     edges: usize,
+    plastic_edges: usize,
     groups: Vec<&'a str>,
     global_weight_version: u64,
 }
@@ -124,6 +126,19 @@ struct BatchStepResponse {
 struct StepResponse {
     ok: bool,
     step: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct TransactionStatsResponse {
+    ok: bool,
+    event: &'static str,
+    slot: usize,
+    plastic_edges: usize,
+    dirty_edges: usize,
+    dirty_fraction: f64,
+    nonzero_shift_edges: usize,
+    lower_bound_changed_edges: usize,
+    upper_bound_changed_edges: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -235,7 +250,9 @@ fn main() -> Result<()> {
     )
     .with_context(|| format!("parse group config from {}", args.groups.display()))?;
     let groups = resolve_groups(&snapshot, config)?;
-    let mut runtime = GpuPopulationRuntime::new(&snapshot, NeuralParams::default(), args.slots)?;
+    let params = NeuralParams::default();
+    let weight_max = params.weight_max;
+    let mut runtime = GpuPopulationRuntime::new(&snapshot, params, args.slots)?;
     let mut global_weight_version = 0u64;
     let mut neural_step = 0u64;
 
@@ -252,6 +269,7 @@ fn main() -> Result<()> {
             slots: runtime.slot_count(),
             neurons: runtime.neuron_count(),
             edges: runtime.edge_count(),
+            plastic_edges: runtime.plastic_edge_count(),
             groups: group_names,
             global_weight_version,
         },
@@ -395,6 +413,32 @@ fn main() -> Result<()> {
                         .checked_add(steps as u64)
                         .context("population neural step counter overflow")?;
                     write_json(&mut stdout, &StepResponse { ok: true, step: neural_step })?;
+                    Ok(())
+                })();
+                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                Ok(())
+            }
+            Request::TransactionStats { slot } => {
+                let result = (|| -> Result<()> {
+                    let stats = runtime.transaction_stats(slot, weight_max)?;
+                    write_json(
+                        &mut stdout,
+                        &TransactionStatsResponse {
+                            ok: true,
+                            event: "transaction_stats",
+                            slot,
+                            plastic_edges: stats.plastic_edges,
+                            dirty_edges: stats.dirty_edges,
+                            dirty_fraction: if stats.plastic_edges == 0 {
+                                0.0
+                            } else {
+                                stats.dirty_edges as f64 / stats.plastic_edges as f64
+                            },
+                            nonzero_shift_edges: stats.nonzero_shift_edges,
+                            lower_bound_changed_edges: stats.lower_bound_changed_edges,
+                            upper_bound_changed_edges: stats.upper_bound_changed_edges,
+                        },
+                    )?;
                     Ok(())
                 })();
                 if let Err(error) = result { write_error(&mut stdout, error)?; }
