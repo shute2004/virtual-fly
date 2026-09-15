@@ -3,8 +3,12 @@
 
 The proven process-body trainer owns all learning/curriculum/checkpoint logic.
 This launcher replaces only its body-process factory so several logical fly slots
-share one MuJoCo owner process.  The default packing rule is the measured M1
+share one MuJoCo owner process. The default packing rule is the measured M1
 optimum family: min(population, 4) body processes.
+
+Viewer telemetry is demand-driven: the detached viewer can be started at any
+time and activates the existing snapshot path only while it is open. ``--telemetry``
+remains available as an explicit always-on diagnostic override.
 
 Set VF_FLYPPY_BODY_PROCESSES to a positive integer to override the default.
 """
@@ -18,11 +22,19 @@ import sys
 
 import train_flyppy_population_process as trainer
 from flyppy_packed_slot_adapter import spawn_packed_slot_handles
+from live_telemetry import ViewerDemandSwitch
 
 
 _RESOLVED_BODY_PROCESSES: int | None = None
 _RESOLVED_VISION_MODE: str | None = None
 _RESOLVED_VISION_RAYS: int | None = None
+_ORIGINAL_PARSE_ARGS = trainer.reference.parse_args
+
+
+def _parse_args_with_viewer_demand():
+    args = _ORIGINAL_PARSE_ARGS()
+    args.telemetry = ViewerDemandSwitch(always=bool(args.telemetry))
+    return args
 
 
 def _spawn_packed(
@@ -95,6 +107,7 @@ def _patch_runtime_metadata(output_dir: Path) -> None:
             int(_RESOLVED_VISION_RAYS) if _RESOLVED_VISION_RAYS is not None else None
         ),
         "vision_framebuffer": (_RESOLVED_VISION_MODE or "raster") == "raster",
+        "viewer_telemetry": "on-demand",
     }
     for name in ("summary.json", "population-state.json"):
         path = output_dir / name
@@ -109,6 +122,7 @@ def _patch_runtime_metadata(output_dir: Path) -> None:
 
 def main() -> int:
     trainer.spawn_body_processes = _spawn_packed
+    trainer.reference.parse_args = _parse_args_with_viewer_demand
     result = trainer.main()
     if result == 0:
         _patch_runtime_metadata(_output_dir_from_argv())
