@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Probe thread-parallel FlyBody compound-eye rendering across independent slots.
+"""Probe process-parallel FlyBody compound-eye rendering across independent slots.
 
-Each slot keeps its own FlyBody/MuJoCo Simulation.  A dedicated worker thread owns
-that slot's lazily-created eye renderer for the whole probe, so a renderer/context
-is never migrated between threads.  The probe compares static-scene ommatidia
-readouts bit-for-bit between sequential and concurrent scheduling and measures
-aggregate readout throughput for concurrency 1/2/4/8.
+macOS OpenGL/CGL rendering is not a safe target for the previous Python-thread
+probe: a native renderer/context failure can terminate the whole interpreter.
+This probe therefore uses multiprocessing with the ``spawn`` start method. Each
+child process constructs and owns one complete FlyBody/MuJoCo slot and performs
+all rendering from that child process's main thread.
+
+The parent compares static-scene ommatidia readouts bit-for-bit between sequential
+and concurrent scheduling and measures aggregate readout throughput for
+concurrency 1/2/4/8. If a child dies or hangs in native rendering, the parent
+records a FAIL report instead of intentionally propagating the native crash.
 
 No production checkpoint, CNS state, or training state is modified.
 """
@@ -13,14 +18,12 @@ No production checkpoint, CNS state, or training state is modified.
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import Future
 from datetime import datetime, timezone
-import json
+import multiprocessing as mp
 from pathlib import Path
-import queue
 import sys
-import threading
 import time
+import traceback
 from types import SimpleNamespace
 
 import numpy as np
@@ -37,58 +40,13 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--slots", type=int, default=8)
     p.add_argument("--iterations", type=int, default=12)
+    p.add_argument("--timeout-s", type=float, default=120.0)
     p.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     return p.parse_args()
 
 
 def absolute(path: Path) -> Path:
     return path if path.is_absolute() else (ROOT / path).resolve()
-
-
-class VisionWorker:
-    def __init__(self, slot) -> None:
-        self.slot = slot
-        self.requests: queue.Queue[tuple[str, Future]] = queue.Queue()
-        self.thread = threading.Thread(
-            target=self._run,
-            name=f"flyppy-vision-{slot.slot}",
-            daemon=True,
-        )
-        self.thread.start()
-
-    def _run(self) -> None:
-        while True:
-            command, future = self.requests.get()
-            try:
-                if command == "read":
-                    result = self.slot.vision._eye_readouts(
-                        self.slot.body.sim, self.slot.body.fly
-                    )
-                    # Copy while still on the owner thread so later renderer reuse
-                    # cannot alias a mutable backing array.
-                    future.set_result(
-                        {side: np.asarray(values).copy() for side, values in result.items()}
-                    )
-                elif command == "close":
-                    # Destroy the MuJoCo renderer on the same thread that created it.
-                    self.slot.body.sim.eye_renderer = None
-                    future.set_result(None)
-                    return
-                else:
-                    raise RuntimeError(f"unknown vision worker command {command!r}")
-            except BaseException as exc:  # propagate worker/backend failures exactly
-                future.set_exception(exc)
-
-    def submit_read(self) -> Future:
-        future: Future = Future()
-        self.requests.put(("read", future))
-        return future
-
-    def close(self) -> None:
-        future: Future = Future()
-        self.requests.put(("close", future))
-        future.result()
-        self.thread.join()
 
 
 def make_args():
@@ -103,6 +61,127 @@ def make_args():
     )
 
 
+def _worker_main(connection, slot_index: int) -> None:
+    """Own one complete FlyBody slot and renderer inside a spawned process."""
+
+    try:
+        # Import and construct inside the child so MuJoCo/CGL objects are never
+        # inherited from or created on the parent's rendering thread.
+        import train_flyppy_population as trainer
+
+        slot = trainer.make_slot(make_args(), slot_index)
+        connection.send(("ready", None))
+        while True:
+            command = connection.recv()
+            if command == "read":
+                result = slot.vision._eye_readouts(slot.body.sim, slot.body.fly)
+                payload = {
+                    side: np.asarray(values).copy()
+                    for side, values in result.items()
+                }
+                connection.send(("ok", payload))
+            elif command == "close":
+                # Release renderer in the same process/main thread that used it.
+                slot.body.sim.eye_renderer = None
+                connection.send(("closed", None))
+                return
+            else:
+                raise RuntimeError(f"unknown vision worker command {command!r}")
+    except BaseException as exc:
+        try:
+            connection.send(
+                (
+                    "error",
+                    {
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
+            )
+        except BaseException:
+            pass
+    finally:
+        try:
+            connection.close()
+        except BaseException:
+            pass
+
+
+class VisionProcess:
+    def __init__(self, context, slot_index: int, timeout_s: float) -> None:
+        parent, child = context.Pipe(duplex=True)
+        self.connection = parent
+        self.process = context.Process(
+            target=_worker_main,
+            args=(child, slot_index),
+            name=f"flyppy-vision-{slot_index}",
+        )
+        self.slot_index = slot_index
+        self.timeout_s = timeout_s
+        self.process.start()
+        child.close()
+        status, payload = self._recv("startup")
+        if status != "ready":
+            raise RuntimeError(f"slot {slot_index} failed startup: {status}: {payload}")
+
+    def _recv(self, phase: str):
+        if not self.connection.poll(self.timeout_s):
+            exitcode = self.process.exitcode
+            if exitcode is not None:
+                raise RuntimeError(
+                    f"slot {self.slot_index} process died during {phase}; exitcode={exitcode}"
+                )
+            self.process.terminate()
+            self.process.join(timeout=5.0)
+            raise RuntimeError(
+                f"slot {self.slot_index} timed out during {phase} after {self.timeout_s:.1f}s"
+            )
+        try:
+            return self.connection.recv()
+        except (EOFError, ConnectionResetError, BrokenPipeError) as exc:
+            self.process.join(timeout=1.0)
+            raise RuntimeError(
+                f"slot {self.slot_index} native process ended during {phase}; "
+                f"exitcode={self.process.exitcode}"
+            ) from exc
+
+    def request_read(self) -> None:
+        if not self.process.is_alive():
+            raise RuntimeError(
+                f"slot {self.slot_index} process is not alive; exitcode={self.process.exitcode}"
+            )
+        self.connection.send("read")
+
+    def receive_read(self) -> dict[str, np.ndarray]:
+        status, payload = self._recv("render")
+        if status == "error":
+            raise RuntimeError(f"slot {self.slot_index} worker error: {payload}")
+        if status != "ok":
+            raise RuntimeError(f"slot {self.slot_index} unexpected response {status!r}")
+        return payload
+
+    def read(self) -> dict[str, np.ndarray]:
+        self.request_read()
+        return self.receive_read()
+
+    def close(self) -> None:
+        if self.process.is_alive():
+            try:
+                self.connection.send("close")
+                self._recv("close")
+            except Exception:
+                self.process.terminate()
+        self.process.join(timeout=5.0)
+        if self.process.is_alive():
+            self.process.kill()
+            self.process.join(timeout=2.0)
+        try:
+            self.connection.close()
+        except Exception:
+            pass
+
+
 def same_readout(a: dict[str, np.ndarray], b: dict[str, np.ndarray]) -> bool:
     return all(
         side in a
@@ -114,26 +193,22 @@ def same_readout(a: dict[str, np.ndarray], b: dict[str, np.ndarray]) -> bool:
     )
 
 
-def timed_sequential(workers: list[VisionWorker], iterations: int):
+def timed_sequential(workers: list[VisionProcess], iterations: int):
     latest = None
     started = time.perf_counter()
     for _ in range(iterations):
-        current = []
+        latest = [worker.read() for worker in workers]
+    return time.perf_counter() - started, latest
+
+
+def timed_parallel(workers: list[VisionProcess], iterations: int):
+    latest = None
+    started = time.perf_counter()
+    for _ in range(iterations):
         for worker in workers:
-            current.append(worker.submit_read().result())
-        latest = current
-    elapsed = time.perf_counter() - started
-    return elapsed, latest
-
-
-def timed_parallel(workers: list[VisionWorker], iterations: int):
-    latest = None
-    started = time.perf_counter()
-    for _ in range(iterations):
-        futures = [worker.submit_read() for worker in workers]
-        latest = [future.result() for future in futures]
-    elapsed = time.perf_counter() - started
-    return elapsed, latest
+            worker.request_read()
+        latest = [worker.receive_read() for worker in workers]
+    return time.perf_counter() - started, latest
 
 
 def main() -> int:
@@ -142,6 +217,8 @@ def main() -> int:
         raise SystemExit("--slots must be in 1..8 for this probe")
     if args.iterations < 1:
         raise SystemExit("--iterations must be >= 1")
+    if args.timeout_s <= 0.0:
+        raise SystemExit("--timeout-s must be positive")
 
     required = [
         ROOT / "artifacts/malecns-v1.0/retinotopic-vision-v1.json",
@@ -152,62 +229,78 @@ def main() -> int:
     if missing:
         raise SystemExit("missing parallel-vision probe inputs:\n  " + "\n  ".join(missing))
 
-    import train_flyppy_population as trainer
-
-    trainer_args = make_args()
-    slots = [trainer.make_slot(trainer_args, index) for index in range(args.slots)]
-    workers = [VisionWorker(slot) for slot in slots]
+    rows: list[dict[str, object]] = []
+    errors: list[str] = []
+    overall_equal = True
+    context = mp.get_context("spawn")
+    workers: list[VisionProcess] = []
     try:
-        # Warm every renderer + Numba path before timing.  Renderer construction is
-        # deliberately performed on its permanent owner thread.
-        warm = [worker.submit_read().result() for worker in workers]
+        for index in range(args.slots):
+            workers.append(VisionProcess(context, index, args.timeout_s))
 
-        rows = []
-        overall_equal = True
+        # Warm renderer + Numba paths sequentially so compilation/initialization is
+        # excluded from both scheduling measurements.
+        warm = [worker.read() for worker in workers]
+
         for concurrency in (1, 2, 4, 8):
             if concurrency > args.slots:
                 continue
             selected = workers[:concurrency]
-            sequential_s, sequential_latest = timed_sequential(selected, args.iterations)
-            parallel_s, parallel_latest = timed_parallel(selected, args.iterations)
-            equal = all(
-                same_readout(warm[index], sequential_latest[index])
-                and same_readout(sequential_latest[index], parallel_latest[index])
-                for index in range(concurrency)
-            )
-            overall_equal = overall_equal and equal
-            reads = concurrency * args.iterations
-            rows.append(
-                {
-                    "concurrency": concurrency,
-                    "reads": reads,
-                    "sequential_s": sequential_s,
-                    "parallel_s": parallel_s,
-                    "sequential_reads_s": reads / sequential_s,
-                    "parallel_reads_s": reads / parallel_s,
-                    "speedup": sequential_s / parallel_s,
-                    "bitwise_equal": equal,
-                }
-            )
+            try:
+                sequential_s, sequential_latest = timed_sequential(
+                    selected, args.iterations
+                )
+                parallel_s, parallel_latest = timed_parallel(selected, args.iterations)
+                equal = all(
+                    same_readout(warm[index], sequential_latest[index])
+                    and same_readout(sequential_latest[index], parallel_latest[index])
+                    for index in range(concurrency)
+                )
+                overall_equal = overall_equal and equal
+                reads = concurrency * args.iterations
+                rows.append(
+                    {
+                        "concurrency": concurrency,
+                        "reads": reads,
+                        "sequential_s": sequential_s,
+                        "parallel_s": parallel_s,
+                        "sequential_reads_s": reads / sequential_s,
+                        "parallel_reads_s": reads / parallel_s,
+                        "speedup": sequential_s / parallel_s,
+                        "bitwise_equal": equal,
+                    }
+                )
+            except Exception as exc:
+                overall_equal = False
+                errors.append(f"N={concurrency}: {type(exc).__name__}: {exc}")
+                break
+    except Exception as exc:
+        overall_equal = False
+        errors.append(f"setup/warmup: {type(exc).__name__}: {exc}")
     finally:
         for worker in workers:
             try:
                 worker.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                errors.append(
+                    f"close slot {worker.slot_index}: {type(exc).__name__}: {exc}"
+                )
 
     report = absolute(args.report)
     report.parent.mkdir(parents=True, exist_ok=True)
+    overall_pass = overall_equal and not errors and bool(rows)
     lines = [
-        "# FlyBody parallel compound-eye rendering probe",
+        "# FlyBody process-parallel compound-eye rendering probe",
         "",
         f"- generated_at_utc: {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
-        f"- overall: {'PASS' if overall_equal else 'FAIL'}",
+        f"- overall: {'PASS' if overall_pass else 'FAIL'}",
         "- training performed: false",
         "- production checkpoint touched: false",
-        f"- slots constructed: {args.slots}",
+        f"- requested slots: {args.slots}",
         f"- measured iterations per scheduling mode: {args.iterations}",
-        "- renderer ownership: one permanent worker thread per FlyBody slot",
+        "- multiprocessing start method: spawn",
+        "- ownership: one complete FlyBody/MuJoCo/renderer per child process",
+        "- renderer thread: child-process main thread only",
         "- numerical contract: static-scene L/R ommatidia arrays must be bitwise identical",
         "",
         "| concurrency | aggregate eye-readout calls | sequential s | parallel s | sequential readouts/s | parallel readouts/s | speedup | bitwise equal |",
@@ -220,21 +313,29 @@ def main() -> int:
                 **row
             )
         )
-    lines.extend([
-        "",
-        "Interpretation: this probe changes scheduling only. Each independent MuJoCo/FlyBody slot keeps its own physics state and renderer; CNS state and body dynamics are not merged or approximated.",
-        "",
-    ])
+    if errors:
+        lines.extend(["", "## Errors", ""])
+        lines.extend(f"- {error}" for error in errors)
+    lines.extend(
+        [
+            "",
+            "Interpretation: process isolation is deliberate on macOS. A child-native rendering failure is reported here rather than moving an OpenGL context across Python threads or terminating the parent probe.",
+            "",
+        ]
+    )
     report.write_text("\n".join(lines), encoding="utf-8")
     print(f"parallel_vision_probe={report}")
-    print(f"parallel_vision_bitwise_equal={str(overall_equal).lower()}")
+    print(f"parallel_vision_pass={str(overall_pass).lower()}")
     for row in rows:
         print(
             f"N{row['concurrency']}_parallel_speedup={row['speedup']:.6f} "
             f"parallel_readouts_per_second={row['parallel_reads_s']:.6f}"
         )
-    return 0 if overall_equal else 1
+    for error in errors:
+        print(f"parallel_vision_error={error}", file=sys.stderr)
+    return 0 if overall_pass else 1
 
 
 if __name__ == "__main__":
+    mp.freeze_support()
     raise SystemExit(main())
