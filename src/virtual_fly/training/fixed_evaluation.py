@@ -116,6 +116,7 @@ def render_markdown(payload: Mapping[str, object]) -> str:
         "# Flyppy v3 fixed learning evaluation",
         "",
         f"- suite: `{payload['suite_version']}`",
+        f"- subject: `{payload.get('evaluation_subject', 'trained_checkpoint')}`",
         f"- checkpoint: `{payload['checkpoint']}`",
         f"- checkpoint neural step: {payload['checkpoint_neural_step']}",
         f"- training episode end: {payload.get('training_episode_end')}",

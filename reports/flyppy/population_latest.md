@@ -9,25 +9,41 @@
 - RGB framebuffer: false
 - shared weight: true
 - weight averaging: false
-- episodes: 8
-- elapsed: 12.209 s
-- aggregate control steps: 368
-- aggregate control steps/s: 30.141
-- simulated biological seconds: 0.184000
-- first gate pass: 2/8
-- max passed gates: 1
-- global weight version: 80 -> 88
-- mean version staleness: 2.250
-- max version staleness: 6
+- episodes: 24
+- elapsed: 31.016 s
+- aggregate control steps: 940
+- aggregate control steps/s: 30.307
+- simulated biological seconds: 0.470000
+- first gate pass: 6/24
+- max passed gates: 2
+- global weight version: 112 -> 136
+- mean version staleness: 2.750
+- max version staleness: 9
 - commit semantics: episode-local additive+clamp transaction rebased onto latest global weight
 
 | ep | slot | source v | commit from | commit v | stale | steps | passed | collision |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 152 | 0 | 80 | 86 | 87 | 6 | 93 | 1 | true |
-| 153 | 1 | 80 | 80 | 81 | 0 | 32 | 0 | true |
-| 154 | 2 | 80 | 84 | 85 | 4 | 89 | 1 | true |
-| 155 | 3 | 80 | 81 | 82 | 1 | 33 | 0 | true |
-| 156 | 1 | 81 | 82 | 83 | 1 | 31 | 0 | true |
-| 157 | 3 | 82 | 83 | 84 | 1 | 32 | 0 | true |
-| 158 | 1 | 83 | 85 | 86 | 2 | 29 | 0 | true |
-| 159 | 3 | 84 | 87 | 88 | 3 | 29 | 0 | true |
+| 184 | 0 | 112 | 119 | 120 | 7 | 92 | 1 | true |
+| 185 | 1 | 112 | 112 | 113 | 0 | 28 | 0 | true |
+| 186 | 2 | 112 | 118 | 119 | 6 | 87 | 1 | true |
+| 187 | 3 | 112 | 113 | 114 | 1 | 28 | 0 | true |
+| 188 | 1 | 113 | 115 | 116 | 2 | 26 | 0 | true |
+| 189 | 3 | 114 | 114 | 115 | 0 | 25 | 0 | true |
+| 190 | 3 | 115 | 117 | 118 | 2 | 24 | 0 | true |
+| 191 | 1 | 116 | 116 | 117 | 0 | 23 | 0 | true |
+| 192 | 1 | 117 | 121 | 122 | 4 | 23 | 0 | true |
+| 193 | 3 | 118 | 120 | 121 | 2 | 22 | 0 | true |
+| 194 | 2 | 119 | 128 | 129 | 9 | 83 | 1 | true |
+| 195 | 0 | 120 | 129 | 130 | 9 | 91 | 1 | true |
+| 196 | 3 | 121 | 123 | 124 | 2 | 27 | 0 | true |
+| 197 | 1 | 122 | 122 | 123 | 0 | 23 | 0 | true |
+| 198 | 1 | 123 | 124 | 125 | 1 | 23 | 0 | true |
+| 199 | 3 | 124 | 125 | 126 | 1 | 22 | 0 | true |
+| 200 | 1 | 125 | 126 | 127 | 1 | 20 | 0 | true |
+| 201 | 3 | 126 | 127 | 128 | 1 | 20 | 0 | true |
+| 202 | 1 | 127 | 130 | 131 | 3 | 20 | 0 | true |
+| 203 | 3 | 128 | 131 | 132 | 3 | 19 | 0 | true |
+| 204 | 2 | 129 | 134 | 135 | 5 | 80 | 1 | true |
+| 205 | 0 | 130 | 135 | 136 | 5 | 92 | 2 | true |
+| 206 | 1 | 131 | 133 | 134 | 2 | 22 | 0 | true |
+| 207 | 3 | 132 | 132 | 133 | 0 | 20 | 0 | true |

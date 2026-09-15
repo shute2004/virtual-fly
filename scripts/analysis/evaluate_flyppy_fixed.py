@@ -55,6 +55,11 @@ DEFAULT_REPORT = Path("reports/flyppy/fixed_evaluation_latest.md")
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--production", type=Path, default=DEFAULT_PRODUCTION)
+    p.add_argument(
+        "--initial-malecns",
+        action="store_true",
+        help="evaluate the untrained MaleCNS initial weights instead of loading a production checkpoint",
+    )
     p.add_argument("--snapshot", type=Path, default=DEFAULT_SNAPSHOT)
     p.add_argument("--calibration", type=Path, default=DEFAULT_CALIBRATION)
     p.add_argument("--output-json", type=Path, default=DEFAULT_JSON)
@@ -123,7 +128,6 @@ def validate(args: argparse.Namespace, production: Path, snapshot: Path, calibra
         raise SystemExit("current gains must be finite and positive")
 
     required = [
-        production / "checkpoint" / "manifest.json",
         snapshot / "manifest.json",
         snapshot / "embodiment-groups-v0.json",
         snapshot / "retinotopic-vision-v1.json",
@@ -131,6 +135,8 @@ def validate(args: argparse.Namespace, production: Path, snapshot: Path, calibra
         snapshot / "body-motor-neurons-v0.json",
         calibration,
     ]
+    if not args.initial_malecns:
+        required.append(production / "checkpoint" / "manifest.json")
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise SystemExit("missing fixed-evaluation inputs:\n  " + "\n  ".join(missing))
@@ -324,11 +330,17 @@ def main() -> int:
     os.environ["VF_NEURAL_SYNAPSE_SCALE"] = str(float(calibration_payload["synapse_scale"]))
 
     population_state_path = production / "population-state.json"
-    population_state = load_json(population_state_path) if population_state_path.exists() else {}
+    population_state = (
+        load_json(population_state_path)
+        if not args.initial_malecns and population_state_path.exists()
+        else {}
+    )
     initial_global_version = int(population_state.get("global_weight_version", 0))
     production_summary_path = production / "summary.json"
     production_summary = (
-        load_json(production_summary_path) if production_summary_path.exists() else {}
+        load_json(production_summary_path)
+        if not args.initial_malecns and production_summary_path.exists()
+        else {}
     )
     training_episode_end = production_summary.get("episode_end")
 
@@ -376,11 +388,14 @@ def main() -> int:
         ) as brain:
             brain.ping()
             backend = str(brain.ready.get("backend", "gpu-population"))
-            loaded = brain.load_checkpoint(
-                production / "checkpoint",
-                global_weight_version=initial_global_version,
-            )
-            loaded_step = int(loaded.get("step", -1))
+            if args.initial_malecns:
+                loaded_step = 0
+            else:
+                loaded = brain.load_checkpoint(
+                    production / "checkpoint",
+                    global_weight_version=initial_global_version,
+                )
+                loaded_step = int(loaded.get("step", -1))
 
             for condition in FIXED_EVAL_SUITE_V1:
                 episode_results.extend(
@@ -424,7 +439,12 @@ def main() -> int:
         "schema_version": 1,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "suite_version": SUITE_VERSION,
-        "checkpoint": portable_path(production / "checkpoint"),
+        "evaluation_subject": "initial_malecns" if args.initial_malecns else "trained_checkpoint",
+        "checkpoint": (
+            "initial MaleCNS snapshot weights"
+            if args.initial_malecns
+            else portable_path(production / "checkpoint")
+        ),
         "checkpoint_neural_step": loaded_step,
         "training_episode_end": (
             int(training_episode_end) if training_episode_end is not None else None

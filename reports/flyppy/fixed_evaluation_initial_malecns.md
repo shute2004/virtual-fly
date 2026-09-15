@@ -1,42 +1,43 @@
 # Flyppy v3 fixed learning evaluation
 
 - suite: `flyppy-v3-fixed-v1`
-- checkpoint: `artifacts/experiments/flyppy-v3/checkpoint`
-- checkpoint neural step: 13213
-- training episode end: 207
-- global weight version: 136
+- subject: `initial_malecns`
+- checkpoint: `initial MaleCNS snapshot weights`
+- checkpoint neural step: 0
+- training episode end: None
+- global weight version: 0
 - backend: `gpu-population:Apple M1 (Metal)`
 - population / course seeds: 4 / 0..3
 - vision: `direct-ray` / 13 rays/ommatidium
 - plasticity: `false`
 - global weight version unchanged: `true`
 - transaction dirty edges after evaluation: {0: 0, 1: 0, 2: 0, 3: 0}
-- elapsed: 41.927 s
+- elapsed: 39.434 s
 
 ## 固定条件別
 
 | condition | x mm | z mm | vx mm/s | first gate | second gate | collision | mean gates | max gates | mean altitude gain mm | mean altitude loss mm |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| part3_frontier | 3.2670 | 11.4670 | 450.0 | 2/4 (50.0%) | 0/4 (0.0%) | 4/4 (100.0%) | 0.500 | 1 | -0.006 | 1.367 |
-| midpoint | 1.6335 | 10.1885 | 375.0 | 2/4 (50.0%) | 0/4 (0.0%) | 4/4 (100.0%) | 0.500 | 1 | -0.005 | 1.773 |
-| target | 0.0000 | 8.9100 | 300.0 | 1/4 (25.0%) | 0/4 (0.0%) | 4/4 (100.0%) | 0.250 | 1 | -0.005 | 3.068 |
+| part3_frontier | 3.2670 | 11.4670 | 450.0 | 2/4 (50.0%) | 1/4 (25.0%) | 4/4 (100.0%) | 0.750 | 2 | -0.006 | 1.452 |
+| midpoint | 1.6335 | 10.1885 | 375.0 | 1/4 (25.0%) | 0/4 (0.0%) | 4/4 (100.0%) | 0.250 | 1 | -0.005 | 0.692 |
+| target | 0.0000 | 8.9100 | 300.0 | 1/4 (25.0%) | 0/4 (0.0%) | 4/4 (100.0%) | 0.250 | 1 | -0.005 | 3.146 |
 
 ## Episode一覧
 
 | condition | seed | slot | steps | passed | collision | finished | max x mm | min z mm | max z mm | final vx mm/s |
 |---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|
-| part3_frontier | 0 | 0 | 92 | 1 | gate | false | 23.923 | 8.721 | 11.461 | 475.609 |
+| part3_frontier | 0 | 0 | 93 | 2 | gate | false | 24.016 | 8.673 | 11.461 | 391.871 |
 | part3_frontier | 1 | 1 | 29 | 0 | gate | false | 9.844 | 11.270 | 11.461 | 77.733 |
-| part3_frontier | 2 | 2 | 88 | 1 | gate | false | 22.744 | 9.202 | 11.461 | 59.103 |
+| part3_frontier | 2 | 2 | 88 | 1 | gate | false | 22.708 | 8.908 | 11.461 | 109.892 |
 | part3_frontier | 3 | 3 | 33 | 0 | gate | false | 10.572 | 11.207 | 11.461 | -18.945 |
-| midpoint | 0 | 0 | 105 | 1 | gate | false | 22.377 | 4.995 | 10.183 | -166.789 |
-| midpoint | 1 | 1 | 47 | 0 | gate | false | 10.630 | 9.706 | 10.183 | 44.261 |
-| midpoint | 2 | 2 | 47 | 0 | gate | false | 10.566 | 9.680 | 10.183 | 30.419 |
-| midpoint | 3 | 3 | 59 | 1 | gate | false | 12.954 | 9.283 | 10.183 | 480.959 |
-| target | 0 | 0 | 66 | 0 | gate | false | 10.693 | 7.692 | 8.905 | 2.734 |
-| target | 1 | 1 | 69 | 0 | gate | false | 11.383 | 7.266 | 8.905 | 321.135 |
-| target | 2 | 2 | 65 | 0 | gate | false | 10.689 | 7.617 | 8.905 | 257.532 |
-| target | 3 | 3 | 118 | 1 | floor | false | 19.741 | 0.790 | 8.905 | 223.235 |
+| midpoint | 0 | 0 | 54 | 0 | gate | false | 11.964 | 9.426 | 10.183 | 351.418 |
+| midpoint | 1 | 1 | 48 | 0 | gate | false | 10.684 | 9.625 | 10.183 | 67.870 |
+| midpoint | 2 | 2 | 47 | 0 | gate | false | 10.547 | 9.680 | 10.183 | -3.431 |
+| midpoint | 3 | 3 | 59 | 1 | gate | false | 12.919 | 9.254 | 10.183 | 420.077 |
+| target | 0 | 0 | 66 | 0 | gate | false | 10.685 | 7.568 | 8.905 | -15.312 |
+| target | 1 | 1 | 70 | 0 | gate | false | 11.429 | 7.223 | 8.905 | 306.920 |
+| target | 2 | 2 | 66 | 0 | gate | false | 10.719 | 7.426 | 8.905 | 124.336 |
+| target | 3 | 3 | 117 | 1 | floor | false | 19.428 | 0.839 | 8.905 | 205.336 |
 
 ## 解釈上の契約
 
