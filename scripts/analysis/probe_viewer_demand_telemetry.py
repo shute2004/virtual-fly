@@ -27,6 +27,11 @@ def send(target: Path, payload: bytes) -> None:
 def main() -> int:
     temp_root = Path(tempfile.mkdtemp(prefix="virtual-fly-viewer-demand-"))
     experiment = temp_root / "experiment"
+    live = experiment / "live"
+    live.mkdir(parents=True, exist_ok=True)
+    for name in ("status.json", "body.json", "neural.json", "fly.png"):
+        (live / name).write_bytes(b"stale")
+
     switch = ViewerDemandSwitch(always=False)
     publisher = LiveTelemetryPublisher(
         experiment,
@@ -34,6 +39,11 @@ def main() -> int:
         lease_timeout_s=0.25,
     )
     try:
+        stale_outputs_cleared = all(
+            not (live / name).exists()
+            for name in ("status.json", "body.json", "neural.json", "fly.png")
+        )
+
         # Before publisher binding the switch is used once only to preload the
         # immutable viewer graph. After binding it must be inactive with no viewer.
         inactive_initial = not bool(switch)
@@ -43,11 +53,17 @@ def main() -> int:
             episode=1,
             control_step=1,
         )
-        status = experiment / "live" / "status.json"
+        status = live / "status.json"
         no_write_without_viewer = not status.exists()
 
+        # Exact mid-run join contract: the status published before the viewer
+        # existed must materialize immediately when the watch lease arrives.
         send(publisher.control_path, b"watch")
         active_after_watch = bool(switch)
+        cached_status_materialized = status.exists()
+        cached_payload = json.loads(status.read_text(encoding="utf-8")) if status.exists() else {}
+        cached_control_step_is_1 = cached_payload.get("control_step") == 1
+
         publisher.publish_status(
             running=True,
             backend="probe",
@@ -56,6 +72,7 @@ def main() -> int:
         )
         wrote_with_viewer = status.exists()
         watched_payload = json.loads(status.read_text(encoding="utf-8")) if status.exists() else {}
+        watched_control_step_is_2 = watched_payload.get("control_step") == 2
 
         before_mtime = status.stat().st_mtime_ns if status.exists() else -1
         send(publisher.control_path, b"stop")
@@ -75,11 +92,14 @@ def main() -> int:
         inactive_after_timeout = not bool(switch)
 
         checks = {
+            "stale_outputs_cleared": stale_outputs_cleared,
             "inactive_initial": inactive_initial,
             "no_write_without_viewer": no_write_without_viewer,
             "active_after_watch": active_after_watch,
+            "cached_status_materialized": cached_status_materialized,
+            "cached_control_step_is_1": cached_control_step_is_1,
             "wrote_with_viewer": wrote_with_viewer,
-            "watched_control_step_is_2": watched_payload.get("control_step") == 2,
+            "watched_control_step_is_2": watched_control_step_is_2,
             "inactive_after_stop": inactive_after_stop,
             "no_write_after_stop": no_write_after_stop,
             "active_for_timeout": active_for_timeout,
