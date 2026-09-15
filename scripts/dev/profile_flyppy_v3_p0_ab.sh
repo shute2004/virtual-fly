@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 mkdir -p reports/flyppy
+rm -f reports/flyppy/profile_ab_status.md
 
 run_one() {
   local mode="$1"
@@ -12,6 +13,7 @@ run_one() {
   local json="reports/flyppy/profile_telemetry_${mode}.json"
   local log="reports/flyppy/profile_telemetry_${mode}.log"
 
+  rm -f "$report" "$json" "$log"
   echo "=== Flyppy P0 telemetry=${mode} ===" | tee "$log"
   set +e
   VF_P0_TELEMETRY="$mode" \
