@@ -9,11 +9,11 @@ mod transaction;
 #[path = "gpu30.rs"]
 pub mod gpu;
 
-// Population training now keeps slot-local mutable synapse and transaction
-// state only for PlasticFastGraph edges. The public module name remains stable
-// so the bridge/trainer protocol does not change while the runtime evolves.
+// Population training now keeps slot-local mutable synapse state only for
+// PlasticFastGraph edges.  The profiled wrapper adds read-only transaction
+// diagnostics without changing the numerical hot path.
 #[cfg(feature = "gpu")]
-#[path = "gpu_population_sparse.rs"]
+#[path = "gpu_population_profiled.rs"]
 pub mod gpu_population;
 
 pub use cpu::{CpuRuntime, StepSummary};
