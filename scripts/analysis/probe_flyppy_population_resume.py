@@ -4,7 +4,7 @@
 The probe reproduces the production trainer's initialization path through:
 
 1. argument/input validation,
-2. two FlyBody slot construction,
+2. requested FlyBody slot construction,
 3. population neural bridge startup,
 4. loading the existing production checkpoint.
 
@@ -141,8 +141,8 @@ def main() -> int:
 
     try:
         def validate_inputs() -> None:
-            if args.population not in (1, 2):
-                raise RuntimeError("probe supports population=1 or 2")
+            if not 1 <= args.population <= 32:
+                raise RuntimeError("probe supports population=1..32")
             required = [
                 snapshot / "manifest.json",
                 groups,
@@ -181,7 +181,6 @@ def main() -> int:
         initial_global_version = int(population_state.get("global_weight_version", 0))
         details["initial_global_weight_version"] = initial_global_version
 
-        # Reuse the trainer's actual slot-construction path, but do not begin an episode.
         class SlotArgs:
             gate_count = 6
             seed = 0
