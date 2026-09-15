@@ -3,31 +3,31 @@
 - backend: `gpu:Apple M1 (Metal)`
 - measured control steps: 256
 - telemetry: `on`
-- wall-clock: 20.140259 s
-- control steps/s: 12.711
+- wall-clock: 20.327913 s
+- control steps/s: 12.594
 - neurons / edges: 166700 / 25582938
 - neural/body/trajectory stride: 10/1/10
 
 | stage | calls | total s | mean ms | p50 ms | p95 ms |
 |---|---:|---:|---:|---:|---:|
-| control_step_total | 256 | 20.129990 | 78.633 | 75.312 | 83.077 |
-| neural_control_total | 256 | 10.575521 | 41.311 | 38.885 | 42.491 |
-| bridge_request:step | 261 | 10.019029 | 38.387 | 36.558 | 39.604 |
-| retina_total | 256 | 7.260422 | 28.361 | 28.502 | 34.193 |
-| retina_eye_readout | 256 | 5.119104 | 19.997 | 19.660 | 23.580 |
-| physics | 256 | 1.899679 | 7.421 | 4.643 | 14.745 |
-| telemetry_body | 256 | 0.218000 | 0.852 | 0.846 | 1.194 |
-| periphery | 256 | 0.084515 | 0.330 | 0.330 | 0.418 |
-| telemetry_neural | 34 | 0.023444 | 0.690 | 0.561 | 1.204 |
-| episode_reset_total | 5 | 0.009924 | 1.985 | 1.940 | 2.140 |
-| bridge_request:reset_dynamics | 5 | 0.004642 | 0.928 | 0.935 | 1.036 |
-| reinforcement_total | 5 | 0.003995 | 0.799 | 0.826 | 0.865 |
-| course_update | 256 | 0.001776 | 0.007 | 0.007 | 0.009 |
-| telemetry_status | 5 | 0.001536 | 0.307 | 0.322 | 0.367 |
-| collision_query | 256 | 0.001496 | 0.006 | 0.002 | 0.003 |
-| trajectory_serialize | 34 | 0.001475 | 0.043 | 0.041 | 0.063 |
-| trajectory_write | 34 | 0.000375 | 0.011 | 0.001 | 0.056 |
-| trajectory_flush | 5 | 0.000003 | 0.001 | 0.000 | 0.001 |
+| control_step_total | 256 | 20.316463 | 79.361 | 75.965 | 86.507 |
+| neural_control_total | 256 | 10.731957 | 41.922 | 39.199 | 45.203 |
+| bridge_request:step | 261 | 10.173593 | 38.979 | 37.022 | 42.678 |
+| retina_total | 256 | 7.267034 | 28.387 | 28.260 | 32.933 |
+| retina_eye_readout | 256 | 5.125272 | 20.021 | 19.643 | 22.808 |
+| physics | 256 | 1.924151 | 7.516 | 4.626 | 14.728 |
+| telemetry_body | 256 | 0.216986 | 0.848 | 0.838 | 1.085 |
+| periphery | 256 | 0.086803 | 0.339 | 0.335 | 0.438 |
+| telemetry_neural | 34 | 0.021145 | 0.622 | 0.590 | 1.028 |
+| episode_reset_total | 5 | 0.011186 | 2.237 | 2.181 | 2.709 |
+| bridge_request:reset_dynamics | 5 | 0.005053 | 1.011 | 0.931 | 1.191 |
+| reinforcement_total | 5 | 0.004523 | 0.905 | 0.917 | 1.021 |
+| telemetry_status | 5 | 0.001900 | 0.380 | 0.336 | 0.576 |
+| course_update | 256 | 0.001786 | 0.007 | 0.007 | 0.009 |
+| trajectory_serialize | 34 | 0.001413 | 0.042 | 0.041 | 0.065 |
+| collision_query | 256 | 0.000841 | 0.003 | 0.003 | 0.004 |
+| trajectory_write | 34 | 0.000306 | 0.009 | 0.001 | 0.059 |
+| trajectory_flush | 5 | 0.000003 | 0.001 | 0.001 | 0.001 |
 
 ## Protocol
 
