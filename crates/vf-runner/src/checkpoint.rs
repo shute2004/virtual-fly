@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::Write,
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
 
@@ -149,22 +149,44 @@ fn temp_directory(directory: &Path) -> PathBuf {
 }
 
 fn write_f32(path: PathBuf, values: &[f32]) -> Result<()> {
-    let mut file = fs::File::create(&path)
-        .with_context(|| format!("failed to create {}", path.display()))?;
-    for &value in values {
-        file.write_all(&value.to_le_bytes())?;
-    }
-    file.flush()?;
-    Ok(())
+    write_le_words(path, values, |value| value.to_le_bytes())
 }
 
 fn write_u32(path: PathBuf, values: &[u32]) -> Result<()> {
-    let mut file = fs::File::create(&path)
+    write_le_words(path, values, |value| value.to_le_bytes())
+}
+
+fn write_le_words<T: bytemuck::Pod + Copy>(
+    path: PathBuf,
+    values: &[T],
+    to_le_bytes: impl Fn(T) -> [u8; 4],
+) -> Result<()> {
+    let file = fs::File::create(&path)
         .with_context(|| format!("failed to create {}", path.display()))?;
-    for &value in values {
-        file.write_all(&value.to_le_bytes())?;
+    let mut writer = BufWriter::with_capacity(4 * 1024 * 1024, file);
+
+    #[cfg(target_endian = "little")]
+    {
+        writer.write_all(bytemuck::cast_slice(values))?;
     }
-    file.flush()?;
+
+    #[cfg(not(target_endian = "little"))]
+    {
+        const CHUNK_WORDS: usize = 1 << 20;
+        let mut buffer = Vec::with_capacity(CHUNK_WORDS * 4);
+        for chunk in values.chunks(CHUNK_WORDS) {
+            buffer.clear();
+            for &value in chunk {
+                buffer.extend_from_slice(&to_le_bytes(value));
+            }
+            writer.write_all(&buffer)?;
+        }
+    }
+
+    // Keep the argument used on little-endian builds as part of the portable
+    // signature without paying per-element conversion cost on the hot path.
+    let _ = &to_le_bytes;
+    writer.flush()?;
     Ok(())
 }
 
