@@ -169,6 +169,12 @@ class PopulationNeuralBridgeClient:
         )
         self.last_step = int(response.get("step", self.last_step))
 
+    def transaction_stats(self, slot: int) -> dict:
+        response = self._request({"type": "transaction_stats", "slot": int(slot)})
+        if response.get("event") != "transaction_stats":
+            raise PopulationNeuralBridgeError(f"unexpected transaction stats response: {response}")
+        return response
+
     def commit_slot(self, slot: int, *, source_weight_version: int) -> dict:
         response = self._request(
             {
