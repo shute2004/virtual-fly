@@ -23,8 +23,8 @@ struct Params {
     pre_start: u32,
     post_start: u32,
     count_start: u32,
+    meta_start: u32,
     refractory_steps: u32,
-    _pad_u0: u32,
     membrane_decay: f32,
     threshold: f32,
     reset: f32,
@@ -41,23 +41,21 @@ struct Params {
 
 struct Control {
     slot: u32,
+    active_mask: u32,
     _pad0: u32,
     _pad1: u32,
-    _pad2: u32,
 }
 
 @group(0) @binding(0) var<storage, read> topology: array<u32>;
-@group(0) @binding(1) var<storage, read> metadata: array<u32>;
-@group(0) @binding(2) var<storage, read_write> neurons: array<NeuronState>;
-@group(0) @binding(3) var<storage, read> spikes_prev: array<u32>;
-@group(0) @binding(4) var<storage, read_write> spikes_next: array<u32>;
-@group(0) @binding(5) var<storage, read> external_current: array<f32>;
-@group(0) @binding(6) var<storage, read_write> synapses: array<SynapseState>;
-@group(0) @binding(7) var<storage, read_write> transactions: array<TransactionState>;
-@group(0) @binding(8) var<storage, read_write> global_weights: array<f32>;
-@group(0) @binding(9) var<storage, read> slot_active: array<u32>;
-@group(0) @binding(10) var<uniform> params: Params;
-@group(0) @binding(11) var<uniform> control: Control;
+@group(0) @binding(1) var<storage, read_write> neurons: array<NeuronState>;
+@group(0) @binding(2) var<storage, read> spikes_prev: array<u32>;
+@group(0) @binding(3) var<storage, read_write> spikes_next: array<u32>;
+@group(0) @binding(4) var<storage, read> external_current: array<f32>;
+@group(0) @binding(5) var<storage, read_write> synapses: array<SynapseState>;
+@group(0) @binding(6) var<storage, read_write> transactions: array<TransactionState>;
+@group(0) @binding(7) var<storage, read_write> global_weights: array<f32>;
+@group(0) @binding(8) var<uniform> params: Params;
+@group(0) @binding(9) var<uniform> control: Control;
 
 const WORKGROUP_SIZE: u32 = 256u;
 const NT_DOPAMINE: u32 = 4u;
@@ -70,11 +68,15 @@ fn linear_invocation_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
 }
 
 fn nt_code(neuron: u32) -> u32 {
-    return metadata[neuron] & 0xffu;
+    return topology[params.meta_start + neuron] & 0xffu;
 }
 
 fn is_dopamine(neuron: u32) -> bool {
     return nt_code(neuron) == NT_DOPAMINE;
+}
+
+fn slot_is_active(slot: u32) -> bool {
+    return (control.active_mask & (1u << slot)) != 0u;
 }
 
 fn activity_sign(event: u32) -> f32 {
@@ -102,7 +104,7 @@ fn neuron_step(
     let total = params.slot_count * params.neuron_count;
     if flat >= total { return; }
     let slot = flat / params.neuron_count;
-    if slot_active[slot] == 0u { return; }
+    if !slot_is_active(slot) { return; }
     let post = flat % params.neuron_count;
     let neuron_base = slot * params.neuron_count;
     let edge_base = slot * params.edge_count;
@@ -166,7 +168,7 @@ fn plasticity_step(
     let total = params.slot_count * params.edge_count;
     if flat >= total { return; }
     let slot = flat / params.edge_count;
-    if slot_active[slot] == 0u { return; }
+    if !slot_is_active(slot) { return; }
     let edge = flat % params.edge_count;
     let edge_base = slot * params.edge_count;
     let neuron_base = slot * params.neuron_count;
@@ -199,7 +201,7 @@ fn trace_step(
     let total = params.slot_count * params.neuron_count;
     if flat >= total { return; }
     let slot = flat / params.neuron_count;
-    if slot_active[slot] == 0u { return; }
+    if !slot_is_active(slot) { return; }
     var state = neurons[flat];
     state.trace = state.trace * params.trace_decay + activity_sign(spikes_next[flat]);
     neurons[flat] = state;
