@@ -12,15 +12,18 @@ pub mod gpu;
 
 // Keep the P-backed dense-incoming runtime available as a numerical reference
 // while the production-facing population module experiments with an outgoing
-// propagation frontier. This lets parity probes run both implementations from
-// the same build.
+// propagation frontier. Debug wrappers expose full slot state only for golden
+// tests; training does not call those readbacks.
 #[cfg(feature = "gpu")]
-#[path = "gpu_population_sparse.rs"]
+#[path = "gpu_population_reference_debug.rs"]
 pub mod gpu_population_reference;
 
 #[cfg(feature = "gpu")]
-#[path = "gpu_population_frontier.rs"]
+#[path = "gpu_population_frontier_debug.rs"]
 pub mod gpu_population;
+
+#[cfg(all(test, feature = "gpu"))]
+mod frontier_parity;
 
 pub use cpu::{CpuRuntime, StepSummary};
 pub use model::{
