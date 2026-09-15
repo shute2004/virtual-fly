@@ -30,16 +30,11 @@ fn main() -> Result<()> {
         .with_context(|| format!("load MaleCNS snapshot from {}", args.snapshot.display()))?;
     let graph = PlasticFastGraph::compile(&snapshot).context("compile PlasticFastGraph")?;
 
-    let dopamine_capable_post_count = graph
-        .row_offsets
-        .windows(2)
-        .filter(|row| row[1] > row[0])
-        .count();
     let plastic_edge_count = graph.edge_count();
     let result = ProbeResult {
         neuron_count: snapshot.neuron_count(),
         edge_count: snapshot.edge_count(),
-        dopamine_capable_post_count,
+        dopamine_capable_post_count: graph.dopamine_capable_posts.len(),
         plastic_edge_count,
         plastic_edge_fraction: if snapshot.edge_count() == 0 {
             0.0
