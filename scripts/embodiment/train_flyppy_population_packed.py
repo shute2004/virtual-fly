@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Packed-body production candidate for Flyppy population training.
+"""Packed-body production trainer for Flyppy population learning.
 
 The proven process-body trainer owns all learning/curriculum/checkpoint logic.
 This launcher replaces only its body-process factory so several logical fly slots
@@ -11,10 +11,16 @@ Set VF_FLYPPY_BODY_PROCESSES to a positive integer to override the default.
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
+import sys
 
 import train_flyppy_population_process as trainer
 from flyppy_packed_slot_adapter import spawn_packed_slot_handles
+
+
+_RESOLVED_BODY_PROCESSES: int | None = None
 
 
 def _spawn_packed(
@@ -24,6 +30,8 @@ def _spawn_packed(
     timeout_s: float,
     config: dict[str, object],
 ):
+    global _RESOLVED_BODY_PROCESSES
+
     raw = os.environ.get("VF_FLYPPY_BODY_PROCESSES", "").strip()
     process_count = None
     if raw and raw.lower() != "auto":
@@ -41,6 +49,7 @@ def _spawn_packed(
         timeout_s=timeout_s,
         config=config,
     )
+    _RESOLVED_BODY_PROCESSES = int(resolved)
     print(
         "body_process_packing=packed population={} body_processes={} "
         "flies_per_process_mean={:.3f}".format(
@@ -52,9 +61,43 @@ def _spawn_packed(
     return handles
 
 
+def _output_dir_from_argv() -> Path:
+    default = Path("artifacts/experiments/flyppy-v3")
+    args = sys.argv[1:]
+    for index, arg in enumerate(args):
+        if arg == "--output-dir" and index + 1 < len(args):
+            return Path(args[index + 1])
+        if arg.startswith("--output-dir="):
+            return Path(arg.split("=", 1)[1])
+    return default
+
+
+def _patch_runtime_metadata(output_dir: Path) -> None:
+    if _RESOLVED_BODY_PROCESSES is None:
+        return
+
+    metadata = {
+        "body_runtime": "packed-process",
+        "body_processes": int(_RESOLVED_BODY_PROCESSES),
+        "body_process_rule": "min(population, 4) unless VF_FLYPPY_BODY_PROCESSES overrides it",
+    }
+    for name in ("summary.json", "population-state.json"):
+        path = output_dir / name
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload.update(metadata)
+        temp = path.with_name(f".{path.name}.packed.tmp")
+        temp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        temp.replace(path)
+
+
 def main() -> int:
     trainer.spawn_body_processes = _spawn_packed
-    return trainer.main()
+    result = trainer.main()
+    if result == 0:
+        _patch_runtime_metadata(_output_dir_from_argv())
+    return result
 
 
 if __name__ == "__main__":
