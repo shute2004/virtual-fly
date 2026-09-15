@@ -1,5 +1,6 @@
 mod cpu;
 pub mod model;
+mod plastic_graph;
 mod snapshot;
 mod state;
 mod transaction;
@@ -21,6 +22,7 @@ pub use model::{
     ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, ACTIVITY_SILENT, BackendKind,
     NeuralParams, Stimulus, nt,
 };
+pub use plastic_graph::PlasticFastGraph;
 pub use snapshot::{ConnectomeSnapshot, EdgeInput, SnapshotManifest};
 pub use state::NeuralState;
 pub use transaction::{PlasticityTransaction, PlasticityTransform};
