@@ -34,27 +34,12 @@ if [ "${VF_SKIP_V3_FLIGHT_PREFLIGHT:-0}" != "1" ]; then
   bash scripts/dev/preflight_flyppy_v3.sh
 fi
 
-if [ ! -f "$GROUPS" ]; then
-  uv run python scripts/data/make_embodiment_groups.py \
-    --snapshot "$SNAPSHOT" \
-    --output "$GROUPS"
-fi
-if [ ! -f "$WING_MOTOR_MAP" ]; then
-  uv run python scripts/data/prepare_wing_motor_map.py \
-    --snapshot "$SNAPSHOT" \
-    --output "$WING_MOTOR_MAP"
-fi
-if [ ! -f "$BODY_MOTOR_MAP" ]; then
-  uv run python scripts/data/prepare_body_motor_map.py \
-    --snapshot "$SNAPSHOT" \
-    --output "$BODY_MOTOR_MAP"
-fi
-if [ ! -f "$RETINOTOPIC_MAP" ]; then
-  uv run python scripts/data/prepare_retinotopic_vision.py \
-    --snapshot "$SNAPSHOT" \
-    --output "$RETINOTOPIC_MAP" \
-    --download
-fi
+uv run python scripts/dev/prepare_flyppy_population_inputs.py \
+  --snapshot "$SNAPSHOT" \
+  --groups "$GROUPS" \
+  --retinotopic-map "$RETINOTOPIC_MAP" \
+  --wing-motor-map "$WING_MOTOR_MAP" \
+  --body-motor-map "$BODY_MOTOR_MAP"
 
 EXPECTED_VIEWER_GRAPH_SCHEMA=3
 VIEWER_SCHEMA=0
