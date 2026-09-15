@@ -8,6 +8,9 @@ mod transaction;
 #[path = "gpu30.rs"]
 pub mod gpu;
 
+#[cfg(feature = "gpu")]
+pub mod gpu_population;
+
 pub use cpu::{CpuRuntime, StepSummary};
 pub use model::{
     ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, ACTIVITY_SILENT, BackendKind,
