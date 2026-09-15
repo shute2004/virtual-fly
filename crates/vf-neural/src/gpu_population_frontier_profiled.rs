@@ -1,9 +1,15 @@
 include!("gpu_population_frontier.rs");
 
+#[derive(Debug, Clone)]
+pub struct PlasticityProfileState {
+    pub modulation: Vec<f32>,
+    pub eligibility: Vec<f32>,
+}
+
 impl GpuPopulationRuntime {
     /// Diagnostic-only signed activity readback for one population slot.
     ///
-    /// The production hot path never calls this.  Values are returned as dense
+    /// The production hot path never calls this. Values are returned as dense
     /// neuron indices whose current internal activity code is either 1 or 2;
     /// both signs propagate through the outgoing frontier.
     pub fn active_neuron_indices(&self, slot: usize) -> Result<Vec<u32>> {
@@ -30,5 +36,39 @@ impl GpuPopulationRuntime {
                 }
             })
             .collect())
+    }
+
+    /// Diagnostic-only state needed to size a future live-plasticity frontier.
+    ///
+    /// This performs large GPU readbacks and must never be used in the training
+    /// hot path. Eligibility is the already-updated value for the current step;
+    /// modulation is the current postsynaptic value used by that same step's
+    /// weight-delta calculation.
+    pub fn plasticity_profile_state(&self, slot: usize) -> Result<PlasticityProfileState> {
+        self.validate_slot(slot)?;
+        let all_neurons = self.read_buffer::<NeuronStateGpu>(
+            &self._neuron_state_buffer,
+            self.neuron_count * self.slot_count,
+        )?;
+        let all_synapses = self.read_buffer::<SynapseStateGpu>(
+            &self._plastic_synapse_buffer,
+            self.plastic_edge_count * self.slot_count,
+        )?;
+
+        let neuron_start = slot * self.neuron_count;
+        let neuron_end = neuron_start + self.neuron_count;
+        let plastic_start = slot * self.plastic_edge_count;
+        let plastic_end = plastic_start + self.plastic_edge_count;
+
+        Ok(PlasticityProfileState {
+            modulation: all_neurons[neuron_start..neuron_end]
+                .iter()
+                .map(|state| state.modulation)
+                .collect(),
+            eligibility: all_synapses[plastic_start..plastic_end]
+                .iter()
+                .map(|state| state.eligibility)
+                .collect(),
+        })
     }
 }
