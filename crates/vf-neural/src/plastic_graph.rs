@@ -25,6 +25,9 @@ pub struct PlasticFastGraph {
     pub edge_indices: Vec<u32>,
     /// Postsynaptic neuron for every compact plastic edge.
     pub post_indices: Vec<u32>,
+    /// All posts that can receive released dopamine, including rare rows that
+    /// might contain no mutable fast incoming edge.
+    pub dopamine_capable_posts: Vec<u32>,
 }
 
 impl PlasticFastGraph {
@@ -33,6 +36,7 @@ impl PlasticFastGraph {
         let m = snapshot.edge_count();
 
         let mut dopamine_capable_post = vec![false; n];
+        let mut dopamine_capable_posts = Vec::new();
         for post in 0..n {
             let start = snapshot.row_offsets[post] as usize;
             let end = snapshot.row_offsets[post + 1] as usize;
@@ -40,6 +44,10 @@ impl PlasticFastGraph {
                 let pre = snapshot.pre_indices[edge] as usize;
                 if snapshot.neurotransmitters[pre] == nt::DOPAMINE {
                     dopamine_capable_post[post] = true;
+                    dopamine_capable_posts.push(
+                        u32::try_from(post)
+                            .with_context(|| format!("post neuron index {post} exceeds u32"))?,
+                    );
                     break;
                 }
             }
@@ -82,6 +90,7 @@ impl PlasticFastGraph {
             row_offsets,
             edge_indices,
             post_indices,
+            dopamine_capable_posts,
         })
     }
 
@@ -145,6 +154,7 @@ mod tests {
         assert_eq!(graph.edge_indices, vec![0, 2]);
         assert_eq!(graph.post_indices, vec![1, 1]);
         assert_eq!(graph.row_offsets, vec![0, 0, 2, 2, 2, 2]);
+        assert_eq!(graph.dopamine_capable_posts, vec![1]);
     }
 
     #[test]
@@ -179,5 +189,24 @@ mod tests {
         assert_eq!(graph.post_indices, vec![3, 3]);
         assert_eq!(graph.row_offsets[3], 0);
         assert_eq!(graph.row_offsets[4], 2);
+        assert_eq!(graph.dopamine_capable_posts, vec![3]);
+    }
+
+    #[test]
+    fn retains_dopamine_capable_post_even_without_fast_inputs() {
+        let snapshot = ConnectomeSnapshot::from_edges(
+            2,
+            &[EdgeInput {
+                pre: 0,
+                post: 1,
+                synapse_count: 1,
+            }],
+            vec![nt::DOPAMINE, nt::ACETYLCHOLINE],
+        )
+        .unwrap();
+
+        let graph = PlasticFastGraph::compile(&snapshot).unwrap();
+        assert!(graph.edge_indices.is_empty());
+        assert_eq!(graph.dopamine_capable_posts, vec![1]);
     }
 }
