@@ -124,6 +124,19 @@ def _worker_main(connection, slot_index: int, physics_steps: int, config: dict[s
                 )
                 continue
 
+            if command == "snapshot":
+                connection.send(
+                    (
+                        "ok",
+                        {
+                            "sim_time_s": float(slot.body.sim.mj_data.time),
+                            "qpos": [float(value) for value in slot.body.sim.mj_data.qpos],
+                            "qvel": [float(value) for value in slot.body.sim.mj_data.qvel],
+                        },
+                    )
+                )
+                continue
+
             if command == "close":
                 slot.body.sim.eye_renderer = None
                 connection.send(("closed", None))
@@ -241,6 +254,9 @@ class FlyppyBodyProcess:
                 "initial_speed_mm_s": float(initial_speed_mm_s),
             },
         )
+
+    def snapshot(self):
+        return self.call("snapshot")
 
     def close(self) -> None:
         if self.process.is_alive():
