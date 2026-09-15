@@ -46,6 +46,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--gate-count", type=int, default=6)
     parser.add_argument(
+        "--environment-version",
+        choices=("v1", "v2", "v3"),
+        default=None,
+        help="explicit physical environment; overrides missing/stale run metadata",
+    )
+    parser.add_argument(
         "--poll-hz",
         type=float,
         default=30.0,
@@ -109,17 +115,23 @@ def read_camera_state(path: Path, previous: dict[str, float]) -> dict[str, float
     }
 
 
-def infer_training_context(experiment: Path) -> tuple[int, str]:
+def infer_training_context(
+    experiment: Path,
+    explicit_environment_version: str | None = None,
+) -> tuple[int, str]:
     """Mirror trainer stage and physical environment in the detached observer."""
 
     state_path = experiment / "curriculum-state.json"
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
         gate_index = int(state.get("training_gate_index", 0))
-        environment_version = str(state.get("environment_version", "v1"))
+        environment_version = str(
+            explicit_environment_version
+            or state.get("environment_version", "v1")
+        )
     except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
         gate_index = 0
-        environment_version = "v1"
+        environment_version = str(explicit_environment_version or "v1")
     if environment_version not in {"v1", "v2", "v3"}:
         environment_version = "v1"
     return max(0, gate_index), environment_version
@@ -167,7 +179,10 @@ def main() -> int:
     if args.width < 160 or args.height < 120:
         raise SystemExit("render size is too small")
 
-    training_gate_index, environment_version = infer_training_context(args.experiment)
+    training_gate_index, environment_version = infer_training_context(
+        args.experiment,
+        args.environment_version,
+    )
     os.environ["VF_COURSE_START_GATE"] = str(training_gate_index)
     course = FlyppyCourse(
         seed=args.seed,
@@ -190,6 +205,14 @@ def main() -> int:
     live_path = live_dir / "body.json"
     frame_path = live_dir / "fly.png"
     camera_path = live_dir / "camera.json"
+    # fly.png belongs to this detached renderer, not to training. Never display
+    # a frame inherited from a previous observer process while waiting for the
+    # current run's first body snapshot.
+    try:
+        frame_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
     last_key: tuple[int, int] | None = None
     last_camera_mtime: int | None = None
     camera_state = dict(DEFAULT_CAMERA)
@@ -222,6 +245,7 @@ def main() -> int:
     transition_started = time.perf_counter()
     transition_duration = period
     last_source_arrival: float | None = None
+    waiting_for_telemetry = True
 
     print(f"body_viewer_source={live_path}")
     print(f"body_frame_output={frame_path}")
@@ -240,7 +264,24 @@ def main() -> int:
                 native_viewer = None
 
             pose = read_pose(live_path)
-            if pose is not None:
+            if pose is None and not live_path.exists():
+                # A new training run intentionally removes prior live telemetry.
+                # Do not keep rendering the previous run's pose from memory.
+                if last_key is not None:
+                    last_key = None
+                    pose_a_qpos = None
+                    pose_a_qvel = None
+                    pose_b_qpos = None
+                    pose_b_qvel = None
+                    last_source_arrival = None
+                    try:
+                        frame_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                    if not waiting_for_telemetry:
+                        print("body_viewer=waiting-for-telemetry")
+                    waiting_for_telemetry = True
+            elif pose is not None:
                 key, source_time, incoming_qpos, incoming_qvel = pose
                 if incoming_qpos.shape != body.sim.mj_data.qpos.shape:
                     raise RuntimeError(
@@ -250,6 +291,10 @@ def main() -> int:
                     raise RuntimeError(
                         f"qvel shape mismatch: telemetry={incoming_qvel.shape} viewer={body.sim.mj_data.qvel.shape}"
                     )
+
+                if waiting_for_telemetry:
+                    print(f"body_viewer=live episode={key[0]} control_step={key[1]}")
+                    waiting_for_telemetry = False
 
                 if key != last_key:
                     episode_changed = last_key is None or key[0] != last_key[0]
