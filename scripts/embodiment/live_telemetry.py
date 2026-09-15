@@ -1,32 +1,109 @@
 #!/usr/bin/env python3
-"""Low-overhead live telemetry for external Flyppy viewers.
+"""Low-overhead live telemetry for detached Flyppy viewers.
 
-Training never waits for a viewer. The producer atomically replaces a few small
-JSON files under the experiment directory; any number of observers may poll
-those files independently. No renderer, browser, socket server, or viewer state
-is owned by the training process.
+Training never waits for a viewer and does not continuously write viewer state.
+Instead it owns a tiny local Unix datagram control socket. A detached viewer
+sends a short lease heartbeat while it is open; only then does training publish
+body/neural/status JSON under ``<experiment>/live``. Closing the viewer sends an
+explicit stop packet, and an abnormal viewer exit expires automatically after a
+short lease timeout.
+
+No renderer, browser, HTTP server, or viewer state is owned by training.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
+import socket
+import time
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 
 
+def viewer_control_socket_path(experiment_dir: Path) -> Path:
+    """Return a short stable local socket path shared by trainer and viewer."""
+
+    resolved = str(Path(experiment_dir).resolve()).encode("utf-8")
+    token = hashlib.sha256(resolved).hexdigest()[:20]
+    return Path("/tmp") / f"virtual-fly-viewer-{token}.sock"
+
+
 class LiveTelemetryPublisher:
-    def __init__(self, experiment_dir: Path, *, enabled: bool = True) -> None:
-        self.enabled = bool(enabled)
+    def __init__(
+        self,
+        experiment_dir: Path,
+        *,
+        enabled: bool = False,
+        on_demand: bool = True,
+        lease_timeout_s: float = 2.0,
+    ) -> None:
+        self.always_enabled = bool(enabled)
+        self.on_demand = bool(on_demand)
+        self.lease_timeout_s = float(lease_timeout_s)
+        if self.lease_timeout_s <= 0.0:
+            raise ValueError("lease_timeout_s must be positive")
+
         self.root = Path(experiment_dir) / "live"
-        if self.enabled:
-            self.root.mkdir(parents=True, exist_ok=True)
+        self.control_path = viewer_control_socket_path(experiment_dir)
+        self._last_request = float("-inf")
+        self._control: socket.socket | None = None
+
+        if self.on_demand:
+            try:
+                self.control_path.unlink(missing_ok=True)
+                control = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+                control.bind(str(self.control_path))
+                control.setblocking(False)
+                self._control = control
+            except OSError:
+                self.close()
+                raise
+
+    def close(self) -> None:
+        control = self._control
+        self._control = None
+        if control is not None:
+            try:
+                control.close()
+            except OSError:
+                pass
+        if self.on_demand:
+            try:
+                self.control_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def requested(self) -> bool:
+        """Poll viewer control packets and return whether observation is active."""
+
+        if self.always_enabled:
+            return True
+        control = self._control
+        if control is None:
+            return False
+
+        while True:
+            try:
+                packet = control.recv(64)
+            except BlockingIOError:
+                break
+            except OSError:
+                break
+            if packet.startswith(b"watch"):
+                self._last_request = time.monotonic()
+            elif packet.startswith(b"stop"):
+                self._last_request = float("-inf")
+
+        return (time.monotonic() - self._last_request) <= self.lease_timeout_s
 
     def _write(self, name: str, payload: Mapping[str, Any]) -> None:
-        if not self.enabled:
+        if not self.requested():
             return
+        self.root.mkdir(parents=True, exist_ok=True)
         target = self.root / name
         temp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
         temp.write_text(
