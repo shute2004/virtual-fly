@@ -62,7 +62,11 @@ run_population() {
     --body-motor-map "$BODY_MOTOR_MAP" \
     --output-dir "$out" \
     --max-control-steps "$MAX_STEPS" \
-    --checkpoint-every 999999
+    --checkpoint-every 999999 \
+    --curriculum-x-step-mm 0.000000001 \
+    --curriculum-failure-x-step-mm 0.000000001 \
+    --curriculum-z-step-mm 0.000000001 \
+    --curriculum-speed-step-mm-s 0.000000001
 }
 
 run_population 1
@@ -94,6 +98,7 @@ lines = [
     f"- population=2 elapsed: {float(p2['elapsed_seconds']):.3f} s",
     f"- population=2 mean staleness: {float(p2.get('mean_version_staleness', 0.0)):.3f}",
     f"- population=2 max staleness: {int(p2.get('max_version_staleness', 0))}",
+    "- benchmark curriculum drift: effectively frozen (1e-9 steps)",
     "- production checkpoint modified: false",
     "",
 ]
