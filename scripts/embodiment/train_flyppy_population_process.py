@@ -189,8 +189,11 @@ def main() -> int:
     start_episode = reference.infer_next_episode(trajectory_path) if checkpoint_exists else 0
     trajectory_mode = "a" if checkpoint_exists else "w"
     commit_mode = "a" if checkpoint_exists and commit_log_path.exists() else "w"
-    viewer_ids = reference.load_viewer_body_ids(args.viewer_graph) if args.telemetry else ()
-    publisher = LiveTelemetryPublisher(output, enabled=args.telemetry)
+    # Loading the small immutable viewer-ID list once has no per-step cost. The
+    # expensive viewer-specific neural reads and body snapshots remain gated by
+    # telemetry_active below.
+    viewer_ids = reference.load_viewer_body_ids(args.viewer_graph)
+    publisher = LiveTelemetryPublisher(output, enabled=bool(args.telemetry))
 
     workers = spawn_body_processes(
         population=args.population,
@@ -208,11 +211,12 @@ def main() -> int:
         raise RuntimeError(f"body workers disagree on control dt: {control_dts}")
     control_dt_s = float(workers[0].control_dt_s)
 
+    telemetry_mode = "always" if args.telemetry else "viewer-demand"
     print(
         "population_runtime=enabled population={} shared_weight=true weight_averaging=false "
         "environment=v3 motor_boundary=whole-body body_runtime=process telemetry={}".format(
             args.population,
-            args.telemetry,
+            telemetry_mode,
         )
     )
 
@@ -274,6 +278,11 @@ def main() -> int:
                             "process population trainer has no active slots before target completion"
                         )
 
+                    # Viewer demand is a separate runtime condition from the
+                    # --telemetry CLI override. With neither active, no viewer
+                    # neural reads, body snapshots, or telemetry writes occur.
+                    telemetry_active = bool(args.telemetry) or publisher.requested()
+
                     # Observe every active physical fly concurrently.
                     for slot in active_slots:
                         by_slot[slot.slot].request("observe")
@@ -287,7 +296,7 @@ def main() -> int:
                         retinal = observations[slot.slot]
                         slot.last_retinal = retinal
                         neural_sample = (
-                            args.telemetry
+                            telemetry_active
                             and slot.slot == args.telemetry_slot
                             and slot.control_steps % args.telemetry_stride == 0
                         )
@@ -409,7 +418,7 @@ def main() -> int:
                                 + "\n"
                             )
 
-                        if args.telemetry and slot.slot == args.telemetry_slot:
+                        if telemetry_active and slot.slot == args.telemetry_slot:
                             neural_sample = control_step % args.telemetry_stride == 0
                             body_sample = control_step % args.body_telemetry_stride == 0
                             body_spikes = slot.last_body_spikes or {}
