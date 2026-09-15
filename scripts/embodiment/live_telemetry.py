@@ -78,6 +78,17 @@ class LiveTelemetryPublisher:
         self.control_path = viewer_control_socket_path(experiment_dir)
         self._last_request = float("-inf")
         self._control: socket.socket | None = None
+        self._requested_last_poll = False
+        self._latest_status: dict[str, Any] | None = None
+
+        # Never let a new run inherit an old run's apparent live state. The
+        # detached renderer/browser will recreate these files only after a
+        # viewer lease becomes active.
+        for name in ("status.json", "body.json", "neural.json", "fly.png"):
+            try:
+                (self.root / name).unlink(missing_ok=True)
+            except OSError:
+                pass
 
         if self.on_demand:
             try:
@@ -113,32 +124,7 @@ class LiveTelemetryPublisher:
         except Exception:
             pass
 
-    def requested(self) -> bool:
-        """Poll viewer control packets and return whether observation is active."""
-
-        if self.always_enabled:
-            return True
-        control = self._control
-        if control is None:
-            return False
-
-        while True:
-            try:
-                packet = control.recv(64)
-            except BlockingIOError:
-                break
-            except OSError:
-                break
-            if packet.startswith(b"watch"):
-                self._last_request = time.monotonic()
-            elif packet.startswith(b"stop"):
-                self._last_request = float("-inf")
-
-        return (time.monotonic() - self._last_request) <= self.lease_timeout_s
-
-    def _write(self, name: str, payload: Mapping[str, Any]) -> None:
-        if not self.requested():
-            return
+    def _write_unchecked(self, name: str, payload: Mapping[str, Any]) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         target = self.root / name
         temp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
@@ -147,6 +133,42 @@ class LiveTelemetryPublisher:
             encoding="utf-8",
         )
         os.replace(temp, target)
+
+    def requested(self) -> bool:
+        """Poll viewer control packets and return whether observation is active."""
+
+        if self.always_enabled:
+            active = True
+        else:
+            control = self._control
+            if control is None:
+                active = False
+            else:
+                while True:
+                    try:
+                        packet = control.recv(64)
+                    except BlockingIOError:
+                        break
+                    except OSError:
+                        break
+                    if packet.startswith(b"watch"):
+                        self._last_request = time.monotonic()
+                    elif packet.startswith(b"stop"):
+                        self._last_request = float("-inf")
+                active = (time.monotonic() - self._last_request) <= self.lease_timeout_s
+
+        # publish_status() is normally called before a viewer exists. Cache that
+        # latest run state and materialize it immediately when a viewer joins so
+        # the browser does not block waiting for status.json.
+        if active and not self._requested_last_poll and self._latest_status is not None:
+            self._write_unchecked("status.json", self._latest_status)
+        self._requested_last_poll = active
+        return active
+
+    def _write(self, name: str, payload: Mapping[str, Any]) -> None:
+        if not self.requested():
+            return
+        self._write_unchecked(name, payload)
 
     def publish_status(
         self,
@@ -157,17 +179,16 @@ class LiveTelemetryPublisher:
         control_step: int | None,
         curriculum: Mapping[str, Any] | None = None,
     ) -> None:
-        self._write(
-            "status.json",
-            {
-                "schema_version": 1,
-                "running": bool(running),
-                "backend": str(backend),
-                "episode": episode,
-                "control_step": control_step,
-                "curriculum": dict(curriculum or {}),
-            },
-        )
+        payload = {
+            "schema_version": 1,
+            "running": bool(running),
+            "backend": str(backend),
+            "episode": episode,
+            "control_step": control_step,
+            "curriculum": dict(curriculum or {}),
+        }
+        self._latest_status = payload
+        self._write("status.json", payload)
 
     def publish_body_state(
         self,
