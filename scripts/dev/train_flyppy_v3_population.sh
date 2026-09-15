@@ -22,6 +22,14 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   exit 2
 }
 
+case "$POPULATION" in
+  1|2) ;;
+  *)
+    echo "shared-weight population prototype currently supports population=1 or 2; profile 2 slots before expanding further" >&2
+    exit 2
+    ;;
+esac
+
 if [ "${VF_SKIP_V3_FLIGHT_PREFLIGHT:-0}" != "1" ]; then
   bash scripts/dev/preflight_flyppy_v3.sh
 fi
@@ -86,10 +94,12 @@ VF_NEURAL_SYNAPSE_SCALE="$(uv run python -c 'import json,sys; print(json.load(op
 export VF_NEURAL_SYNAPSE_SCALE
 unset VF_COURSE_START_GATE || true
 
+cargo test -q -p vf-neural transaction::tests
 cargo check -q -p vf-runner --bin population_neural_bridge
 uv run python -m py_compile \
   scripts/embodiment/population_neural_bridge_client.py \
-  scripts/embodiment/train_flyppy_population.py
+  scripts/embodiment/train_flyppy_population.py \
+  scripts/analysis/export_flyppy_population_report.py
 
 TELEMETRY_ARGS=()
 if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
@@ -113,8 +123,10 @@ uv run python scripts/embodiment/train_flyppy_population.py \
   "$@"
 
 uv run python scripts/analysis/export_flyppy_report.py --summary "$EXPERIMENT/summary.json"
+uv run python scripts/analysis/export_flyppy_population_report.py --summary "$EXPERIMENT/summary.json"
 uv run python scripts/analysis/append_flyppy_run_history.py --summary "$EXPERIMENT/summary.json"
 
 printf 'report_md=reports/flyppy/latest.md\n'
+printf 'population_report=reports/flyppy/population_latest.md\n'
 printf 'report_csv=reports/flyppy/latest.csv\n'
 printf 'run_history=reports/flyppy/history.csv\n'
