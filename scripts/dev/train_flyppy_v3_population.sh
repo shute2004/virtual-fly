@@ -12,9 +12,10 @@ BODY_MOTOR_MAP="$SNAPSHOT/body-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPERIMENT="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v3}"
-# Do not auto-select N while the full-edge population runtime is being replaced
-# with a sparse/event-driven design.  Population=1 is the conservative default;
-# callers may still select an explicit diagnostic population in 1..32.
+# Population count and body-process count are independent.  The neural runtime
+# still exposes 32 logical slots; physical FlyBody instances are packed into at
+# most four MuJoCo owner processes by default.  Keep population explicit while
+# population-size auto-tuning is measured separately from the runtime cutover.
 POPULATION_REQUEST="${VF_FLYPPY_POPULATION:-1}"
 EPISODES="${VF_FLYPPY_EPISODES:-24}"
 
@@ -30,7 +31,7 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 }
 
 if [ "$POPULATION_REQUEST" = "auto" ]; then
-  echo "VF_FLYPPY_POPULATION=auto is disabled while the full-edge population runtime is being redesigned; choose an explicit diagnostic population only" >&2
+  echo "VF_FLYPPY_POPULATION=auto is not enabled yet; runtime packing is automatic, but logical population size still requires explicit calibration" >&2
   exit 2
 fi
 [[ "$POPULATION_REQUEST" =~ ^[1-9][0-9]*$ ]] || {
@@ -97,6 +98,10 @@ cargo check -q -p vf-runner --bin population_neural_bridge
 uv run python -m py_compile \
   scripts/embodiment/population_neural_bridge_client.py \
   scripts/embodiment/train_flyppy_population.py \
+  scripts/embodiment/train_flyppy_population_process.py \
+  scripts/embodiment/flyppy_packed_body_worker.py \
+  scripts/embodiment/flyppy_packed_slot_adapter.py \
+  scripts/embodiment/train_flyppy_population_packed.py \
   scripts/analysis/export_flyppy_population_report.py
 
 TELEMETRY_ARGS=()
@@ -104,10 +109,11 @@ if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
   TELEMETRY_ARGS+=(--telemetry)
 fi
 
-printf 'shared_weight_population=%s episodes=%s experiment=%s synapse_scale=%s legacy_full_edge_runtime=true\n' \
-  "$POPULATION" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE"
+BODY_PROCESS_REQUEST="${VF_FLYPPY_BODY_PROCESSES:-auto}"
+printf 'shared_weight_population=%s episodes=%s experiment=%s synapse_scale=%s body_runtime=packed body_processes=%s\n' \
+  "$POPULATION" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST"
 
-uv run python scripts/embodiment/train_flyppy_population.py \
+uv run python scripts/embodiment/train_flyppy_population_packed.py \
   --episodes "$EPISODES" \
   --population "$POPULATION" \
   --snapshot "$SNAPSHOT" \
