@@ -33,6 +33,7 @@ from virtual_fly.training.curriculum import (
     SpawnCondition,
     boundary_condition_for_attempt,
     current_adaptive_condition,
+    next_boundary_attempt_for_group,
     ensure_boundary_state,
     load_state as load_curriculum_state,
     record_adaptive_result,
@@ -287,19 +288,12 @@ def main() -> int:
                     if boundary is None:
                         condition = current_adaptive_condition(state)
                     else:
-                        payload = ensure_boundary_state(state, boundary)
-                        completed_attempts = {
-                            int(value)
-                            for value in payload.get("completed_attempt_indices", [])
-                        }
-                        attempt_index = next(
-                            (
-                                attempt
-                                for attempt in range(boundary.batch_size)
-                                if attempt not in completed_attempts
-                                and attempt not in boundary_issued_attempts
-                            ),
-                            None,
+                        attempt_index = next_boundary_attempt_for_group(
+                            state,
+                            boundary,
+                            group_index=slot.slot,
+                            group_count=args.population,
+                            issued_attempts=boundary_issued_attempts,
                         )
                         if attempt_index is None:
                             return False

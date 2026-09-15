@@ -8,6 +8,7 @@ from virtual_fly.training.curriculum import (
     SpawnCondition,
     boundary_condition_for_attempt,
     current_boundary_condition,
+    next_boundary_attempt_for_group,
     record_boundary_result,
 )
 
@@ -46,6 +47,8 @@ class BoundaryBandCurriculumTests(unittest.TestCase):
         band = state["boundary_band"]
         self.assertEqual(band["last_adjustment"], "hold")
         self.assertAlmostEqual(band["last_batch_success_rate"], 0.5)
+        self.assertEqual(state["boundary_batch_number"], 1)
+        self.assertIsNone(state["boundary_ease_level"])
 
     def test_async_launch_schedule_is_independent_of_completion_order(self) -> None:
         launched_state: dict[str, object] = {
@@ -92,6 +95,62 @@ class BoundaryBandCurriculumTests(unittest.TestCase):
         self.assertEqual(state_a["successful_first_gates"], state_b["successful_first_gates"])
         self.assertEqual(state_a["consecutive_failures"], 0)
         self.assertEqual(state_b["consecutive_failures"], 0)
+
+    def test_async_group_assignment_is_static_and_resume_safe(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        issued: set[int] = set()
+        assigned: dict[int, list[int]] = {group: [] for group in range(4)}
+        while len(issued) < 24:
+            progressed = False
+            for group in range(4):
+                attempt = next_boundary_attempt_for_group(
+                    state,
+                    config(),
+                    group_index=group,
+                    group_count=4,
+                    issued_attempts=issued,
+                )
+                if attempt is None:
+                    continue
+                self.assertEqual(attempt % 4, group)
+                issued.add(attempt)
+                assigned[group].append(attempt)
+                progressed = True
+            self.assertTrue(progressed)
+
+        self.assertEqual(sorted(issued), list(range(24)))
+        self.assertEqual(assigned[0], [0, 4, 8, 12, 16, 20])
+        self.assertEqual(assigned[1], [1, 5, 9, 13, 17, 21])
+        self.assertEqual(assigned[2], [2, 6, 10, 14, 18, 22])
+        self.assertEqual(assigned[3], [3, 7, 11, 15, 19, 23])
+
+        resumed: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        for attempt in range(8):
+            record_boundary_result(
+                resumed,
+                config(),
+                success=False,
+                attempt_index=attempt,
+                group=attempt % 4,
+            )
+        self.assertEqual(
+            [
+                next_boundary_attempt_for_group(
+                    resumed,
+                    config(),
+                    group_index=group,
+                    group_count=4,
+                )
+                for group in range(4)
+            ],
+            [8, 9, 10, 11],
+        )
 
     def test_boundary_attempt_index_must_stay_inside_current_batch(self) -> None:
         state: dict[str, object] = {

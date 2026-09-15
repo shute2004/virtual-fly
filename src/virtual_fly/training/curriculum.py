@@ -353,6 +353,41 @@ def boundary_condition_for_attempt(
     return condition, level
 
 
+def next_boundary_attempt_for_group(
+    state: MutableMapping[str, Any],
+    config: BoundaryBandConfig,
+    *,
+    group_index: int,
+    group_count: int,
+    issued_attempts: set[int] | frozenset[int] = frozenset(),
+) -> int | None:
+    """Return the next unconsumed attempt statically assigned to one async group.
+
+    Attempt ``i`` belongs to group ``i % group_count``.  This keeps the
+    condition-to-course-seed mapping independent of which asynchronous slot
+    finishes first.  ``issued_attempts`` covers in-flight episodes that have not
+    yet reached ``record_boundary_result``.
+    """
+
+    if group_count < 1:
+        raise ValueError("boundary group_count must be >= 1")
+    if group_index < 0 or group_index >= group_count:
+        raise ValueError(
+            f"boundary group_index must be in [0, {group_count - 1}], got {group_index}"
+        )
+    payload = ensure_boundary_state(state, config)
+    completed = {int(value) for value in payload.get("completed_attempt_indices", [])}
+    issued = {int(value) for value in issued_attempts}
+    return next(
+        (
+            attempt
+            for attempt in range(group_index, config.batch_size, group_count)
+            if attempt not in completed and attempt not in issued
+        ),
+        None,
+    )
+
+
 def current_boundary_condition(
     state: MutableMapping[str, Any], config: BoundaryBandConfig
 ) -> tuple[SpawnCondition, float]:
@@ -505,6 +540,8 @@ def record_boundary_result(
         payload["completed_attempt_indices"] = []
         payload["group_attempts"] = {}
         payload["group_successes"] = {}
+        state["boundary_batch_number"] = int(payload["batch_number"])
+        state["boundary_ease_level"] = None
         completed = {
             "successes": successes,
             "attempts": attempts,

@@ -67,9 +67,9 @@ curriculum stateは `completed_attempt_indices` を保持する。これによ�
 
 実測resume smokeでは、8 episode + 16 episodeの2runを跨いでattempt ID 0..23が重複なく1回ずつ消費された。
 
-## 5. condition setは固定、slotへの割当は非同期
+## 5. condition setとcourse seedへの割当を固定する
 
-batch開始時のhard/easy endpointと24個のease level集合は固定する。
+batch開始時のhard/easy endpointと24個のease level集合を固定する。
 
 24 episodeの既定分布は従来boundary-bandと同じ:
 
@@ -81,21 +81,36 @@ ease=0.75: 5
 ease=1.00: 4
 ```
 
-ただしattemptを特定slotへ固定はしない。空いたslotへ未消費attemptを渡す。
+さらに各attemptをphysical slot / course seedへ静的に割り当てる。
 
-理由はwall-clock throughputである。attemptを `attempt % slot` で固定したsmokeでは、短いepisodeのslotが担当分を早く使い切って待機し、約19.3 aggregate control steps/sまで低下した。非同期割当では同条件系のsmokeで約23.4 steps/sまで回復した。
+```text
+assigned_slot = attempt_index % population
+```
 
-shared-weight runtime自体もcommit順・stalenessを持つ非同期学習であるため、ここでは全実行順の決定論化ではなく、**batch中に難易度そのものを動かさないこと**を保証対象とする。
+population=4, batch=24なら各slotは6 episodeずつ担当する。
 
-## 6. fast-failing slotによる成功率バイアスへの対処
+```text
+slot 0: 0, 4, 8, 12, 16, 20
+slot 1: 1, 5, 9, 13, 17, 21
+slot 2: 2, 6, 10, 14, 18, 22
+slot 3: 3, 7, 11, 15, 19, 23
+```
+
+初期実装では空いたslotへ最小の未消費attemptを渡していた。この方式はwall-clockでは速い一方、短時間で失敗するcourse seedがbatch内のtraining experienceそのものを多数占有する。固定評価で「weightは大きく変わるが能力改善が安定しない」状態が確認されているため、Part4ではこの交絡を残さないことを優先する。
+
+固定割当smokeではaggregate throughputは約18.7〜19.3 steps/sで、動的割当の約23 steps/sより低かった。これは意図したtrade-offであり、まずseedごとの経験数を等しくした状態で学習成立性を判定する。
+
+shared-weight runtimeのcommit順・staleness自体は引き続き非同期である。固定するのは「どのcourse seedがどのbatch conditionを経験するか」であり、neural transactionのcommit順ではない。
+
+## 6. fast-failing slotによる成功率・経験数バイアスへの対処
 
 現在のphysical slotは `seed + slot_id` のFlyppy courseを持つ。
 
-実測するとseedごとのepisode長が大きく異なり、短時間でgate collisionするslotは24 episode中に多数のepisodeを消費する一方、長く飛ぶslotは1回程度しか完了しない場合がある。
+seedごとのepisode長は大きく異なる。動的割当では短時間でgate collisionするslotが多数episodeを消費し、長く飛ぶslotの経験数が少なくなるため、curriculum統計だけでなくshared CNSへ入るPAM/PPL経験数までseed依存に偏る。
 
-したがって単純なraw episode成功率だけでbandを更新すると、fast-failing course seedがcurriculumを支配する。
+固定割当により、population=4 / batch=24のproduction条件では各seedが6 episodeずつ経験する。これによりtraining experience自体のepisode数をseed間で揃える。
 
-production boundary-bandでは次を両方記録する。
+加えてproduction boundary-bandは次を両方記録する。
 
 ```text
 raw_success_rate
@@ -108,16 +123,18 @@ success_rate used for curriculum
     = group_success_rateをslot間で等重み平均
 ```
 
-smoke例:
+batch sizeがpopulationで割り切れる現在の既定条件では各slotのattempt数が等しいため、raw rateとequal-group meanは一致する。実際の固定割当resume smokeでは:
 
 ```text
-raw episode success: 2/24 = 0.083
-slot/course-seed equal-weight success: 0.500
+successes: 12/24
+raw_success_rate: 0.500
+equal-group success_rate: 0.500
+adjustment: hold
 ```
 
-rawだけなら`easier`になるが、seed等重みでは`hold`となった。
+となった。
 
-この変更はtraining experienceそのものを再重み付けしない。shared CNSへ入るPAM/PPLイベントは実際に起きたepisodeのままであり、変更するのは次batchのspawn難易度を決める統計だけである。
+batch sizeを将来変更してslotごとのattempt数が不均等になった場合にも、group等重み集計を維持することで特定course seedのepisode数だけがband更新を支配しない。
 
 ## 7. completion-order依存の除去範囲
 
@@ -145,6 +162,7 @@ boundary-bandでは以下を完了順に依存させない。
 - explicit attempt IDの範囲検証
 - duplicate attempt拒否
 - outcome完了順を逆転してもband結果が一致
+- attemptのstatic group割当とpartial resume後の次attempt選択
 - fast groupがepisode数だけでbatch判定を支配しないequal-group aggregation
 
 ### fresh 24-episode smoke
@@ -164,7 +182,11 @@ boundary-bandでは以下を完了順に依存させない。
 - global version 8からresume
 - 既完了attemptを再利用しない
 - 合計24 attemptが0..23を一度ずつ消費
-- 最後にbatchが正常完了
+- 全24件で `attempt_index % 4 == slot` を維持
+- slotごとの最終attempt集合が `0,4,...,20` / `1,5,...,21` / `2,6,...,22` / `3,7,...,23`
+- raw success 12/24 = 0.500
+- equal-group success rate = 0.500
+- 最後にbatchが正常完了し、`batch_number=1`, `attempts_in_batch=0`, `completed_attempt_indices=[]` へ遷移
 
 ## 9. 今後の評価
 
