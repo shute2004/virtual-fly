@@ -40,6 +40,7 @@ struct Params {
     modulator_scale: f32,
     _pad_f0: f32,
     _pad_f1: f32,
+    _pad_f2: f32,
 }
 
 struct Control {
@@ -118,9 +119,6 @@ fn neuron_step(
     let begin = topology[post];
     let end = topology[post + 1u];
 
-    // PlasticFastGraph preserves source incoming order. For a dopamine-capable
-    // post, every fast edge in this row corresponds one-for-one to the compact
-    // plastic cursor. This avoids an E-sized edge->plastic-index map.
     var plastic_cursor = topology[params.plastic_row_start + post];
     let plastic_end = topology[params.plastic_row_start + post + 1u];
 
