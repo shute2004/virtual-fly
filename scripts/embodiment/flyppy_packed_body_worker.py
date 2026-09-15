@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""Packed process-isolated Flyppy body workers.
+
+A small number of spawned processes each own several fully independent FlyBody
+slots.  Every MuJoCo model, eye renderer, retinal state, peripheral state, and
+course state remains slot-local.  Slots inside one worker are executed
+sequentially on that worker's main thread; different workers run concurrently.
+
+The parent owns the shared MaleCNS runtime.  The IPC boundary is unchanged:
+
+    child -> parent: retinal body currents
+    parent -> child: individual motor-neuron spikes
+
+This avoids one Python/MuJoCo process per fly while preserving the exact physical
+and learning semantics used by the one-process-per-fly runtime.
+"""
+
+from __future__ import annotations
+
+import multiprocessing as mp
+from pathlib import Path
+import traceback
+from types import SimpleNamespace
+from typing import Any, Iterable
+
+
+def assignments(population: int, process_count: int) -> list[tuple[int, ...]]:
+    if population < 1:
+        raise ValueError("population must be positive")
+    if process_count < 1:
+        raise ValueError("process_count must be positive")
+    actual = min(int(population), int(process_count))
+    groups: list[list[int]] = [[] for _ in range(actual)]
+    for slot_id in range(population):
+        groups[slot_id % actual].append(slot_id)
+    return [tuple(group) for group in groups if group]
+
+
+def default_process_count(population: int) -> int:
+    """Measured M1 packing rule: at most four MuJoCo owner processes."""
+
+    return min(int(population), 4)
+
+
+def _worker_args(config: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(
+        seed=int(config["seed"]),
+        gate_count=int(config["gate_count"]),
+        wing_motor_map=Path(config["wing_motor_map"]),
+        body_motor_map=Path(config["body_motor_map"]),
+        retinotopic_map=Path(config["retinotopic_map"]),
+        photoreceptor_current_gain=float(config["photoreceptor_current_gain"]),
+    )
+
+
+def _worker_main(
+    connection,
+    slot_ids: tuple[int, ...],
+    physics_steps: int,
+    config: dict[str, Any],
+) -> None:
+    try:
+        # MuJoCo/CGL objects are created and used only in this spawned process's
+        # main thread. This avoids the macOS native crash seen with renderer
+        # calls from Python worker threads.
+        import train_flyppy_population as trainer
+        from virtual_fly.training.curriculum import SpawnCondition
+
+        slots = {
+            slot_id: trainer.make_slot(_worker_args(config), slot_id)
+            for slot_id in slot_ids
+        }
+        body_ids = {
+            slot_id: tuple(int(value) for value in slot.periphery.body_ids)
+            for slot_id, slot in slots.items()
+        }
+        control_dts = {
+            round(float(slot.body.timestep) * int(physics_steps), 15)
+            for slot in slots.values()
+        }
+        if len(control_dts) != 1:
+            raise RuntimeError(f"packed slots disagree on control dt: {control_dts}")
+        control_dt_s = float(next(iter(control_dts)))
+
+        connection.send(
+            (
+                "ready",
+                {
+                    "slot_ids": slot_ids,
+                    "body_ids": body_ids,
+                    "control_dt_s": control_dt_s,
+                },
+            )
+        )
+
+        while True:
+            request = connection.recv()
+            command = str(request[0])
+            payload = request[1] if len(request) > 1 else None
+
+            if command == "reset":
+                replies: dict[int, dict[str, Any]] = {}
+                for raw_id, reset_payload in dict(payload).items():
+                    slot_id = int(raw_id)
+                    slot = slots[slot_id]
+                    condition = SpawnCondition(
+                        float(reset_payload["spawn_x_mm"]),
+                        float(reset_payload["spawn_z_mm"]),
+                        float(reset_payload["initial_speed_mm_s"]),
+                    )
+                    trainer.begin_episode(
+                        slot,
+                        episode=int(reset_payload["episode"]),
+                        source_weight_version=int(reset_payload["source_weight_version"]),
+                        condition=condition,
+                    )
+                    replies[slot_id] = {
+                        "position": tuple(
+                            float(value) for value in slot.body.thorax_position_mm()
+                        ),
+                        "velocity": tuple(
+                            float(value)
+                            for value in slot.body.root_linear_velocity_mm_s()
+                        ),
+                    }
+                connection.send(("ok", replies))
+                continue
+
+            if command == "observe":
+                replies: dict[int, dict[str, Any]] = {}
+                for slot_id in tuple(int(value) for value in payload):
+                    slot = slots[slot_id]
+                    retinal = slot.vision.encode(slot.body.sim, slot.body.fly)
+                    replies[slot_id] = {
+                        "body_currents": retinal.body_currents,
+                        "active_photoreceptors": int(retinal.active_photoreceptors),
+                        "active_columns": int(retinal.active_columns),
+                        "mean_current": float(retinal.mean_current),
+                        "max_current": float(retinal.max_current),
+                    }
+                connection.send(("ok", replies))
+                continue
+
+            if command == "act":
+                replies: dict[int, dict[str, Any]] = {}
+                for raw_id, active_values in dict(payload).items():
+                    slot_id = int(raw_id)
+                    slot = slots[slot_id]
+                    active_ids = frozenset(int(value) for value in active_values)
+                    spikes = {
+                        body_id: body_id in active_ids
+                        for body_id in body_ids[slot_id]
+                    }
+                    peripheral = slot.periphery.step(spikes, dt_s=control_dt_s)
+                    slot.body.step_muscles(peripheral, physics_steps=physics_steps)
+
+                    position = slot.body.thorax_position_mm()
+                    velocity = slot.body.root_linear_velocity_mm_s()
+                    physical_collision = slot.world.physical_collision_reason(slot.body.sim)
+                    event = slot.course.update(
+                        float(position[0]),
+                        float(position[2]),
+                        physical_collision_reason=physical_collision,
+                        analytic_body_collision=False,
+                    )
+                    replies[slot_id] = {
+                        "position": tuple(float(value) for value in position),
+                        "velocity": tuple(float(value) for value in velocity),
+                        "passed_gate": bool(event.passed_gate),
+                        "collision": bool(event.collision),
+                        "collision_reason": event.collision_reason,
+                        "finished": bool(event.finished),
+                        "next_gate": int(
+                            getattr(
+                                slot.course,
+                                "absolute_next_gate_index",
+                                slot.course.next_gate_index,
+                            )
+                        ),
+                        "motor": peripheral.compact_diagnostics(),
+                    }
+                connection.send(("ok", replies))
+                continue
+
+            if command == "snapshot":
+                replies: dict[int, dict[str, Any]] = {}
+                for slot_id in tuple(int(value) for value in payload):
+                    sim = slots[slot_id].body.sim
+                    replies[slot_id] = {
+                        "sim_time_s": float(sim.mj_data.time),
+                        "qpos": [float(value) for value in sim.mj_data.qpos],
+                        "qvel": [float(value) for value in sim.mj_data.qvel],
+                    }
+                connection.send(("ok", replies))
+                continue
+
+            if command == "close":
+                for slot in slots.values():
+                    slot.body.sim.eye_renderer = None
+                connection.send(("closed", None))
+                return
+
+            raise RuntimeError(f"unknown packed Flyppy worker command {command!r}")
+    except BaseException as exc:
+        try:
+            connection.send(
+                (
+                    "error",
+                    {
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
+            )
+        except BaseException:
+            pass
+    finally:
+        try:
+            connection.close()
+        except BaseException:
+            pass
+
+
+class PackedFlyppyBodyProcess:
+    def __init__(
+        self,
+        context: mp.context.BaseContext,
+        *,
+        slot_ids: tuple[int, ...],
+        physics_steps: int,
+        timeout_s: float,
+        config: dict[str, Any],
+    ) -> None:
+        parent, child = context.Pipe(duplex=True)
+        self.connection = parent
+        self.slot_ids = tuple(int(value) for value in slot_ids)
+        self.timeout_s = float(timeout_s)
+        self.process = context.Process(
+            target=_worker_main,
+            args=(child, self.slot_ids, physics_steps, dict(config)),
+            name="flyppy-packed-" + "-".join(str(value) for value in self.slot_ids),
+        )
+        self.process.start()
+        child.close()
+        status, payload = self._recv("startup")
+        if status != "ready":
+            raise RuntimeError(
+                f"packed worker {self.slot_ids} failed startup: {status}: {payload}"
+            )
+        self.body_ids = {
+            int(key): tuple(int(value) for value in values)
+            for key, values in payload["body_ids"].items()
+        }
+        self.control_dt_s = float(payload["control_dt_s"])
+
+    def _recv(self, phase: str):
+        if not self.connection.poll(self.timeout_s):
+            exitcode = self.process.exitcode
+            if exitcode is not None:
+                raise RuntimeError(
+                    f"packed worker {self.slot_ids} died during {phase}; exitcode={exitcode}"
+                )
+            self.process.terminate()
+            self.process.join(timeout=5.0)
+            raise RuntimeError(
+                f"packed worker {self.slot_ids} timed out during {phase} "
+                f"after {self.timeout_s:.1f}s"
+            )
+        try:
+            return self.connection.recv()
+        except (EOFError, ConnectionResetError, BrokenPipeError) as exc:
+            self.process.join(timeout=1.0)
+            raise RuntimeError(
+                f"packed worker {self.slot_ids} native process ended during {phase}; "
+                f"exitcode={self.process.exitcode}"
+            ) from exc
+
+    def request(self, command: str, payload=None) -> None:
+        if not self.process.is_alive():
+            raise RuntimeError(
+                f"packed worker {self.slot_ids} is not alive; "
+                f"exitcode={self.process.exitcode}"
+            )
+        self.connection.send((command,) if payload is None else (command, payload))
+
+    def receive(self, phase: str):
+        status, payload = self._recv(phase)
+        if status == "error":
+            raise RuntimeError(f"packed worker {self.slot_ids} error: {payload}")
+        if status not in {"ok", "closed"}:
+            raise RuntimeError(
+                f"packed worker {self.slot_ids} unexpected response {status!r}"
+            )
+        return payload
+
+    def call(self, command: str, payload=None):
+        self.request(command, payload)
+        return self.receive(command)
+
+    def close(self) -> None:
+        if self.process.is_alive():
+            try:
+                self.request("close")
+                self.receive("close")
+            except Exception:
+                self.process.terminate()
+        self.process.join(timeout=5.0)
+        if self.process.is_alive():
+            self.process.kill()
+            self.process.join(timeout=2.0)
+        try:
+            self.connection.close()
+        except Exception:
+            pass
+
+
+def spawn_packed_body_processes(
+    *,
+    population: int,
+    process_count: int | None,
+    physics_steps: int,
+    timeout_s: float,
+    config: dict[str, Any],
+) -> tuple[list[PackedFlyppyBodyProcess], dict[int, PackedFlyppyBodyProcess]]:
+    count = default_process_count(population) if process_count is None else int(process_count)
+    context = mp.get_context("spawn")
+    workers = [
+        PackedFlyppyBodyProcess(
+            context,
+            slot_ids=group,
+            physics_steps=physics_steps,
+            timeout_s=timeout_s,
+            config=config,
+        )
+        for group in assignments(population, count)
+    ]
+    slot_to_worker = {
+        slot_id: worker
+        for worker in workers
+        for slot_id in worker.slot_ids
+    }
+    return workers, slot_to_worker
+
+
+def active_by_worker(
+    workers: Iterable[PackedFlyppyBodyProcess],
+    active_slot_ids: Iterable[int],
+) -> dict[PackedFlyppyBodyProcess, tuple[int, ...]]:
+    active = frozenset(int(value) for value in active_slot_ids)
+    return {
+        worker: tuple(slot_id for slot_id in worker.slot_ids if slot_id in active)
+        for worker in workers
+    }
