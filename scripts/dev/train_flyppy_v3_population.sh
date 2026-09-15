@@ -141,27 +141,27 @@ uv run python -m py_compile \
   scripts/embodiment/train_flyppy_population_packed.py \
   scripts/analysis/export_flyppy_population_report.py
 
-TELEMETRY_ARGS=()
-if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
-  TELEMETRY_ARGS+=(--telemetry)
-fi
-
 BODY_PROCESS_REQUEST="${VF_FLYPPY_BODY_PROCESSES:-auto}"
 printf 'shared_weight_population=%s population_request=%s episodes=%s experiment=%s synapse_scale=%s body_runtime=packed body_processes=%s vision=%s rays_per_ommatidium=%s framebuffer=%s\n' \
   "$POPULATION" "$POPULATION_REQUEST" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST" "$VISION_MODE" "$OMMATIDIA_RAYS" "$([ "$VISION_MODE" = "raster" ] && printf true || printf false)"
 
-uv run python scripts/embodiment/train_flyppy_population_packed.py \
-  --episodes "$EPISODES" \
-  --population "$POPULATION" \
-  --snapshot "$SNAPSHOT" \
-  --groups "$GROUPS" \
-  --retinotopic-map "$RETINOTOPIC_MAP" \
-  --wing-motor-map "$WING_MOTOR_MAP" \
-  --body-motor-map "$BODY_MOTOR_MAP" \
-  --viewer-graph "$VIEWER_GRAPH" \
-  --output-dir "$EXPERIMENT" \
-  "${TELEMETRY_ARGS[@]}" \
-  "$@"
+TRAIN_ARGS=(
+  uv run python scripts/embodiment/train_flyppy_population_packed.py
+  --episodes "$EPISODES"
+  --population "$POPULATION"
+  --snapshot "$SNAPSHOT"
+  --groups "$GROUPS"
+  --retinotopic-map "$RETINOTOPIC_MAP"
+  --wing-motor-map "$WING_MOTOR_MAP"
+  --body-motor-map "$BODY_MOTOR_MAP"
+  --viewer-graph "$VIEWER_GRAPH"
+  --output-dir "$EXPERIMENT"
+)
+if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
+  TRAIN_ARGS+=(--telemetry)
+fi
+TRAIN_ARGS+=("$@")
+"${TRAIN_ARGS[@]}"
 
 uv run python scripts/analysis/export_flyppy_report.py --summary "$EXPERIMENT/summary.json"
 uv run python scripts/analysis/export_flyppy_population_report.py --summary "$EXPERIMENT/summary.json"
