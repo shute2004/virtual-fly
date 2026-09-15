@@ -18,7 +18,6 @@ if [ "$#" -gt 0 ]; then
 fi
 
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
-command -v python3 >/dev/null 2>&1 || { echo 'python3 is required' >&2; exit 127; }
 
 [ -f "$GROUPS" ] || { echo "missing $GROUPS; run training/bootstrap first" >&2; exit 2; }
 [ -f "$WING_MOTOR_MAP" ] || { echo "missing $WING_MOTOR_MAP; run training/bootstrap first" >&2; exit 2; }
@@ -40,14 +39,15 @@ if [ "$VIEWER_SCHEMA" != "$EXPECTED_VIEWER_GRAPH_SCHEMA" ]; then
     --output "$VIEWER_GRAPH"
 fi
 
-python3 -m py_compile \
+uv run python -m py_compile \
+  scripts/embodiment/live_telemetry.py \
   scripts/embodiment/live_viewer_server.py \
   scripts/embodiment/live_body_viewer.py
 
 URL="http://127.0.0.1:${PORT}/visualization/live-neural-viewer.html?experiment=${EXPERIMENT}"
 LOG="/tmp/virtual-fly-live-viewer-${PORT}.log"
 
-python3 scripts/embodiment/live_viewer_server.py \
+uv run python scripts/embodiment/live_viewer_server.py \
   --port "$PORT" \
   --bind 127.0.0.1 \
   --root "$ROOT" \
