@@ -2,11 +2,10 @@
 """Low-overhead live telemetry for detached Flyppy viewers.
 
 Training never waits for a viewer and does not continuously write viewer state.
-Instead it owns a tiny local Unix datagram control socket. A detached viewer
-sends a short lease heartbeat while it is open; only then does training publish
-body/neural/status JSON under ``<experiment>/live``. Closing the viewer sends an
-explicit stop packet, and an abnormal viewer exit expires automatically after a
-short lease timeout.
+Instead it owns a tiny local Unix stream listener. A detached viewer connects to
+that socket while it is open; only then does training publish body/neural/status
+JSON under ``<experiment>/live``. Closing or crashing the viewer closes the
+stream and disables telemetry automatically.
 
 No renderer, browser, HTTP server, or viewer state is owned by training.
 """
@@ -18,7 +17,6 @@ import json
 import os
 from pathlib import Path
 import socket
-import time
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -33,22 +31,19 @@ def viewer_control_socket_path(experiment_dir: Path) -> Path:
 
 
 class ViewerDemandSwitch:
-    """Bool-like trainer switch driven by a detached viewer lease.
-
-    Before the publisher is bound this is truthy only so the trainer can preload
-    the immutable viewer-graph body-ID list once. No snapshot or telemetry work
-    happens at that stage. After binding, every boolean check reflects the live
-    viewer lease (or an explicit always-on telemetry request).
-    """
+    """Bool-like trainer switch driven by a detached viewer connection."""
 
     def __init__(self, *, always: bool = False) -> None:
         self.always = bool(always)
         self._publisher: LiveTelemetryPublisher | None = None
 
-    def bind(self, publisher: LiveTelemetryPublisher) -> None:
+    def bind(self, publisher: "LiveTelemetryPublisher") -> None:
         self._publisher = publisher
 
     def __bool__(self) -> bool:
+        # Before publisher construction this is intentionally true once so the
+        # trainer can preload the immutable viewer graph. After binding, every
+        # boolean check reflects the live viewer connection.
         if self._publisher is None:
             return True
         return self.always or self._publisher.requested()
@@ -66,24 +61,22 @@ class LiveTelemetryPublisher:
         on_demand: bool = True,
         lease_timeout_s: float = 2.0,
     ) -> None:
+        # lease_timeout_s remains accepted for API compatibility with older
+        # probes/callers. Stream lifetime now defines the lease directly.
+        del lease_timeout_s
         switch = enabled if isinstance(enabled, ViewerDemandSwitch) else None
         self.always_enabled = switch.always if switch is not None else bool(enabled)
         self.enabled = self.always_enabled
         self.on_demand = bool(on_demand)
-        self.lease_timeout_s = float(lease_timeout_s)
-        if self.lease_timeout_s <= 0.0:
-            raise ValueError("lease_timeout_s must be positive")
 
         self.root = Path(experiment_dir) / "live"
         self.control_path = viewer_control_socket_path(experiment_dir)
-        self._last_request = float("-inf")
-        self._control: socket.socket | None = None
+        self._listener: socket.socket | None = None
+        self._clients: list[socket.socket] = []
         self._requested_last_poll = False
         self._latest_status: dict[str, Any] | None = None
 
-        # Never let a new run inherit an old run's apparent live state. The
-        # detached renderer/browser will recreate these files only after a
-        # viewer lease becomes active.
+        # A new run must never inherit an old run's apparent live state.
         for name in ("status.json", "body.json", "neural.json", "fly.png"):
             try:
                 (self.root / name).unlink(missing_ok=True)
@@ -93,10 +86,11 @@ class LiveTelemetryPublisher:
         if self.on_demand:
             try:
                 self.control_path.unlink(missing_ok=True)
-                control = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-                control.bind(str(self.control_path))
-                control.setblocking(False)
-                self._control = control
+                listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                listener.bind(str(self.control_path))
+                listener.listen(8)
+                listener.setblocking(False)
+                self._listener = listener
             except OSError:
                 self.close()
                 raise
@@ -105,11 +99,18 @@ class LiveTelemetryPublisher:
             switch.bind(self)
 
     def close(self) -> None:
-        control = self._control
-        self._control = None
-        if control is not None:
+        for client in self._clients:
             try:
-                control.close()
+                client.close()
+            except OSError:
+                pass
+        self._clients.clear()
+
+        listener = self._listener
+        self._listener = None
+        if listener is not None:
+            try:
+                listener.close()
             except OSError:
                 pass
         if self.on_demand:
@@ -134,32 +135,58 @@ class LiveTelemetryPublisher:
         )
         os.replace(temp, target)
 
+    def _accept_clients(self) -> None:
+        listener = self._listener
+        if listener is None:
+            return
+        while True:
+            try:
+                client, _ = listener.accept()
+            except BlockingIOError:
+                break
+            except OSError:
+                break
+            client.setblocking(False)
+            self._clients.append(client)
+
+    def _prune_clients(self) -> None:
+        alive: list[socket.socket] = []
+        for client in self._clients:
+            keep = True
+            while True:
+                try:
+                    packet = client.recv(256)
+                except BlockingIOError:
+                    break
+                except OSError:
+                    keep = False
+                    break
+                if not packet:
+                    keep = False
+                    break
+                # Payload content is intentionally irrelevant. Receiving bytes
+                # merely proves the stream is still connected.
+            if keep:
+                alive.append(client)
+            else:
+                try:
+                    client.close()
+                except OSError:
+                    pass
+        self._clients = alive
+
     def requested(self) -> bool:
-        """Poll viewer control packets and return whether observation is active."""
+        """Return whether at least one detached viewer is currently connected."""
 
         if self.always_enabled:
             active = True
         else:
-            control = self._control
-            if control is None:
-                active = False
-            else:
-                while True:
-                    try:
-                        packet = control.recv(64)
-                    except BlockingIOError:
-                        break
-                    except OSError:
-                        break
-                    if packet.startswith(b"watch"):
-                        self._last_request = time.monotonic()
-                    elif packet.startswith(b"stop"):
-                        self._last_request = float("-inf")
-                active = (time.monotonic() - self._last_request) <= self.lease_timeout_s
+            self._accept_clients()
+            self._prune_clients()
+            active = bool(self._clients)
 
-        # publish_status() is normally called before a viewer exists. Cache that
-        # latest run state and materialize it immediately when a viewer joins so
-        # the browser does not block waiting for status.json.
+        # publish_status() is normally called before a viewer exists. Materialize
+        # the cached status immediately when the first viewer connects.
         if active and not self._requested_last_poll and self._latest_status is not None:
             self._write_unchecked("status.json", self._latest_status)
         self._requested_last_poll = active
@@ -207,8 +234,6 @@ class LiveTelemetryPublisher:
         motor: Mapping[str, Any],
         retinal: Mapping[str, Any],
     ) -> None:
-        """Publish a body snapshot without requiring the MuJoCo object in-process."""
-
         self._write(
             "body.json",
             {
