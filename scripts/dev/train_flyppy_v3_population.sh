@@ -12,8 +12,9 @@ BODY_MOTOR_MAP="$SNAPSHOT/body-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPERIMENT="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v3}"
-POPULATION="${VF_FLYPPY_POPULATION:-2}"
+POPULATION_REQUEST="${VF_FLYPPY_POPULATION:-auto}"
 EPISODES="${VF_FLYPPY_EPISODES:-24}"
+CAPACITY_JSON="$ROOT/artifacts/profiles/flyppy-population-capacity/latest.json"
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -21,14 +22,21 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   echo "MaleCNS snapshot not found at $SNAPSHOT; run scripts/dev/bootstrap.sh first" >&2
   exit 2
 }
+[[ "$EPISODES" =~ ^[1-9][0-9]*$ ]] || {
+  echo "VF_FLYPPY_EPISODES must be a positive integer" >&2
+  exit 2
+}
 
-case "$POPULATION" in
-  1|2) ;;
-  *)
-    echo "shared-weight population prototype currently supports population=1 or 2; profile 2 slots before expanding further" >&2
+if [ "$POPULATION_REQUEST" != "auto" ]; then
+  [[ "$POPULATION_REQUEST" =~ ^[1-9][0-9]*$ ]] || {
+    echo "VF_FLYPPY_POPULATION must be 'auto' or an integer in 1..32" >&2
     exit 2
-    ;;
-esac
+  }
+  if [ "$POPULATION_REQUEST" -gt 32 ]; then
+    echo "VF_FLYPPY_POPULATION=$POPULATION_REQUEST exceeds the GPU runtime 32-slot active-mask limit" >&2
+    exit 2
+  fi
+fi
 
 if [ "${VF_SKIP_V3_FLIGHT_PREFLIGHT:-0}" != "1" ]; then
   bash scripts/dev/preflight_flyppy_v3.sh
@@ -84,7 +92,22 @@ cargo check -q -p vf-runner --bin population_neural_bridge
 uv run python -m py_compile \
   scripts/embodiment/population_neural_bridge_client.py \
   scripts/embodiment/train_flyppy_population.py \
+  scripts/analysis/find_flyppy_population_capacity.py \
   scripts/analysis/export_flyppy_population_report.py
+
+if [ "$POPULATION_REQUEST" = "auto" ]; then
+  uv run python scripts/analysis/find_flyppy_population_capacity.py \
+    --experiment "$EXPERIMENT" \
+    --snapshot "$SNAPSHOT"
+  POPULATION="$(uv run python -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["max_supported_population"]))' "$CAPACITY_JSON")"
+  if [ "$POPULATION" -gt "$EPISODES" ]; then
+    POPULATION="$EPISODES"
+  fi
+  printf 'population_auto_selected=%s capacity=%s episodes=%s\n' \
+    "$POPULATION" "$(uv run python -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["max_supported_population"]))' "$CAPACITY_JSON")" "$EPISODES"
+else
+  POPULATION="$POPULATION_REQUEST"
+fi
 
 TELEMETRY_ARGS=()
 if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
@@ -111,6 +134,7 @@ uv run python scripts/analysis/export_flyppy_report.py --summary "$EXPERIMENT/su
 uv run python scripts/analysis/export_flyppy_population_report.py --summary "$EXPERIMENT/summary.json"
 uv run python scripts/analysis/append_flyppy_run_history.py --summary "$EXPERIMENT/summary.json"
 
+printf 'population_capacity_report=reports/flyppy/population_capacity.md\n'
 printf 'report_md=reports/flyppy/latest.md\n'
 printf 'population_report=reports/flyppy/population_latest.md\n'
 printf 'report_csv=reports/flyppy/latest.csv\n'
