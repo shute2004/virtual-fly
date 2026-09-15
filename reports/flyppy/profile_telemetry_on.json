@@ -1,0 +1,189 @@
+{
+  "schema_version": 2,
+  "backend": "gpu:Apple M1 (Metal)",
+  "neurons": 166700,
+  "edges": 25582938,
+  "warmup_control_steps": 32,
+  "measured_control_steps": 256,
+  "measured_wall_seconds": 20.140258624916896,
+  "control_steps_per_second": 12.710859615441324,
+  "telemetry": "on",
+  "neural_telemetry_stride": 10,
+  "body_telemetry_stride": 1,
+  "trajectory_stride": 10,
+  "spawn_x_mm": 1.336500000000001,
+  "spawn_z_mm": 9.98233224757348,
+  "initial_speed_mm_s": 362.5,
+  "mean_retinal_stimulus_pairs": 2535.61328125,
+  "mean_motor_read_ids": 539.30859375,
+  "reinforcement_events": 5,
+  "episode_resets": 5,
+  "timing": {
+    "bridge_request:reset_dynamics": {
+      "calls": 5,
+      "total_s": 0.0046423752792179585,
+      "mean_ms": 0.9284750558435917,
+      "p50_ms": 0.9347079321742058,
+      "p95_ms": 1.0362090542912483,
+      "max_ms": 1.0362090542912483
+    },
+    "bridge_request:step": {
+      "calls": 261,
+      "total_s": 10.019029453163967,
+      "mean_ms": 38.38708602744815,
+      "p50_ms": 36.55791678465903,
+      "p95_ms": 39.60370901040733,
+      "max_ms": 146.75941714085639
+    },
+    "collision_query": {
+      "calls": 256,
+      "total_s": 0.0014963338617235422,
+      "mean_ms": 0.005845054147357587,
+      "p50_ms": 0.0024170149117708206,
+      "p95_ms": 0.0033748801797628403,
+      "max_ms": 0.7969171274453402
+    },
+    "control_step_total": {
+      "calls": 256,
+      "total_s": 20.129990000277758,
+      "mean_ms": 78.63277343858499,
+      "p50_ms": 75.31200058292598,
+      "p95_ms": 83.0771669279784,
+      "max_ms": 203.84308299981058
+    },
+    "course_update": {
+      "calls": 256,
+      "total_s": 0.0017757858149707317,
+      "mean_ms": 0.006936663339729421,
+      "p50_ms": 0.006875023245811462,
+      "p95_ms": 0.009041978046298027,
+      "max_ms": 0.019083963707089424
+    },
+    "episode_reset_total": {
+      "calls": 5,
+      "total_s": 0.009924165671691298,
+      "mean_ms": 1.9848331343382597,
+      "p50_ms": 1.9404168706387281,
+      "p95_ms": 2.139582997187972,
+      "max_ms": 2.139582997187972
+    },
+    "neural_control_total": {
+      "calls": 256,
+      "total_s": 10.575520670507103,
+      "mean_ms": 41.31062761916837,
+      "p50_ms": 38.88456302229315,
+      "p95_ms": 42.49062482267618,
+      "max_ms": 148.70137488469481
+    },
+    "periphery": {
+      "calls": 256,
+      "total_s": 0.08451546216383576,
+      "mean_ms": 0.33013852407748345,
+      "p50_ms": 0.3303124103695154,
+      "p95_ms": 0.41816686280071735,
+      "max_ms": 0.6131250411272049
+    },
+    "physics": {
+      "calls": 256,
+      "total_s": 1.8996793732512742,
+      "mean_ms": 7.42062255176279,
+      "p50_ms": 4.642916959710419,
+      "p95_ms": 14.744916930794716,
+      "max_ms": 16.440415987744927
+    },
+    "reinforcement_total": {
+      "calls": 5,
+      "total_s": 0.003995209001004696,
+      "mean_ms": 0.7990418002009392,
+      "p50_ms": 0.8259171154350042,
+      "p95_ms": 0.8652920369058847,
+      "max_ms": 0.8652920369058847
+    },
+    "retina_eye_readout": {
+      "calls": 256,
+      "total_s": 5.119104333687574,
+      "mean_ms": 19.996501303467085,
+      "p50_ms": 19.659604062326252,
+      "p95_ms": 23.579916916787624,
+      "max_ms": 55.54908304475248
+    },
+    "retina_total": {
+      "calls": 256,
+      "total_s": 7.260422301944345,
+      "mean_ms": 28.3610246169701,
+      "p50_ms": 28.501770924776793,
+      "p95_ms": 34.1933339368552,
+      "max_ms": 61.69533287175
+    },
+    "telemetry_body": {
+      "calls": 256,
+      "total_s": 0.2179998755455017,
+      "mean_ms": 0.851562013849616,
+      "p50_ms": 0.8457496296614408,
+      "p95_ms": 1.1939171236008406,
+      "max_ms": 3.2734167762100697
+    },
+    "telemetry_neural": {
+      "calls": 34,
+      "total_s": 0.023443670012056828,
+      "mean_ms": 0.6895197062369655,
+      "p50_ms": 0.5612289533019066,
+      "p95_ms": 1.2037910055369139,
+      "max_ms": 2.877916907891631
+    },
+    "telemetry_status": {
+      "calls": 5,
+      "total_s": 0.0015357930678874254,
+      "mean_ms": 0.3071586135774851,
+      "p50_ms": 0.3215419128537178,
+      "p95_ms": 0.3670831210911274,
+      "max_ms": 0.3670831210911274
+    },
+    "trajectory_flush": {
+      "calls": 5,
+      "total_s": 2.584420144557953e-06,
+      "mean_ms": 0.0005168840289115906,
+      "p50_ms": 0.0004591420292854309,
+      "p95_ms": 0.000791158527135849,
+      "max_ms": 0.000791158527135849
+    },
+    "trajectory_serialize": {
+      "calls": 34,
+      "total_s": 0.0014750403352081776,
+      "mean_ms": 0.043383539270828754,
+      "p50_ms": 0.04147901199758053,
+      "p95_ms": 0.06295903585851192,
+      "max_ms": 0.06458302959799767
+    },
+    "trajectory_write": {
+      "calls": 34,
+      "total_s": 0.0003754994831979275,
+      "mean_ms": 0.011044102446997868,
+      "p50_ms": 0.0009374925866723061,
+      "p95_ms": 0.05550007335841656,
+      "max_ms": 0.1337910071015358
+    }
+  },
+  "protocol": {
+    "request_bytes_total": 19312268,
+    "response_bytes_total": 4568533,
+    "request_bytes_by_type": {
+      "step": 19312138,
+      "reset_dynamics": 130
+    },
+    "request_count_by_type": {
+      "step": 261,
+      "reset_dynamics": 5
+    }
+  },
+  "checkpoint": "/Users/<local-user>/desktop/virtual-fly/artifacts/experiments/flyppy-v3/checkpoint",
+  "checkpoint_modified": false,
+  "paths": {
+    "snapshot": "/Users/<local-user>/desktop/virtual-fly/artifacts/malecns-v1.0",
+    "groups": "/Users/<local-user>/Desktop/virtual-fly/20",
+    "retinotopic_map": "/Users/<local-user>/desktop/virtual-fly/artifacts/malecns-v1.0/retinotopic-vision-v1.json",
+    "wing_motor_map": "/Users/<local-user>/desktop/virtual-fly/artifacts/malecns-v1.0/wing-motor-neurons-v0.json",
+    "body_motor_map": "/Users/<local-user>/desktop/virtual-fly/artifacts/malecns-v1.0/body-motor-neurons-v0.json",
+    "viewer_graph": "/Users/<local-user>/desktop/virtual-fly/artifacts/embodiment/neural-viewer-graph-v1.json"
+  }
+}

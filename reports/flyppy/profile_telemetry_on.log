@@ -1,24 +1,7 @@
 === Flyppy P0 telemetry=on ===
 using production VF_NEURAL_SYNAPSE_SCALE=0.005
-Error: read group config from artifacts/malecns-v1.0/embodiment-groups-v0.json
+profile_report=/Users/<local-user>/Desktop/virtual-fly/reports/flyppy/profile_telemetry_on.md
+profile_json=/Users/<local-user>/Desktop/virtual-fly/reports/flyppy/profile_telemetry_on.json
 
-Caused by:
-    No such file or directory (os error 2)
-Traceback (most recent call last):
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/analysis/profile_flyppy_v3_p0.py", line 149, in <module>
-    if __name__=="__main__": raise SystemExit(main())
-                                              ~~~~^^
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/analysis/profile_flyppy_v3_p0.py", line 102, in main
-    with Bridge(snapshot=Path("artifacts/malecns-v1.0"),groups=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"),backend="gpu",prof=prof) as brain:
-         ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/analysis/profile_flyppy_v3_p0.py", line 43, in __init__
-    super().__init__(*a,**kw)
-    ~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/embodiment/neural_bridge_client.py", line 57, in __init__
-    self.ready = self._read_response()
-                 ~~~~~~~~~~~~~~~~~~~^^
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/analysis/profile_flyppy_v3_p0.py", line 46, in _read_response
-    if not line: raise NeuralBridgeError(f"neural bridge exited unexpectedly (code={self._proc.poll()})")
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-neural_bridge_client.NeuralBridgeError: neural bridge exited unexpectedly (code=1)
-exit_status=1
+P0 profile complete. Commit the requested report/log outputs from the A/B launcher.
+exit_status=0
