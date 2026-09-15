@@ -2,6 +2,7 @@ mod cpu;
 pub mod model;
 mod snapshot;
 mod state;
+mod transaction;
 
 #[cfg(feature = "gpu")]
 #[path = "gpu30.rs"]
@@ -14,3 +15,4 @@ pub use model::{
 };
 pub use snapshot::{ConnectomeSnapshot, EdgeInput, SnapshotManifest};
 pub use state::NeuralState;
+pub use transaction::{PlasticityTransaction, PlasticityTransform};
