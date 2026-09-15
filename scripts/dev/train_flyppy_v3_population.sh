@@ -20,6 +20,32 @@ POPULATION_REQUEST="${VF_FLYPPY_POPULATION:-auto}"
 AUTO_POPULATION="${VF_FLYPPY_AUTO_POPULATION:-4}"
 EPISODES="${VF_FLYPPY_EPISODES:-24}"
 
+# Production vision is image-free by default.  K=13 was selected against the
+# uncompressed direct receptive-field integral: light r=0.9990 and MaleCNS
+# current r=0.9904, while the end-to-end learning benchmark ran 1.606x faster
+# than the raster path on the M1 reference machine.  Raster remains available as
+# an explicit compatibility/debug oracle.
+VISION_MODE="${VF_FLYPPY_VISION_MODE:-direct-ray}"
+OMMATIDIA_RAYS="${VF_FLYPPY_OMMATIDIA_RAYS:-13}"
+case "$VISION_MODE" in
+  direct|ray|direct-ray)
+    VISION_MODE="direct-ray"
+    ;;
+  raster|flygym|reference)
+    VISION_MODE="raster"
+    ;;
+  *)
+    echo "VF_FLYPPY_VISION_MODE must be raster or direct-ray" >&2
+    exit 2
+    ;;
+esac
+[[ "$OMMATIDIA_RAYS" =~ ^[1-9][0-9]*$ ]] || {
+  echo "VF_FLYPPY_OMMATIDIA_RAYS must be a positive integer" >&2
+  exit 2
+}
+export VF_FLYPPY_VISION_MODE="$VISION_MODE"
+export VF_FLYPPY_OMMATIDIA_RAYS="$OMMATIDIA_RAYS"
+
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 [ -f "$SNAPSHOT/manifest.json" ] || {
@@ -108,6 +134,8 @@ uv run python -m py_compile \
   scripts/embodiment/population_neural_bridge_client.py \
   scripts/embodiment/train_flyppy_population.py \
   scripts/embodiment/train_flyppy_population_process.py \
+  scripts/embodiment/direct_ommatidia_sensor.py \
+  scripts/embodiment/direct_ommatidia_sensor_bodyexclude.py \
   scripts/embodiment/flyppy_packed_body_worker.py \
   scripts/embodiment/flyppy_packed_slot_adapter.py \
   scripts/embodiment/train_flyppy_population_packed.py \
@@ -119,8 +147,8 @@ if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
 fi
 
 BODY_PROCESS_REQUEST="${VF_FLYPPY_BODY_PROCESSES:-auto}"
-printf 'shared_weight_population=%s population_request=%s episodes=%s experiment=%s synapse_scale=%s body_runtime=packed body_processes=%s\n' \
-  "$POPULATION" "$POPULATION_REQUEST" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST"
+printf 'shared_weight_population=%s population_request=%s episodes=%s experiment=%s synapse_scale=%s body_runtime=packed body_processes=%s vision=%s rays_per_ommatidium=%s framebuffer=%s\n' \
+  "$POPULATION" "$POPULATION_REQUEST" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST" "$VISION_MODE" "$OMMATIDIA_RAYS" "$([ "$VISION_MODE" = "raster" ] && printf true || printf false)"
 
 uv run python scripts/embodiment/train_flyppy_population_packed.py \
   --episodes "$EPISODES" \
