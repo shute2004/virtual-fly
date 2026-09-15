@@ -8,7 +8,12 @@ mod transaction;
 #[path = "gpu30.rs"]
 pub mod gpu;
 
+// The population runtime intentionally owns several GPU buffers only to keep
+// resources referenced by bind groups alive for the lifetime of the runtime.
+// Rust therefore sees those lifetime-anchor fields as unread even though they
+// are required by the WGPU resource graph.
 #[cfg(feature = "gpu")]
+#[allow(dead_code)]
 pub mod gpu_population;
 
 pub use cpu::{CpuRuntime, StepSummary};
