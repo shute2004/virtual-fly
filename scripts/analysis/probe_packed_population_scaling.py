@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Measure packed Flyppy body-worker scaling across larger populations.
 
-This meta-probe reuses probe_body_worker_packing.py so every population is tested
-with the real shared GPU MaleCNS and the same checkpoint/outcome parity contract.
-It intentionally varies population independently from body-process count; the
-result is used to choose a packing rule rather than baking in the N=8 optimum.
+This probe reuses the tested run_case implementation from
+probe_body_worker_packing.py directly.  The older CLI remains an N=8 historical
+probe; importing its functions lets this scaling probe vary population without
+changing that historical contract.
 
-Production checkpoint/state are never modified.
+Every case uses the real shared GPU MaleCNS runtime and the same checkpoint /
+outcome parity contract. Production checkpoint/state are never modified.
 """
 
 from __future__ import annotations
@@ -14,24 +15,24 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import json
+import multiprocessing as mp
+import os
 from pathlib import Path
-import re
-import subprocess
+import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+ANALYSIS = ROOT / "scripts" / "analysis"
+EMBODIMENT = ROOT / "scripts" / "embodiment"
+for path in (ANALYSIS, EMBODIMENT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
 DEFAULT_PRODUCTION = Path("artifacts/experiments/flyppy-v3")
 DEFAULT_TEMP = Path("artifacts/profiles/flyppy-packed-population-scaling")
 DEFAULT_REPORT = Path("reports/flyppy/packed_population_scaling.md")
-PACKING_PROBE = ROOT / "scripts/analysis/probe_body_worker_packing.py"
-
-ROW_RE = re.compile(
-    r"^\|\s*(?P<processes>\d+)\s*\|\s*(?P<flies>[0-9.]+)\s*\|\s*"
-    r"(?P<steps>\d+)\s*\|\s*(?P<sps>[0-9.]+)\s*\|\s*"
-    r"(?P<observe>[0-9.]+)\s*\|\s*(?P<cns>[0-9.]+)\s*\|\s*"
-    r"(?P<act>[0-9.]+)\s*\|\s*(?P<startup>[0-9.]+)\s*\|\s*"
-    r"(?P<equal>True|False)\s*\|$"
-)
+DEFAULT_CALIBRATION = Path("artifacts/embodiment/neural-runtime-calibration-v1.json")
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,6 +42,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     p.add_argument("--populations", type=int, nargs="+", default=(4, 8, 12))
     p.add_argument("--max-control-steps", type=int, default=48)
+    p.add_argument("--physics-steps", type=int, default=10)
+    p.add_argument("--timeout-s", type=float, default=120.0)
     return p.parse_args()
 
 
@@ -59,29 +62,24 @@ def tree_digest(path: Path) -> str:
     return h.hexdigest()
 
 
-def parse_child_report(path: Path) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        match = ROW_RE.match(line.strip())
-        if not match:
-            continue
-        values = match.groupdict()
-        rows.append(
-            {
-                "processes": int(values["processes"]),
-                "flies_per_process": float(values["flies"]),
-                "steps": int(values["steps"]),
-                "sps": float(values["sps"]),
-                "observe_s": float(values["observe"]),
-                "cns_s": float(values["cns"]),
-                "act_s": float(values["act"]),
-                "startup_s": float(values["startup"]),
-                "equal": values["equal"] == "True",
-            }
-        )
-    if not rows:
-        raise RuntimeError(f"no packing rows parsed from {path}")
-    return rows
+def process_counts_for(population: int) -> tuple[int, ...]:
+    """Test physically distinct packings only.
+
+    The historical packing probe used requested counts 1/2/4/8.  Here we keep
+    that ladder but never request more owner processes than flies, avoiding the
+    old N=4 alias where requested 8 silently collapsed to four non-empty groups.
+    """
+
+    return tuple(value for value in (1, 2, 4, 8) if value <= population)
+
+
+def comparable_key(row: dict[str, object]) -> tuple[object, ...]:
+    return (
+        row["checkpoint_digest"],
+        row["results"],
+        row["final_version"],
+        row["neural_step"],
+    )
 
 
 def main() -> int:
@@ -90,74 +88,103 @@ def main() -> int:
     temp = absolute(args.temp)
     report = absolute(args.report)
     populations = tuple(dict.fromkeys(int(v) for v in args.populations))
+
     if any(v < 1 or v > 32 for v in populations):
         raise SystemExit("populations must be in 1..32")
-    if args.max_control_steps < 1:
-        raise SystemExit("--max-control-steps must be >= 1")
-    required = [production / "checkpoint/manifest.json", PACKING_PROBE]
+    if args.max_control_steps < 1 or args.physics_steps < 1:
+        raise SystemExit("step counts must be positive")
+    if args.timeout_s <= 0.0:
+        raise SystemExit("--timeout-s must be positive")
+
+    required = [
+        production / "checkpoint/manifest.json",
+        production / "curriculum-state.json",
+        ROOT / DEFAULT_CALIBRATION,
+        ANALYSIS / "probe_body_worker_packing.py",
+    ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise SystemExit("missing packed scaling inputs:\n  " + "\n  ".join(missing))
 
-    temp.mkdir(parents=True, exist_ok=True)
+    # Importing does not execute the N=8-only CLI main().  We deliberately reuse
+    # the already parity-tested worker/run_case implementation underneath it.
+    import probe_body_worker_packing as packing
+    from flyppy_course import FlyppyCourse
+    from virtual_fly.training.curriculum import (
+        SpawnCondition,
+        current_adaptive_condition,
+        load_state,
+    )
+
+    calibration = json.loads((ROOT / DEFAULT_CALIBRATION).read_text(encoding="utf-8"))
+    os.environ["VF_NEURAL_SYNAPSE_SCALE"] = str(float(calibration["synapse_scale"]))
+
+    population_state_path = production / "population-state.json"
+    population_state = (
+        json.loads(population_state_path.read_text(encoding="utf-8"))
+        if population_state_path.exists()
+        else {}
+    )
+    initial_global_version = int(population_state.get("global_weight_version", 0))
+
+    course = FlyppyCourse(seed=0, gate_count=6, environment_version="v3")
+    first_gate = course.gates[0]
+    state = load_state(
+        production / "curriculum-state.json",
+        start=SpawnCondition(8.91, float(first_gate.center_z_mm), 400.0),
+        target=SpawnCondition(0.0, 8.91, 300.0),
+        checkpoint_exists=True,
+    )
+    condition = current_adaptive_condition(state)
+
     before = tree_digest(production / "checkpoint")
+    if temp.exists():
+        shutil.rmtree(temp)
+    temp.mkdir(parents=True)
+
     all_rows: list[dict[str, object]] = []
-    child_pass = True
+    parity_ok = True
 
     for population in populations:
-        child_report = temp / f"packing-n{population}.md"
-        child_temp = temp / f"n{population}"
-        command = [
-            sys.executable,
-            str(PACKING_PROBE),
-            "--production",
-            str(production),
-            "--temp",
-            str(child_temp),
-            "--report",
-            str(child_report),
-            "--population",
-            str(population),
-            "--max-control-steps",
-            str(args.max_control_steps),
-        ]
-        completed = subprocess.run(
-            command,
-            cwd=ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
-        if completed.returncode != 0:
-            tail = "\n".join(completed.stdout.splitlines()[-120:])
-            raise RuntimeError(f"packing probe N={population} failed:\n{tail}")
-        text = child_report.read_text(encoding="utf-8")
-        child_pass = child_pass and "- overall: PASS" in text
-        rows = parse_child_report(child_report)
-        # With process_count > population, the underlying assignment collapses
-        # empty groups. Keep only physically distinct process counts here.
-        seen_actual: set[int] = set()
-        for row in rows:
-            requested = int(row["processes"])
-            actual = min(requested, population)
-            if actual in seen_actual:
-                continue
-            seen_actual.add(actual)
-            row = dict(row)
-            row["population"] = population
-            row["actual_processes"] = actual
-            all_rows.append(row)
+        reference_key: tuple[object, ...] | None = None
+        for process_count in process_counts_for(population):
+            row = packing.run_case(
+                out=temp / f"n{population}-p{process_count}",
+                production=production,
+                population=population,
+                process_count=process_count,
+                max_steps=args.max_control_steps,
+                physics_steps=args.physics_steps,
+                timeout_s=args.timeout_s,
+                condition=condition,
+                initial_global_version=initial_global_version,
+            )
+            key = comparable_key(row)
+            if reference_key is None:
+                reference_key = key
+                equal = True
+            else:
+                equal = key == reference_key
+            parity_ok = parity_ok and equal
+
+            record = dict(row)
+            record["population"] = population
+            record["processes"] = process_count
+            record["flies_per_process"] = population / process_count
+            record["equal"] = equal
+            all_rows.append(record)
 
     after = tree_digest(production / "checkpoint")
     production_unchanged = before == after
-    parity_ok = all(bool(row["equal"]) for row in all_rows)
-    overall = child_pass and parity_ok and production_unchanged
+    overall = parity_ok and production_unchanged
 
     best_by_population: dict[int, dict[str, object]] = {}
     for population in populations:
         candidates = [row for row in all_rows if int(row["population"]) == population]
-        best_by_population[population] = max(candidates, key=lambda row: float(row["sps"]))
+        best_by_population[population] = max(
+            candidates,
+            key=lambda row: float(row["steady_steps_s"]),
+        )
 
     lines = [
         "# Flyppy packed population scaling probe",
@@ -175,24 +202,26 @@ def main() -> int:
     ]
     for row in all_rows:
         lines.append(
-            "| {population} | {actual_processes} | {flies_per_process:.2f} | {sps:.3f} | "
-            "{observe_s:.3f} | {cns_s:.3f} | {act_s:.3f} | {startup_s:.3f} | {equal} |".format(**row)
+            "| {population} | {processes} | {flies_per_process:.2f} | {steady_steps_s:.3f} | "
+            "{observe_s:.3f} | {cns_s:.3f} | {act_s:.3f} | {startup_s:.3f} | {equal} |".format(
+                **row
+            )
         )
 
     lines.extend(["", "## Best packing by population", ""])
     for population in populations:
         row = best_by_population[population]
         lines.append(
-            f"- N={population}: {int(row['actual_processes'])} body processes, "
+            f"- N={population}: {int(row['processes'])} body processes, "
             f"{float(row['flies_per_process']):.2f} flies/process, "
-            f"{float(row['sps']):.3f} steps/s"
+            f"{float(row['steady_steps_s']):.3f} steps/s"
         )
 
     if len(populations) >= 2:
         first = populations[0]
         last = populations[-1]
-        first_sps = float(best_by_population[first]["sps"])
-        last_sps = float(best_by_population[last]["sps"])
+        first_sps = float(best_by_population[first]["steady_steps_s"])
+        last_sps = float(best_by_population[last]["steady_steps_s"])
         lines.extend(
             [
                 "",
@@ -206,7 +235,8 @@ def main() -> int:
         [
             "",
             "Interpretation: population count and body-process count are independent variables. "
-            "The goal is to identify a packing rule that preserves independent flies while avoiding excessive MuJoCo/Python/renderer process duplication.",
+            "Each population is compared only across physically distinct process counts, and "
+            "checkpoint/outcome parity is required within that population.",
             "",
         ]
     )
@@ -217,11 +247,12 @@ def main() -> int:
     for population in populations:
         row = best_by_population[population]
         print(
-            f"N{population}_best_processes={int(row['actual_processes'])} "
-            f"N{population}_best_steps_per_second={float(row['sps']):.6f}"
+            f"N{population}_best_processes={int(row['processes'])} "
+            f"N{population}_best_steps_per_second={float(row['steady_steps_s']):.6f}"
         )
     return 0 if overall else 1
 
 
 if __name__ == "__main__":
+    mp.freeze_support()
     raise SystemExit(main())
