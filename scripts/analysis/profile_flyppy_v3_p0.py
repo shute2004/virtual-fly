@@ -64,11 +64,21 @@ class Bridge(NeuralBridgeClient):
 def args():
     p=argparse.ArgumentParser()
     p.add_argument("--experiment",type=Path,default=Path("artifacts/experiments/flyppy-v3"))
+    p.add_argument("--snapshot",type=Path,default=Path("artifacts/malecns-v1.0"))
+    p.add_argument("--groups",type=Path,default=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"))
+    p.add_argument("--retinotopic-map",type=Path,default=Path("artifacts/malecns-v1.0/retinotopic-vision-v1.json"))
+    p.add_argument("--wing-motor-map",type=Path,default=Path("artifacts/malecns-v1.0/wing-motor-neurons-v0.json"))
+    p.add_argument("--body-motor-map",type=Path,default=Path("artifacts/malecns-v1.0/body-motor-neurons-v0.json"))
+    p.add_argument("--viewer-graph",type=Path,default=Path("artifacts/embodiment/neural-viewer-graph-v1.json"))
     p.add_argument("--warmup",type=int,default=32); p.add_argument("--steps",type=int,default=256)
     p.add_argument("--telemetry",choices=("on","off"),default="on")
     p.add_argument("--report",type=Path,default=Path("reports/flyppy/profile_latest.md"))
     p.add_argument("--json",type=Path,default=Path("reports/flyppy/profile_latest.json"))
     return p.parse_args()
+
+
+def absolute(path: Path) -> Path:
+    return path if path.is_absolute() else (ROOT / path).resolve()
 
 
 def viewer_ids(path):
@@ -77,19 +87,24 @@ def viewer_ids(path):
 
 
 def main():
-    a=args(); checkpoint=a.experiment/"checkpoint"
-    if not (checkpoint/"manifest.json").exists(): raise SystemExit(f"checkpoint missing: {checkpoint}")
-    st=json.loads((a.experiment/"curriculum-state.json").read_text())
+    a=args()
+    experiment=absolute(a.experiment); snapshot=absolute(a.snapshot); groups=absolute(a.groups)
+    retinotopic_map=absolute(a.retinotopic_map); wing_motor_map=absolute(a.wing_motor_map)
+    body_motor_map=absolute(a.body_motor_map); viewer_graph=absolute(a.viewer_graph)
+    checkpoint=experiment/"checkpoint"
+    required=[snapshot/"manifest.json", groups, retinotopic_map, wing_motor_map, body_motor_map, checkpoint/"manifest.json", experiment/"curriculum-state.json"]
+    missing=[str(path) for path in required if not path.exists()]
+    if missing: raise SystemExit("missing required profile inputs:\n  " + "\n  ".join(missing))
+    st=json.loads((experiment/"curriculum-state.json").read_text())
     spawn=(float(st["spawn_x_mm"]),float(st["spawn_z_mm"]),float(st["initial_speed_mm_s"]))
     course=FlyppyCourse(seed=0,gate_count=6,environment_version="v3"); world=FlyppyWorld(course)
     body=FlyBodyV3NeuromuscularAdapter(tethered=False,world=world,
         spawn_position_mm=(0,0,FLYPPY_GEOMETRY_V3.corridor_high_z_mm/2),
         initial_linear_velocity_mm_s=(0,0,0),enable_vision=True,enable_observer_camera=False)
-    per=WholeBodyPeriphery(Path("artifacts/malecns-v1.0/wing-motor-neurons-v0.json"),
-                            Path("artifacts/malecns-v1.0/body-motor-neurons-v0.json"))
-    vis=MaleCNSRetina(Path("artifacts/malecns-v1.0/retinotopic-vision-v1.json"),current_gain=2.0)
-    ids=viewer_ids(Path("artifacts/embodiment/neural-viewer-graph-v1.json")) if a.telemetry=="on" else ()
-    pub=LiveTelemetryPublisher(Path("artifacts/profiles/flyppy-v3-p0"),enabled=a.telemetry=="on")
+    per=WholeBodyPeriphery(wing_motor_map, body_motor_map)
+    vis=MaleCNSRetina(retinotopic_map,current_gain=2.0)
+    ids=viewer_ids(viewer_graph) if a.telemetry=="on" else ()
+    pub=LiveTelemetryPublisher(ROOT/"artifacts/profiles/flyppy-v3-p0",enabled=a.telemetry=="on")
     prof=Prof(); orig_eye=vis._eye_readouts
     vis._eye_readouts=lambda sim,fly: prof.call("retina_eye_readout",orig_eye,sim,fly)
     measured=0; ep=0; step_ep=0; pairs=reads=reinf=resets=0
@@ -99,7 +114,7 @@ def main():
         course.reset(); body.reset(); body.set_root_position_mm((spawn[0],0,spawn[1])); body.set_root_linear_velocity_mm_s((spawn[2],0,0))
         per.reset(); vis.reset_adaptation(); brain.reset_dynamics(); ep+=1; step_ep=0
 
-    with Bridge(snapshot=Path("artifacts/malecns-v1.0"),groups=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"),backend="gpu",prof=prof) as brain:
+    with Bridge(snapshot=snapshot,groups=groups,backend="gpu",repo_root=ROOT,prof=prof) as brain:
         brain.ping(); brain.load_checkpoint(checkpoint); reset(brain)
         warm_left=a.warmup; wall_start=None
         while measured<a.steps:
@@ -136,14 +151,16 @@ def main():
                  "warmup_control_steps":a.warmup,"measured_control_steps":measured,"measured_wall_seconds":wall,"control_steps_per_second":measured/wall,
                  "telemetry":a.telemetry,"spawn_x_mm":spawn[0],"spawn_z_mm":spawn[1],"initial_speed_mm_s":spawn[2],"mean_retinal_stimulus_pairs":pairs/measured,
                  "mean_motor_read_ids":reads/measured,"reinforcement_events":reinf,"episode_resets":resets,"timing":prof.summary(),"protocol":brain.protocol(),
-                 "checkpoint":str(checkpoint),"checkpoint_modified":False}
-    a.json.parent.mkdir(parents=True,exist_ok=True); a.report.parent.mkdir(parents=True,exist_ok=True)
-    a.json.write_text(json.dumps(payload,indent=2)+"\n")
+                 "checkpoint":str(checkpoint),"checkpoint_modified":False,
+                 "paths":{"snapshot":str(snapshot),"groups":str(groups),"retinotopic_map":str(retinotopic_map),"wing_motor_map":str(wing_motor_map),"body_motor_map":str(body_motor_map)}}
+    json_path=absolute(a.json); report_path=absolute(a.report)
+    json_path.parent.mkdir(parents=True,exist_ok=True); report_path.parent.mkdir(parents=True,exist_ok=True)
+    json_path.write_text(json.dumps(payload,indent=2)+"\n")
     rows=sorted(payload["timing"].items(),key=lambda kv:kv[1]["total_s"],reverse=True)
     md=["# Flyppy P0 performance profile","",f"- backend: `{payload['backend']}`",f"- measured control steps: {measured}",f"- telemetry: `{a.telemetry}`",f"- wall-clock: {wall:.6f} s",f"- control steps/s: {measured/wall:.3f}",f"- neurons / edges: {payload['neurons']} / {payload['edges']}","","| stage | calls | total s | mean ms | p50 ms | p95 ms |","|---|---:|---:|---:|---:|---:|"]
     for k,v in rows: md.append(f"| {k} | {v['calls']} | {v['total_s']:.6f} | {v['mean_ms']:.3f} | {v['p50_ms']:.3f} | {v['p95_ms']:.3f} |")
     md += ["","## Protocol", "",f"- request bytes: {payload['protocol']['request_bytes_total']}",f"- response bytes: {payload['protocol']['response_bytes_total']}",f"- request count: `{json.dumps(payload['protocol']['request_count_by_type'],sort_keys=True)}`",f"- mean retinal stimulus pairs/step: {payload['mean_retinal_stimulus_pairs']:.1f}",f"- mean read_body IDs/step: {payload['mean_motor_read_ids']:.1f}","","`retina_total` includes `retina_eye_readout`. `bridge_request:step` overlaps conceptually with neural/reinforcement totals. This pass intentionally does not alter the training checkpoint or learning semantics. GPU kernel-level splitting is deferred until this wall-clock profile shows the neural bridge is dominant.",""]
-    a.report.write_text("\n".join(md)); print(f"profile_report={a.report}"); print(f"profile_json={a.json}")
+    report_path.write_text("\n".join(md)); print(f"profile_report={report_path}"); print(f"profile_json={json_path}")
     return 0
 
 if __name__=="__main__": raise SystemExit(main())
