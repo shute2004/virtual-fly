@@ -21,6 +21,8 @@ from flyppy_packed_slot_adapter import spawn_packed_slot_handles
 
 
 _RESOLVED_BODY_PROCESSES: int | None = None
+_RESOLVED_VISION_MODE: str | None = None
+_RESOLVED_VISION_RAYS: int | None = None
 
 
 def _spawn_packed(
@@ -30,7 +32,7 @@ def _spawn_packed(
     timeout_s: float,
     config: dict[str, object],
 ):
-    global _RESOLVED_BODY_PROCESSES
+    global _RESOLVED_BODY_PROCESSES, _RESOLVED_VISION_MODE, _RESOLVED_VISION_RAYS
 
     raw = os.environ.get("VF_FLYPPY_BODY_PROCESSES", "").strip()
     process_count = None
@@ -50,12 +52,20 @@ def _spawn_packed(
         config=config,
     )
     _RESOLVED_BODY_PROCESSES = int(resolved)
+    if handles:
+        worker = handles[0]._worker
+        _RESOLVED_VISION_MODE = str(getattr(worker, "vision_mode", "raster"))
+        _RESOLVED_VISION_RAYS = int(
+            getattr(worker, "vision_rays_per_ommatidium", 7)
+        )
     print(
         "body_process_packing=packed population={} body_processes={} "
-        "flies_per_process_mean={:.3f}".format(
+        "flies_per_process_mean={:.3f} vision_mode={} rays_per_ommatidium={}".format(
             population,
             resolved,
             population / resolved,
+            _RESOLVED_VISION_MODE,
+            _RESOLVED_VISION_RAYS,
         )
     )
     return handles
@@ -80,6 +90,11 @@ def _patch_runtime_metadata(output_dir: Path) -> None:
         "body_runtime": "packed-process",
         "body_processes": int(_RESOLVED_BODY_PROCESSES),
         "body_process_rule": "min(population, 4) unless VF_FLYPPY_BODY_PROCESSES overrides it",
+        "vision_runtime": _RESOLVED_VISION_MODE or "raster",
+        "vision_rays_per_ommatidium": (
+            int(_RESOLVED_VISION_RAYS) if _RESOLVED_VISION_RAYS is not None else None
+        ),
+        "vision_framebuffer": (_RESOLVED_VISION_MODE or "raster") == "raster",
     }
     for name in ("summary.json", "population-state.json"):
         path = output_dir / name
