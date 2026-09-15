@@ -9,7 +9,6 @@ import shutil
 import socket
 import sys
 import tempfile
-import time
 
 ROOT = Path(__file__).resolve().parents[2]
 EMBODIMENT = ROOT / "scripts" / "embodiment"
@@ -19,9 +18,11 @@ if str(EMBODIMENT) not in sys.path:
 from live_telemetry import LiveTelemetryPublisher, ViewerDemandSwitch
 
 
-def send(target: Path, payload: bytes) -> None:
-    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
-        client.sendto(payload, str(target))
+def connect(target: Path) -> socket.socket:
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    client.connect(str(target))
+    client.sendall(b"watch\n")
+    return client
 
 
 def main() -> int:
@@ -33,19 +34,14 @@ def main() -> int:
         (live / name).write_bytes(b"stale")
 
     switch = ViewerDemandSwitch(always=False)
-    publisher = LiveTelemetryPublisher(
-        experiment,
-        enabled=switch,
-        lease_timeout_s=0.25,
-    )
+    publisher = LiveTelemetryPublisher(experiment, enabled=switch)
+    client: socket.socket | None = None
     try:
         stale_outputs_cleared = all(
             not (live / name).exists()
             for name in ("status.json", "body.json", "neural.json", "fly.png")
         )
 
-        # Before publisher binding the switch is used once only to preload the
-        # immutable viewer graph. After binding it must be inactive with no viewer.
         inactive_initial = not bool(switch)
         publisher.publish_status(
             running=True,
@@ -56,10 +52,8 @@ def main() -> int:
         status = live / "status.json"
         no_write_without_viewer = not status.exists()
 
-        # Exact mid-run join contract: the status published before the viewer
-        # existed must materialize immediately when the watch lease arrives.
-        send(publisher.control_path, b"watch")
-        active_after_watch = bool(switch)
+        client = connect(publisher.control_path)
+        active_after_connect = bool(switch)
         cached_status_materialized = status.exists()
         cached_payload = json.loads(status.read_text(encoding="utf-8")) if status.exists() else {}
         cached_control_step_is_1 = cached_payload.get("control_step") == 1
@@ -70,40 +64,36 @@ def main() -> int:
             episode=1,
             control_step=2,
         )
-        wrote_with_viewer = status.exists()
         watched_payload = json.loads(status.read_text(encoding="utf-8")) if status.exists() else {}
         watched_control_step_is_2 = watched_payload.get("control_step") == 2
 
         before_mtime = status.stat().st_mtime_ns if status.exists() else -1
-        send(publisher.control_path, b"stop")
-        inactive_after_stop = not bool(switch)
+        client.close()
+        client = None
+        inactive_after_disconnect = not bool(switch)
         publisher.publish_status(
             running=True,
             backend="probe",
             episode=1,
             control_step=3,
         )
-        after_stop_mtime = status.stat().st_mtime_ns if status.exists() else -2
-        no_write_after_stop = before_mtime == after_stop_mtime
+        after_disconnect_mtime = status.stat().st_mtime_ns if status.exists() else -2
+        no_write_after_disconnect = before_mtime == after_disconnect_mtime
 
-        send(publisher.control_path, b"watch")
-        active_for_timeout = bool(switch)
-        time.sleep(0.35)
-        inactive_after_timeout = not bool(switch)
+        client = connect(publisher.control_path)
+        active_after_reconnect = bool(switch)
 
         checks = {
             "stale_outputs_cleared": stale_outputs_cleared,
             "inactive_initial": inactive_initial,
             "no_write_without_viewer": no_write_without_viewer,
-            "active_after_watch": active_after_watch,
+            "active_after_connect": active_after_connect,
             "cached_status_materialized": cached_status_materialized,
             "cached_control_step_is_1": cached_control_step_is_1,
-            "wrote_with_viewer": wrote_with_viewer,
             "watched_control_step_is_2": watched_control_step_is_2,
-            "inactive_after_stop": inactive_after_stop,
-            "no_write_after_stop": no_write_after_stop,
-            "active_for_timeout": active_for_timeout,
-            "inactive_after_timeout": inactive_after_timeout,
+            "inactive_after_disconnect": inactive_after_disconnect,
+            "no_write_after_disconnect": no_write_after_disconnect,
+            "active_after_reconnect": active_after_reconnect,
         }
         passed = all(checks.values())
         for name, value in checks.items():
@@ -111,6 +101,11 @@ def main() -> int:
         print(f"viewer_demand_telemetry={'PASS' if passed else 'FAIL'}")
         return 0 if passed else 1
     finally:
+        if client is not None:
+            try:
+                client.close()
+            except OSError:
+                pass
         publisher.close()
         shutil.rmtree(temp_root, ignore_errors=True)
 
