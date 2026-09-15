@@ -63,6 +63,13 @@ const ACTIVITY_SILENT: u32 = 0u;
 const ACTIVITY_DEPOLARIZING: u32 = 1u;
 const ACTIVITY_HYPERPOLARIZING: u32 = 2u;
 
+// Refractory counts are tiny. Population training keeps two private structural
+// flags in the unused high bits so PlasticFastGraph membership can be cached
+// per slot without another storage buffer/binding.
+const REFRACTORY_VALUE_MASK: u32 = 0x3fffffffu;
+const STRUCTURAL_READY_BIT: u32 = 0x40000000u;
+const PLASTIC_CAPABLE_BIT: u32 = 0x80000000u;
+
 fn linear_invocation_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
     return gid.x + gid.y * num_workgroups.x * WORKGROUP_SIZE;
 }
@@ -109,6 +116,11 @@ fn neuron_step(
     let neuron_base = slot * params.neuron_count;
     let edge_base = slot * params.edge_count;
 
+    let old = neurons[flat];
+    let old_refractory = old.refractory & REFRACTORY_VALUE_MASK;
+    let structural_ready = (old.refractory & STRUCTURAL_READY_BIT) != 0u;
+    var plastic_capable = (old.refractory & PLASTIC_CAPABLE_BIT) != 0u;
+
     var fast_current = external_current[flat];
     var dopaminergic_input = 0.0;
     let begin = topology[post];
@@ -118,6 +130,9 @@ fn neuron_step(
     loop {
         if edge >= end { break; }
         let pre = topology[params.pre_start + edge];
+        if !structural_ready && is_dopamine(pre) {
+            plastic_capable = true;
+        }
         let event_sign = activity_sign(spikes_prev[neuron_base + pre]);
         if event_sign != 0.0 {
             if is_dopamine(pre) {
@@ -132,27 +147,31 @@ fn neuron_step(
         edge += 1u;
     }
 
-    let old = neurons[flat];
+    var structural_flags = STRUCTURAL_READY_BIT;
+    if plastic_capable {
+        structural_flags = structural_flags | PLASTIC_CAPABLE_BIT;
+    }
+
     var next = old;
     next.modulation = old.modulation * params.modulator_decay + dopaminergic_input;
 
-    if old.refractory > 0u {
+    if old_refractory > 0u {
         next.membrane = params.reset;
-        next.refractory = old.refractory - 1u;
+        next.refractory = structural_flags | (old_refractory - 1u);
         spikes_next[flat] = ACTIVITY_SILENT;
     } else {
         let membrane = old.membrane * params.membrane_decay + fast_current;
         if membrane >= params.threshold {
             next.membrane = params.reset;
-            next.refractory = params.refractory_steps;
+            next.refractory = structural_flags | params.refractory_steps;
             spikes_next[flat] = ACTIVITY_DEPOLARIZING;
         } else if membrane <= -params.threshold {
             next.membrane = params.reset;
-            next.refractory = params.refractory_steps;
+            next.refractory = structural_flags | params.refractory_steps;
             spikes_next[flat] = ACTIVITY_HYPERPOLARIZING;
         } else {
             next.membrane = membrane;
-            next.refractory = 0u;
+            next.refractory = structural_flags;
             spikes_next[flat] = ACTIVITY_SILENT;
         }
     }
@@ -177,17 +196,21 @@ fn plasticity_step(
     let post = topology[params.post_start + edge];
     if fast_sign(pre) == 0.0 { return; }
 
+    // A post with no released dopamine input can never acquire non-zero
+    // modulation under the current model. Its incoming fast weights therefore
+    // cannot change, so neither eligibility nor transaction state is needed.
+    if (neurons[neuron_base + post].refractory & PLASTIC_CAPABLE_BIT) == 0u {
+        return;
+    }
+
     var syn = synapses[edge_base + edge];
     let local = neurons[neuron_base + pre].trace * activity_sign(spikes_next[neuron_base + post])
         - neurons[neuron_base + post].trace * activity_sign(spikes_prev[neuron_base + pre]);
     syn.eligibility = syn.eligibility * params.eligibility_decay + local;
     let delta = params.learning_rate * neurons[neuron_base + post].modulation * syn.eligibility;
 
-    // Most MaleCNS fast edges are unmodulated on a given step. Preserve the
-    // exact local eligibility evolution, but avoid touching the 12-byte
-    // transaction record when this step contributes no weight operation.
-    // Starting/rebased weights are already within [0, weight_max], so
-    // clamp(weight + 0) is an identity operation.
+    // Preserve exact eligibility evolution but avoid the 12-byte transaction
+    // read/write on steps with no weight operation.
     if delta != 0.0 {
         syn.weight = clamp(syn.weight + delta, 0.0, params.weight_max);
         var txn = transactions[edge_base + edge];
