@@ -12,9 +12,11 @@ BODY_MOTOR_MAP="$SNAPSHOT/body-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPERIMENT="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v3}"
-POPULATION_REQUEST="${VF_FLYPPY_POPULATION:-auto}"
+# Do not auto-select N while the full-edge population runtime is being replaced
+# with a sparse/event-driven design.  Population=1 is the conservative default;
+# callers may still select an explicit diagnostic population in 1..32.
+POPULATION_REQUEST="${VF_FLYPPY_POPULATION:-1}"
 EPISODES="${VF_FLYPPY_EPISODES:-24}"
-CAPACITY_JSON="$ROOT/artifacts/profiles/flyppy-population-capacity/latest.json"
 
 command -v cargo >/dev/null 2>&1 || { echo 'cargo is required' >&2; exit 127; }
 command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
@@ -27,16 +29,19 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
   exit 2
 }
 
-if [ "$POPULATION_REQUEST" != "auto" ]; then
-  [[ "$POPULATION_REQUEST" =~ ^[1-9][0-9]*$ ]] || {
-    echo "VF_FLYPPY_POPULATION must be 'auto' or an integer in 1..32" >&2
-    exit 2
-  }
-  if [ "$POPULATION_REQUEST" -gt 32 ]; then
-    echo "VF_FLYPPY_POPULATION=$POPULATION_REQUEST exceeds the GPU runtime 32-slot active-mask limit" >&2
-    exit 2
-  fi
+if [ "$POPULATION_REQUEST" = "auto" ]; then
+  echo "VF_FLYPPY_POPULATION=auto is disabled while the full-edge population runtime is being redesigned; choose an explicit diagnostic population only" >&2
+  exit 2
 fi
+[[ "$POPULATION_REQUEST" =~ ^[1-9][0-9]*$ ]] || {
+  echo "VF_FLYPPY_POPULATION must be an integer in 1..32" >&2
+  exit 2
+}
+if [ "$POPULATION_REQUEST" -gt 32 ]; then
+  echo "VF_FLYPPY_POPULATION=$POPULATION_REQUEST exceeds the GPU runtime 32-slot active-mask limit" >&2
+  exit 2
+fi
+POPULATION="$POPULATION_REQUEST"
 
 if [ "${VF_SKIP_V3_FLIGHT_PREFLIGHT:-0}" != "1" ]; then
   bash scripts/dev/preflight_flyppy_v3.sh
@@ -92,29 +97,14 @@ cargo check -q -p vf-runner --bin population_neural_bridge
 uv run python -m py_compile \
   scripts/embodiment/population_neural_bridge_client.py \
   scripts/embodiment/train_flyppy_population.py \
-  scripts/analysis/find_flyppy_population_capacity.py \
   scripts/analysis/export_flyppy_population_report.py
-
-if [ "$POPULATION_REQUEST" = "auto" ]; then
-  uv run python scripts/analysis/find_flyppy_population_capacity.py \
-    --experiment "$EXPERIMENT" \
-    --snapshot "$SNAPSHOT"
-  POPULATION="$(uv run python -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["max_supported_population"]))' "$CAPACITY_JSON")"
-  if [ "$POPULATION" -gt "$EPISODES" ]; then
-    POPULATION="$EPISODES"
-  fi
-  printf 'population_auto_selected=%s capacity=%s episodes=%s\n' \
-    "$POPULATION" "$(uv run python -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["max_supported_population"]))' "$CAPACITY_JSON")" "$EPISODES"
-else
-  POPULATION="$POPULATION_REQUEST"
-fi
 
 TELEMETRY_ARGS=()
 if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
   TELEMETRY_ARGS+=(--telemetry)
 fi
 
-printf 'shared_weight_population=%s episodes=%s experiment=%s synapse_scale=%s\n' \
+printf 'shared_weight_population=%s episodes=%s experiment=%s synapse_scale=%s legacy_full_edge_runtime=true\n' \
   "$POPULATION" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE"
 
 uv run python scripts/embodiment/train_flyppy_population.py \
@@ -134,7 +124,6 @@ uv run python scripts/analysis/export_flyppy_report.py --summary "$EXPERIMENT/su
 uv run python scripts/analysis/export_flyppy_population_report.py --summary "$EXPERIMENT/summary.json"
 uv run python scripts/analysis/append_flyppy_run_history.py --summary "$EXPERIMENT/summary.json"
 
-printf 'population_capacity_report=reports/flyppy/population_capacity.md\n'
 printf 'report_md=reports/flyppy/latest.md\n'
 printf 'population_report=reports/flyppy/population_latest.md\n'
 printf 'report_csv=reports/flyppy/latest.csv\n'
