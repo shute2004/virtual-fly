@@ -7,6 +7,11 @@ viewer lease. Training generates body and neural snapshots only while the stream
 is connected. Browser camera gestures are written atomically under
 ``<experiment>/live/camera.json`` and are consumed only by
 ``live_body_viewer.py``'s separate MuJoCo renderer.
+
+The HTTP layer deliberately tolerates partially materialized telemetry. The
+browser polls status, neural state and body state together, so a missing optional
+JSON file must not prevent it from continuing to request the independently
+rendered ``fly.png`` frame.
 """
 
 from __future__ import annotations
@@ -116,8 +121,16 @@ class ViewerTelemetryLease:
         self._thread.join(timeout=max(1.0, self.interval_s * 3.0))
 
 
-def make_handler(root: Path, camera_path: Path, status_url: str):
+def make_handler(
+    root: Path,
+    camera_path: Path,
+    live_url_prefix: str,
+    lease: ViewerTelemetryLease,
+):
     live_root = camera_path.parent
+    status_url = live_url_prefix + "status.json"
+    body_url = live_url_prefix + "body.json"
+    neural_url = live_url_prefix + "neural.json"
 
     class ViewerHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -128,40 +141,134 @@ def make_handler(root: Path, camera_path: Path, status_url: str):
                 self.send_header("Cache-Control", "no-store, max-age=0")
             super().end_headers()
 
+        def _send_json(self, payload: dict, *, status: int = 200) -> None:
+            response = json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        @staticmethod
+        def _read_json(path: Path) -> dict | None:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, OSError, json.JSONDecodeError):
+                return None
+            return payload if isinstance(payload, dict) else None
+
         def do_GET(self) -> None:  # noqa: N802 - stdlib hook name
-            if urlparse(self.path).path == status_url:
+            request_path = urlparse(self.path).path
+
+            if request_path == "/api/viewer-health":
+                artifacts = {}
+                for name in ("status.json", "body.json", "neural.json", "fly.png", "camera.json"):
+                    path = live_root / name
+                    try:
+                        stat = path.stat()
+                    except FileNotFoundError:
+                        artifacts[name] = {"exists": False}
+                    else:
+                        artifacts[name] = {
+                            "exists": True,
+                            "bytes": int(stat.st_size),
+                            "mtime_ns": int(stat.st_mtime_ns),
+                        }
+                self._send_json(
+                    {
+                        "schema_version": 1,
+                        "telemetry_stream_connected": lease.connected,
+                        "telemetry_socket": str(lease.target),
+                        "artifacts": artifacts,
+                    }
+                )
+                return
+
+            if request_path == status_url:
                 status_path = live_root / "status.json"
                 body_path = live_root / "body.json"
-                if body_path.exists():
+                status = self._read_json(status_path)
+                body = self._read_json(body_path)
+
+                # status is normally published at run start/end, whereas body is
+                # sampled continuously. If body is newer, synthesize the current
+                # episode/step instead of serving stale status metadata.
+                if body is not None:
                     try:
                         body_mtime = body_path.stat().st_mtime_ns
                         status_mtime = status_path.stat().st_mtime_ns if status_path.exists() else -1
-                        if status_mtime < body_mtime:
-                            body = json.loads(body_path.read_text(encoding="utf-8"))
-                            previous = (
-                                json.loads(status_path.read_text(encoding="utf-8"))
-                                if status_path.exists()
-                                else {}
-                            )
-                            payload = {
+                    except OSError:
+                        body_mtime = 0
+                        status_mtime = 0
+                    if status is None or status_mtime < body_mtime:
+                        self._send_json(
+                            {
                                 "schema_version": 1,
                                 "running": True,
-                                "backend": previous.get("backend", "gpu-population"),
+                                "backend": (status or {}).get("backend", "gpu-population"),
                                 "episode": body.get("episode"),
                                 "control_step": body.get("control_step"),
-                                "curriculum": previous.get("curriculum", {}),
-                                "viewer_attached": True,
+                                "curriculum": (status or {}).get("curriculum", {}),
+                                "viewer_attached": lease.connected,
                                 "served_at_unix_s": time.time(),
                             }
-                            response = json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
-                            self.send_response(200)
-                            self.send_header("Content-Type", "application/json")
-                            self.send_header("Content-Length", str(len(response)))
-                            self.end_headers()
-                            self.wfile.write(response)
-                            return
-                    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-                        pass
+                        )
+                        return
+
+                if status is None:
+                    self._send_json(
+                        {
+                            "schema_version": 1,
+                            "running": False,
+                            "backend": "waiting-for-training",
+                            "episode": None,
+                            "control_step": None,
+                            "curriculum": {},
+                            "viewer_attached": lease.connected,
+                            "served_at_unix_s": time.time(),
+                        }
+                    )
+                    return
+
+            # The browser currently polls status, neural and body in one
+            # Promise.all. Return harmless waiting payloads for the optional
+            # streams so one missing file does not suppress fly.png polling.
+            if request_path == body_url and not (live_root / "body.json").exists():
+                self._send_json(
+                    {
+                        "schema_version": 1,
+                        "episode": None,
+                        "control_step": None,
+                        "sim_time_s": 0.0,
+                        "qpos": [],
+                        "qvel": [],
+                        "next_gate": None,
+                        "passed_gate": False,
+                        "collision": False,
+                        "collision_reason": None,
+                        "reward": False,
+                        "aversive": False,
+                        "motor": {},
+                        "retinal": {},
+                    }
+                )
+                return
+
+            if request_path == neural_url and not (live_root / "neural.json").exists():
+                self._send_json(
+                    {
+                        "schema_version": 1,
+                        "episode": None,
+                        "control_step": None,
+                        "neural_step": None,
+                        "depolarizing_body_ids": [],
+                        "hyperpolarizing_body_ids": [],
+                        "reward": False,
+                        "aversive": False,
+                    }
+                )
+                return
+
             super().do_GET()
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib hook name
@@ -185,19 +292,9 @@ def make_handler(root: Path, camera_path: Path, status_url: str):
                         "distance": distance,
                     },
                 )
-                response = b'{"ok":true}\n'
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(response)))
-                self.end_headers()
-                self.wfile.write(response)
+                self._send_json({"ok": True})
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                response = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8") + b"\n"
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(response)))
-                self.end_headers()
-                self.wfile.write(response)
+                self._send_json({"ok": False, "error": str(exc)}, status=400)
 
         def log_message(self, format: str, *args) -> None:
             if self.path.startswith("/artifacts/experiments/"):
@@ -218,16 +315,17 @@ def main() -> int:
         experiment_relative = experiment.relative_to(root)
     except ValueError as exc:
         raise SystemExit("experiment path must be inside viewer root") from exc
-    status_url = "/" + experiment_relative.as_posix() + "/live/status.json"
+    live_url_prefix = "/" + experiment_relative.as_posix() + "/live/"
 
-    handler = make_handler(root, camera_path, status_url)
-    server = ThreadingHTTPServer((args.bind, args.port), handler)
     lease = ViewerTelemetryLease(experiment)
     lease.start()
+    handler = make_handler(root, camera_path, live_url_prefix, lease)
+    server = ThreadingHTTPServer((args.bind, args.port), handler)
     print(f"viewer_server=http://{args.bind}:{args.port}")
     print(f"observer_camera={camera_path}")
     print(f"telemetry_request={lease.target}")
     print("telemetry_transport=unix-stream")
+    print("viewer_health=/api/viewer-health")
     try:
         server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
