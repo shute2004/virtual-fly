@@ -1,6 +1,6 @@
 # Flyppy eager-live population bottleneck profile
 
-- generated_at_utc: 2026-09-15T05:33:53+00:00
+- generated_at_utc: 2026-09-15T05:45:18+00:00
 - overall: PASS
 - episodes per case: 8
 - max control steps per episode: 32
@@ -11,8 +11,8 @@
 
 | population | control steps | trainer elapsed s | aggregate steps/s | outer wall s |
 |---:|---:|---:|---:|---:|
-| 1 | 256 | 98.378 | 2.602202 | 101.016 |
-| 8 | 256 | 96.167 | 2.662048 | 111.132 |
+| 1 | 256 | 13.800 | 18.550484 | 16.434 |
+| 8 | 256 | 10.950 | 23.377994 | 25.538 |
 
 ## Timed boundaries
 
@@ -20,26 +20,26 @@ Times are inclusive wall time at Python/CNS boundaries. Percentages use trainer 
 
 | population | stage | seconds | calls | ms/call | ms/control-step | % trainer elapsed |
 |---:|---|---:|---:|---:|---:|---:|
-| 1 | retina | 8.850 | 256 | 34.570 | 34.570 | 9.00% |
-| 1 | brain_batch | 3.291 | 256 | 12.855 | 12.855 | 3.35% |
+| 1 | retina | 7.862 | 256 | 30.712 | 30.712 | 56.97% |
+| 1 | brain_batch | 3.654 | 256 | 14.275 | 14.275 | 26.48% |
 | 1 | brain_reinforcement | 0.000 | 0 | 0.000 | 0.000 | 0.00% |
-| 1 | periphery | 0.065 | 256 | 0.253 | 0.253 | 0.07% |
-| 1 | physics | 0.833 | 256 | 3.254 | 3.254 | 0.85% |
-| 1 | brain_commit | 0.006 | 8 | 0.724 | 0.023 | 0.01% |
-| 1 | brain_checkpoint_load | 0.091 | 1 | 90.679 | 0.354 | 0.09% |
-| 1 | brain_checkpoint_save | 83.773 | 1 | 83773.407 | 327.240 | 85.15% |
-| 8 | retina | 7.662 | 256 | 29.931 | 29.931 | 7.97% |
-| 8 | brain_batch | 1.542 | 32 | 48.200 | 6.025 | 1.60% |
+| 1 | periphery | 0.071 | 256 | 0.278 | 0.278 | 0.52% |
+| 1 | physics | 0.824 | 256 | 3.220 | 3.220 | 5.97% |
+| 1 | brain_commit | 0.006 | 8 | 0.770 | 0.024 | 0.04% |
+| 1 | brain_checkpoint_load | 0.108 | 1 | 108.200 | 0.423 | 0.78% |
+| 1 | brain_checkpoint_save | 0.168 | 1 | 168.128 | 0.657 | 1.22% |
+| 8 | retina | 6.755 | 256 | 26.388 | 26.388 | 61.69% |
+| 8 | brain_batch | 1.515 | 32 | 47.331 | 5.916 | 13.83% |
 | 8 | brain_reinforcement | 0.000 | 0 | 0.000 | 0.000 | 0.00% |
-| 8 | periphery | 0.058 | 256 | 0.228 | 0.228 | 0.06% |
-| 8 | physics | 0.702 | 256 | 2.743 | 2.743 | 0.73% |
-| 8 | brain_commit | 0.006 | 8 | 0.736 | 0.023 | 0.01% |
-| 8 | brain_checkpoint_load | 0.712 | 1 | 711.593 | 2.780 | 0.74% |
-| 8 | brain_checkpoint_save | 84.182 | 1 | 84182.363 | 328.837 | 87.54% |
+| 8 | periphery | 0.059 | 256 | 0.231 | 0.231 | 0.54% |
+| 8 | physics | 0.773 | 256 | 3.020 | 3.020 | 7.06% |
+| 8 | brain_commit | 0.006 | 8 | 0.802 | 0.025 | 0.06% |
+| 8 | brain_checkpoint_load | 0.468 | 1 | 467.771 | 1.827 | 4.27% |
+| 8 | brain_checkpoint_save | 0.236 | 1 | 236.177 | 0.923 | 2.16% |
 
 ## Scaling signal
 
-- N=8 / N=1 aggregate throughput: 1.023x
-- N=8 / N=1 brain_batch total time for the same aggregate episode budget: 0.469x
-- N=8 / N=1 retina total time: 0.866x
-- N=8 / N=1 physics total time: 0.843x
+- N=8 / N=1 aggregate throughput: 1.260x
+- N=8 / N=1 brain_batch total time for the same aggregate episode budget: 0.414x
+- N=8 / N=1 retina total time: 0.859x
+- N=8 / N=1 physics total time: 0.938x
