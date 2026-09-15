@@ -1,6 +1,6 @@
 # Flyppy eager-live population bottleneck profile
 
-- generated_at_utc: 2026-09-15T05:45:18+00:00
+- generated_at_utc: 2026-09-15T06:26:02+00:00
 - overall: PASS
 - episodes per case: 8
 - max control steps per episode: 32
@@ -11,35 +11,41 @@
 
 | population | control steps | trainer elapsed s | aggregate steps/s | outer wall s |
 |---:|---:|---:|---:|---:|
-| 1 | 256 | 13.800 | 18.550484 | 16.434 |
-| 8 | 256 | 10.950 | 23.377994 | 25.538 |
+| 1 | 256 | 13.883 | 18.439356 | 16.556 |
+| 8 | 256 | 11.674 | 21.928939 | 26.192 |
 
 ## Timed boundaries
 
-Times are inclusive wall time at Python/CNS boundaries. Percentages use trainer elapsed and are diagnostic; small uninstrumented Python/course/I/O work appears as remainder.
+Retina readout/transduction rows are nested inside retina and therefore should not be added again when computing total wall time. Percentages use trainer elapsed and are diagnostic.
 
 | population | stage | seconds | calls | ms/call | ms/control-step | % trainer elapsed |
 |---:|---|---:|---:|---:|---:|---:|
-| 1 | retina | 7.862 | 256 | 30.712 | 30.712 | 56.97% |
-| 1 | brain_batch | 3.654 | 256 | 14.275 | 14.275 | 26.48% |
+| 1 | retina | 7.760 | 256 | 30.312 | 30.312 | 55.89% |
+| 1 | retina_readout | 6.966 | 256 | 27.211 | 27.211 | 50.17% |
+| 1 | retina_transduction | 0.793 | 256 | 3.098 | 3.098 | 5.71% |
+| 1 | brain_batch | 3.329 | 256 | 13.005 | 13.005 | 23.98% |
 | 1 | brain_reinforcement | 0.000 | 0 | 0.000 | 0.000 | 0.00% |
-| 1 | periphery | 0.071 | 256 | 0.278 | 0.278 | 0.52% |
-| 1 | physics | 0.824 | 256 | 3.220 | 3.220 | 5.97% |
-| 1 | brain_commit | 0.006 | 8 | 0.770 | 0.024 | 0.04% |
-| 1 | brain_checkpoint_load | 0.108 | 1 | 108.200 | 0.423 | 0.78% |
-| 1 | brain_checkpoint_save | 0.168 | 1 | 168.128 | 0.657 | 1.22% |
-| 8 | retina | 6.755 | 256 | 26.388 | 26.388 | 61.69% |
-| 8 | brain_batch | 1.515 | 32 | 47.331 | 5.916 | 13.83% |
+| 1 | periphery | 0.061 | 256 | 0.239 | 0.239 | 0.44% |
+| 1 | physics | 0.802 | 256 | 3.132 | 3.132 | 5.78% |
+| 1 | brain_commit | 0.006 | 8 | 0.721 | 0.023 | 0.04% |
+| 1 | brain_checkpoint_load | 0.103 | 1 | 103.344 | 0.404 | 0.74% |
+| 1 | brain_checkpoint_save | 0.189 | 1 | 188.791 | 0.737 | 1.36% |
+| 8 | retina | 7.083 | 256 | 27.668 | 27.668 | 60.67% |
+| 8 | retina_readout | 6.310 | 256 | 24.649 | 24.649 | 54.05% |
+| 8 | retina_transduction | 0.772 | 256 | 3.015 | 3.015 | 6.61% |
+| 8 | brain_batch | 1.588 | 32 | 49.632 | 6.204 | 13.60% |
 | 8 | brain_reinforcement | 0.000 | 0 | 0.000 | 0.000 | 0.00% |
-| 8 | periphery | 0.059 | 256 | 0.231 | 0.231 | 0.54% |
-| 8 | physics | 0.773 | 256 | 3.020 | 3.020 | 7.06% |
-| 8 | brain_commit | 0.006 | 8 | 0.802 | 0.025 | 0.06% |
-| 8 | brain_checkpoint_load | 0.468 | 1 | 467.771 | 1.827 | 4.27% |
-| 8 | brain_checkpoint_save | 0.236 | 1 | 236.177 | 0.923 | 2.16% |
+| 8 | periphery | 0.079 | 256 | 0.310 | 0.310 | 0.68% |
+| 8 | physics | 0.896 | 256 | 3.502 | 3.502 | 7.68% |
+| 8 | brain_commit | 0.008 | 8 | 1.014 | 0.032 | 0.07% |
+| 8 | brain_checkpoint_load | 0.582 | 1 | 582.171 | 2.274 | 4.99% |
+| 8 | brain_checkpoint_save | 0.325 | 1 | 324.908 | 1.269 | 2.78% |
 
 ## Scaling signal
 
-- N=8 / N=1 aggregate throughput: 1.260x
-- N=8 / N=1 brain_batch total time for the same aggregate episode budget: 0.414x
-- N=8 / N=1 retina total time: 0.859x
-- N=8 / N=1 physics total time: 0.938x
+- N=8 / N=1 aggregate throughput: 1.189x
+- N=8 / N=1 brain_batch total time for the same aggregate episode budget: 0.477x
+- N=8 / N=1 retina total time: 0.913x
+- N=8 / N=1 retina readout total time: 0.906x
+- N=8 / N=1 retina transduction total time: 0.973x
+- N=8 / N=1 physics total time: 1.118x
