@@ -3,9 +3,9 @@
 
 The profiler runs only on temporary copies of the production checkpoint and
 curriculum. It times the existing Python/CNS boundaries without changing the
-numerical path: retinal acquisition/transduction, batched CNS steps,
-reinforcement CNS steps, periphery, MuJoCo stepping, commits, and checkpoint
-load/save.
+numerical path: retinal acquisition/transduction, FlyGym fisheye/hex conversion,
+batched CNS steps, reinforcement CNS steps, periphery, MuJoCo stepping, commits,
+and checkpoint load/save.
 """
 
 from __future__ import annotations
@@ -100,6 +100,16 @@ def run_case(trainer, bridge_module, production: Path, temp_root: Path, populati
     periphery_cls.step = timed(stats, "periphery", orig_periphery)
     body_cls.step_muscles = timed(stats, "physics", orig_body)
 
+    # FlyGym get_ommatidia_readouts is render -> fisheye -> hex aggregation.
+    # Time the latter two exactly in place. The remaining portion of
+    # retina_readout is reported as render/update-scene residual.
+    from flygym.vision.retina import Retina as FlyGymRetina
+
+    orig_fisheye = FlyGymRetina.correct_fisheye
+    orig_hex = FlyGymRetina.raw_image_to_hex_pxls
+    FlyGymRetina.correct_fisheye = timed(stats, "retina_fisheye", orig_fisheye)
+    FlyGymRetina.raw_image_to_hex_pxls = timed(stats, "retina_hex", orig_hex)
+
     BaseClient = bridge_module.PopulationNeuralBridgeClient
 
     class ProfilingClient(BaseClient):
@@ -142,18 +152,28 @@ def run_case(trainer, bridge_module, production: Path, temp_root: Path, populati
         retina_cls.encode_from_eye_readouts = orig_transduction
         periphery_cls.step = orig_periphery
         body_cls.step_muscles = orig_body
+        FlyGymRetina.correct_fisheye = orig_fisheye
+        FlyGymRetina.raw_image_to_hex_pxls = orig_hex
 
     if rc != 0:
         raise RuntimeError(f"population={population} trainer returned {rc}")
     summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
     controls = int(summary["aggregate_control_steps"])
+    stat_payload = {k: {"seconds": v[0], "calls": int(v[1])} for k, v in stats.items()}
+    readout = float(stat_payload.get("retina_readout", {"seconds": 0.0})["seconds"])
+    fisheye = float(stat_payload.get("retina_fisheye", {"seconds": 0.0})["seconds"])
+    hex_time = float(stat_payload.get("retina_hex", {"seconds": 0.0})["seconds"])
+    stat_payload["retina_render_residual"] = {
+        "seconds": max(0.0, readout - fisheye - hex_time),
+        "calls": controls,
+    }
     return {
         "population": population,
         "wall": wall,
         "trainer_elapsed": float(summary["elapsed_seconds"]),
         "control_steps": controls,
         "control_steps_per_second": controls / float(summary["elapsed_seconds"]),
-        "stats": {k: {"seconds": v[0], "calls": int(v[1])} for k, v in stats.items()},
+        "stats": stat_payload,
     }
 
 
@@ -192,7 +212,8 @@ def main() -> int:
         raise RuntimeError("production checkpoint changed during bottleneck profiling")
 
     stages = [
-        "retina", "retina_readout", "retina_transduction",
+        "retina", "retina_readout", "retina_fisheye", "retina_hex",
+        "retina_render_residual", "retina_transduction",
         "brain_batch", "brain_reinforcement", "periphery", "physics",
         "brain_commit", "brain_checkpoint_load", "brain_checkpoint_save",
     ]
@@ -218,7 +239,7 @@ def main() -> int:
         "",
         "## Timed boundaries",
         "",
-        "Retina readout/transduction rows are nested inside retina and therefore should not be added again when computing total wall time. Percentages use trainer elapsed and are diagnostic.",
+        "Retina substage rows are nested inside retina and therefore should not be added again when computing total wall time. `retina_render_residual` is `retina_readout - retina_fisheye - retina_hex`, covering MuJoCo update_scene/render plus small Python/allocation overhead.",
         "",
         "| population | stage | seconds | calls | ms/call | ms/control-step | % trainer elapsed |",
         "|---:|---|---:|---:|---:|---:|---:|",
@@ -245,6 +266,9 @@ def main() -> int:
         f"- N=8 / N=1 brain_batch total time for the same aggregate episode budget: {n8['stats'].get('brain_batch', {'seconds':0})['seconds']/max(n1['stats'].get('brain_batch', {'seconds':0})['seconds'], 1e-12):.3f}x",
         f"- N=8 / N=1 retina total time: {n8['stats'].get('retina', {'seconds':0})['seconds']/max(n1['stats'].get('retina', {'seconds':0})['seconds'], 1e-12):.3f}x",
         f"- N=8 / N=1 retina readout total time: {n8['stats'].get('retina_readout', {'seconds':0})['seconds']/max(n1['stats'].get('retina_readout', {'seconds':0})['seconds'], 1e-12):.3f}x",
+        f"- N=8 / N=1 retina fisheye total time: {n8['stats'].get('retina_fisheye', {'seconds':0})['seconds']/max(n1['stats'].get('retina_fisheye', {'seconds':0})['seconds'], 1e-12):.3f}x",
+        f"- N=8 / N=1 retina hex total time: {n8['stats'].get('retina_hex', {'seconds':0})['seconds']/max(n1['stats'].get('retina_hex', {'seconds':0})['seconds'], 1e-12):.3f}x",
+        f"- N=8 / N=1 retina render residual total time: {n8['stats'].get('retina_render_residual', {'seconds':0})['seconds']/max(n1['stats'].get('retina_render_residual', {'seconds':0})['seconds'], 1e-12):.3f}x",
         f"- N=8 / N=1 retina transduction total time: {n8['stats'].get('retina_transduction', {'seconds':0})['seconds']/max(n1['stats'].get('retina_transduction', {'seconds':0})['seconds'], 1e-12):.3f}x",
         f"- N=8 / N=1 physics total time: {n8['stats'].get('physics', {'seconds':0})['seconds']/max(n1['stats'].get('physics', {'seconds':0})['seconds'], 1e-12):.3f}x",
         "",
