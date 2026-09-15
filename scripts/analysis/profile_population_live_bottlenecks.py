@@ -3,8 +3,9 @@
 
 The profiler runs only on temporary copies of the production checkpoint and
 curriculum. It times the existing Python/CNS boundaries without changing the
-numerical path: retina encoding, batched CNS steps, reinforcement CNS steps,
-periphery, MuJoCo stepping, commits, and checkpoint load/save.
+numerical path: retinal acquisition/transduction, batched CNS steps,
+reinforcement CNS steps, periphery, MuJoCo stepping, commits, and checkpoint
+load/save.
 """
 
 from __future__ import annotations
@@ -89,9 +90,13 @@ def run_case(trainer, bridge_module, production: Path, temp_root: Path, populati
     periphery_cls = trainer.WholeBodyPeriphery
     body_cls = trainer.FlyBodyV3NeuromuscularAdapter
     orig_retina = retina_cls.encode
+    orig_eye_readouts = retina_cls._eye_readouts
+    orig_transduction = retina_cls.encode_from_eye_readouts
     orig_periphery = periphery_cls.step
     orig_body = body_cls.step_muscles
     retina_cls.encode = timed(stats, "retina", orig_retina)
+    retina_cls._eye_readouts = staticmethod(timed(stats, "retina_readout", orig_eye_readouts))
+    retina_cls.encode_from_eye_readouts = timed(stats, "retina_transduction", orig_transduction)
     periphery_cls.step = timed(stats, "periphery", orig_periphery)
     body_cls.step_muscles = timed(stats, "physics", orig_body)
 
@@ -133,6 +138,8 @@ def run_case(trainer, bridge_module, production: Path, temp_root: Path, populati
         sys.argv = old_argv
         trainer.PopulationNeuralBridgeClient = old_client
         retina_cls.encode = orig_retina
+        retina_cls._eye_readouts = staticmethod(orig_eye_readouts)
+        retina_cls.encode_from_eye_readouts = orig_transduction
         periphery_cls.step = orig_periphery
         body_cls.step_muscles = orig_body
 
@@ -185,7 +192,8 @@ def main() -> int:
         raise RuntimeError("production checkpoint changed during bottleneck profiling")
 
     stages = [
-        "retina", "brain_batch", "brain_reinforcement", "periphery", "physics",
+        "retina", "retina_readout", "retina_transduction",
+        "brain_batch", "brain_reinforcement", "periphery", "physics",
         "brain_commit", "brain_checkpoint_load", "brain_checkpoint_save",
     ]
     lines = [
@@ -210,7 +218,7 @@ def main() -> int:
         "",
         "## Timed boundaries",
         "",
-        "Times are inclusive wall time at Python/CNS boundaries. Percentages use trainer elapsed and are diagnostic; small uninstrumented Python/course/I/O work appears as remainder.",
+        "Retina readout/transduction rows are nested inside retina and therefore should not be added again when computing total wall time. Percentages use trainer elapsed and are diagnostic.",
         "",
         "| population | stage | seconds | calls | ms/call | ms/control-step | % trainer elapsed |",
         "|---:|---|---:|---:|---:|---:|---:|",
@@ -236,6 +244,8 @@ def main() -> int:
         f"- N=8 / N=1 aggregate throughput: {n8['control_steps_per_second']/n1['control_steps_per_second']:.3f}x",
         f"- N=8 / N=1 brain_batch total time for the same aggregate episode budget: {n8['stats'].get('brain_batch', {'seconds':0})['seconds']/max(n1['stats'].get('brain_batch', {'seconds':0})['seconds'], 1e-12):.3f}x",
         f"- N=8 / N=1 retina total time: {n8['stats'].get('retina', {'seconds':0})['seconds']/max(n1['stats'].get('retina', {'seconds':0})['seconds'], 1e-12):.3f}x",
+        f"- N=8 / N=1 retina readout total time: {n8['stats'].get('retina_readout', {'seconds':0})['seconds']/max(n1['stats'].get('retina_readout', {'seconds':0})['seconds'], 1e-12):.3f}x",
+        f"- N=8 / N=1 retina transduction total time: {n8['stats'].get('retina_transduction', {'seconds':0})['seconds']/max(n1['stats'].get('retina_transduction', {'seconds':0})['seconds'], 1e-12):.3f}x",
         f"- N=8 / N=1 physics total time: {n8['stats'].get('physics', {'seconds':0})['seconds']/max(n1['stats'].get('physics', {'seconds':0})['seconds'], 1e-12):.3f}x",
         "",
     ])
