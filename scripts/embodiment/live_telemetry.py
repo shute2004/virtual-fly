@@ -22,11 +22,51 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 
-def viewer_control_socket_path(experiment_dir: Path) -> Path:
-    """Return a short stable local socket path shared by trainer and viewer."""
+def _filesystem_identity(path: Path) -> bytes:
+    """Return a local physical identity for a path without depending on spelling.
 
-    resolved = str(Path(experiment_dir).resolve()).encode("utf-8")
-    token = hashlib.sha256(resolved).hexdigest()[:20]
+    Existing paths are identified by the filesystem device/inode pair, so case
+    aliases and symlink aliases of the same directory rendezvous on the same
+    viewer socket. For a not-yet-created path, anchor the identity at the nearest
+    existing ancestor and append only the missing suffix.
+    """
+
+    candidate = Path(path)
+    try:
+        stat = candidate.stat()
+    except OSError:
+        missing: list[str] = []
+        current = candidate
+        while True:
+            try:
+                stat = current.stat()
+                break
+            except OSError:
+                parent = current.parent
+                if parent == current:
+                    # Extremely defensive fallback for an unusable path. Normal
+                    # viewer/trainer callers always have an existing ancestor.
+                    return b"path\0" + os.fsencode(os.path.abspath(os.fspath(candidate)))
+                missing.append(current.name)
+                current = parent
+        suffix = "/".join(reversed(missing))
+        return (
+            f"ancestor:{int(stat.st_dev)}:{int(stat.st_ino)}:".encode("ascii")
+            + os.fsencode(suffix)
+        )
+
+    return f"inode:{int(stat.st_dev)}:{int(stat.st_ino)}".encode("ascii")
+
+
+def viewer_control_socket_path(experiment_dir: Path) -> Path:
+    """Return the short local socket path shared by trainer and viewer.
+
+    The token is based on filesystem identity rather than the absolute path
+    string. On case-insensitive macOS filesystems, ``Desktop`` and ``desktop``
+    therefore map to the same socket when they name the same directory.
+    """
+
+    token = hashlib.sha256(_filesystem_identity(Path(experiment_dir))).hexdigest()[:20]
     return Path("/tmp") / f"virtual-fly-viewer-{token}.sock"
 
 
@@ -41,9 +81,6 @@ class ViewerDemandSwitch:
         self._publisher = publisher
 
     def __bool__(self) -> bool:
-        # Before publisher construction this is intentionally true once so the
-        # trainer can preload the immutable viewer graph. After binding, every
-        # boolean check reflects the live viewer connection.
         if self._publisher is None:
             return True
         return self.always or self._publisher.requested()
