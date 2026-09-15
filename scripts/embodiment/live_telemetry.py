@@ -56,6 +56,45 @@ class LiveTelemetryPublisher:
             },
         )
 
+    def publish_body_state(
+        self,
+        *,
+        episode: int,
+        control_step: int,
+        sim_time_s: float,
+        qpos: Sequence[float],
+        qvel: Sequence[float],
+        next_gate: int,
+        passed_gate: bool,
+        collision: bool,
+        collision_reason: str | None,
+        reward: bool,
+        aversive: bool,
+        motor: Mapping[str, Any],
+        retinal: Mapping[str, Any],
+    ) -> None:
+        """Publish a body snapshot without requiring the MuJoCo object in-process."""
+
+        self._write(
+            "body.json",
+            {
+                "schema_version": 1,
+                "episode": int(episode),
+                "control_step": int(control_step),
+                "sim_time_s": float(sim_time_s),
+                "qpos": [float(value) for value in qpos],
+                "qvel": [float(value) for value in qvel],
+                "next_gate": int(next_gate),
+                "passed_gate": bool(passed_gate),
+                "collision": bool(collision),
+                "collision_reason": collision_reason,
+                "reward": bool(reward),
+                "aversive": bool(aversive),
+                "motor": dict(motor),
+                "retinal": dict(retinal),
+            },
+        )
+
     def publish_body(
         self,
         *,
@@ -73,24 +112,20 @@ class LiveTelemetryPublisher:
     ) -> None:
         qpos = np.asarray(sim.mj_data.qpos, dtype=np.float64)
         qvel = np.asarray(sim.mj_data.qvel, dtype=np.float64)
-        self._write(
-            "body.json",
-            {
-                "schema_version": 1,
-                "episode": int(episode),
-                "control_step": int(control_step),
-                "sim_time_s": float(sim.mj_data.time),
-                "qpos": qpos.tolist(),
-                "qvel": qvel.tolist(),
-                "next_gate": int(next_gate),
-                "passed_gate": bool(passed_gate),
-                "collision": bool(collision),
-                "collision_reason": collision_reason,
-                "reward": bool(reward),
-                "aversive": bool(aversive),
-                "motor": dict(motor),
-                "retinal": dict(retinal),
-            },
+        self.publish_body_state(
+            episode=episode,
+            control_step=control_step,
+            sim_time_s=float(sim.mj_data.time),
+            qpos=qpos,
+            qvel=qvel,
+            next_gate=next_gate,
+            passed_gate=passed_gate,
+            collision=collision,
+            collision_reason=collision_reason,
+            reward=reward,
+            aversive=aversive,
+            motor=motor,
+            retinal=retinal,
         )
 
     def publish_neural(
