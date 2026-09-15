@@ -61,7 +61,7 @@ class ViewerTelemetryLease:
     """Hold a reconnecting Unix stream to the trainer while the viewer is open."""
 
     def __init__(self, experiment: Path, *, interval_s: float = 0.4) -> None:
-        self.target = viewer_control_socket_path(experiment)
+        self.experiment = Path(experiment)
         self.interval_s = float(interval_s)
         self._stop = threading.Event()
         self._connected = threading.Event()
@@ -70,6 +70,13 @@ class ViewerTelemetryLease:
             name="flyppy-viewer-telemetry-lease",
             daemon=True,
         )
+
+    @property
+    def target(self) -> Path:
+        # Recompute while disconnected. If a --fresh trainer recreates the
+        # experiment directory, its filesystem inode changes and the viewer must
+        # follow the publisher's new control-socket identity automatically.
+        return viewer_control_socket_path(self.experiment)
 
     @property
     def connected(self) -> bool:
@@ -190,9 +197,6 @@ def make_handler(
                 status = self._read_json(status_path)
                 body = self._read_json(body_path)
 
-                # status is normally published at run start/end, whereas body is
-                # sampled continuously. If body is newer, synthesize the current
-                # episode/step instead of serving stale status metadata.
                 if body is not None:
                     try:
                         body_mtime = body_path.stat().st_mtime_ns
@@ -230,9 +234,6 @@ def make_handler(
                     )
                     return
 
-            # The browser currently polls status, neural and body in one
-            # Promise.all. Return harmless waiting payloads for the optional
-            # streams so one missing file does not suppress fly.png polling.
             if request_path == body_url and not (live_root / "body.json").exists():
                 self._send_json(
                     {
