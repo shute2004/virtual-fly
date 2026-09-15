@@ -182,14 +182,21 @@ fn plasticity_step(
         - neurons[neuron_base + post].trace * activity_sign(spikes_prev[neuron_base + pre]);
     syn.eligibility = syn.eligibility * params.eligibility_decay + local;
     let delta = params.learning_rate * neurons[neuron_base + post].modulation * syn.eligibility;
-    syn.weight = clamp(syn.weight + delta, 0.0, params.weight_max);
-    synapses[edge_base + edge] = syn;
 
-    var txn = transactions[edge_base + edge];
-    txn.shift = txn.shift + delta;
-    txn.lo = clamp(txn.lo + delta, 0.0, params.weight_max);
-    txn.hi = clamp(txn.hi + delta, 0.0, params.weight_max);
-    transactions[edge_base + edge] = txn;
+    // Most MaleCNS fast edges are unmodulated on a given step. Preserve the
+    // exact local eligibility evolution, but avoid touching the 12-byte
+    // transaction record when this step contributes no weight operation.
+    // Starting/rebased weights are already within [0, weight_max], so
+    // clamp(weight + 0) is an identity operation.
+    if delta != 0.0 {
+        syn.weight = clamp(syn.weight + delta, 0.0, params.weight_max);
+        var txn = transactions[edge_base + edge];
+        txn.shift = txn.shift + delta;
+        txn.lo = clamp(txn.lo + delta, 0.0, params.weight_max);
+        txn.hi = clamp(txn.hi + delta, 0.0, params.weight_max);
+        transactions[edge_base + edge] = txn;
+    }
+    synapses[edge_base + edge] = syn;
 }
 
 @compute @workgroup_size(256)
