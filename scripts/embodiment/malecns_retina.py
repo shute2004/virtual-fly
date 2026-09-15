@@ -56,6 +56,14 @@ class RetinalDrive:
     max_current: float
 
 
+@dataclass(frozen=True)
+class _ColumnRuntime:
+    """Precompiled immutable data needed by one optical column at runtime."""
+
+    ommatidium_index: int
+    body_ids: tuple[int, ...]
+
+
 class MaleCNSRetina:
     def __init__(
         self,
@@ -138,6 +146,21 @@ class MaleCNSRetina:
                 raise ValueError(f"retinotopic vision map has no {side} eye columns")
             self._attach_uv(self._columns_by_side[side])
             self._attach_ommatidia(self._columns_by_side[side], ommatidia_uv)
+
+        # Preserve the source column order exactly, but precompile the immutable
+        # fields used by every encode() call so the hot path does no dict/string
+        # lookup. Duplicate ommatidium assignments deliberately remain duplicated:
+        # their adaptation updates therefore occur in exactly the original order.
+        self._runtime_columns: dict[str, tuple[_ColumnRuntime, ...]] = {
+            side: tuple(
+                _ColumnRuntime(
+                    ommatidium_index=int(column["ommatidium_index"]),
+                    body_ids=tuple(int(value) for value in column["body_ids"]),
+                )
+                for column in self._columns_by_side[side]
+            )
+            for side in ("L", "R")
+        }
 
         self._adapted_light: dict[str, np.ndarray] = {
             side: np.full(self.flybody_ommatidia_per_eye, np.nan, dtype=np.float64)
@@ -229,12 +252,27 @@ class MaleCNSRetina:
 
     @staticmethod
     def _local_achromatic(readouts: np.ndarray, ommatidium_index: int) -> float:
+        """Reference scalar achromatic conversion retained for parity tests."""
+
         if not 0 <= ommatidium_index < len(readouts):
             raise IndexError(
                 f"ommatidium index {ommatidium_index} outside 0..{len(readouts) - 1}"
             )
         value = float(np.sum(readouts[ommatidium_index], dtype=np.float64))
         return float(np.clip(value, 0.0, 1.0))
+
+    @staticmethod
+    def _all_local_achromatic(readouts: np.ndarray) -> np.ndarray:
+        """Compute every FlyBody ommatidium's achromatic light once per eye."""
+
+        if readouts.ndim != 2 or readouts.shape[1] != 2:
+            raise RuntimeError(f"unexpected single-eye readout shape: {readouts.shape}")
+        # dtype=float64 and axis=1 preserve the same two-channel addition used by
+        # _local_achromatic, but execute it once in NumPy rather than once per
+        # MaleCNS column from Python.
+        values = np.sum(readouts, axis=1, dtype=np.float64)
+        np.clip(values, 0.0, 1.0, out=values)
+        return values
 
     def _transduce(self, side: str, ommatidium_index: int, light: float) -> float:
         baseline = float(self._adapted_light[side][ommatidium_index])
@@ -252,12 +290,21 @@ class MaleCNSRetina:
         )
         return contrast * self.current_gain
 
-    def encode(self, sim, fly) -> RetinalDrive:
-        eyes = self._eye_readouts(sim, fly)
+    def encode_from_eye_readouts(self, eyes: dict[str, np.ndarray]) -> RetinalDrive:
+        """Transduce already-produced FlyBody compound-eye readouts.
+
+        This split is intentionally public enough for diagnostics: encode() still
+        obtains the biological FlyBody ommatidial readout first, while profilers
+        can measure that acquisition separately from the MaleCNS transduction seam.
+        """
+
         body_currents: list[tuple[int, float]] = []
         active_columns = 0
         current_magnitudes: list[float] = []
 
+        # Local bindings avoid repeated attribute lookup in the column loop while
+        # preserving the exact historical update order and scalar equations.
+        current_floor = self.current_floor
         for side in ("L", "R"):
             eye = eyes[side]
             if len(eye) != self.flybody_ommatidia_per_eye:
@@ -265,16 +312,17 @@ class MaleCNSRetina:
                     f"FlyBody {side} eye has {len(eye)} ommatidia; "
                     f"expected {self.flybody_ommatidia_per_eye}"
                 )
-            for column in self._columns_by_side[side]:
-                ommatidium_index = int(column["ommatidium_index"])
-                light = self._local_achromatic(eye, ommatidium_index)
+            light_by_ommatidium = self._all_local_achromatic(eye)
+            for column in self._runtime_columns[side]:
+                ommatidium_index = column.ommatidium_index
+                light = float(light_by_ommatidium[ommatidium_index])
                 current = self._transduce(side, ommatidium_index, light)
-                if abs(current) <= self.current_floor:
+                if abs(current) <= current_floor:
                     continue
                 active_columns += 1
                 magnitude = abs(current)
-                for body_id in column["body_ids"]:
-                    body_currents.append((int(body_id), current))
+                for body_id in column.body_ids:
+                    body_currents.append((body_id, current))
                     current_magnitudes.append(magnitude)
 
         return RetinalDrive(
@@ -288,3 +336,6 @@ class MaleCNSRetina:
                 float(np.max(current_magnitudes)) if current_magnitudes else 0.0
             ),
         )
+
+    def encode(self, sim, fly) -> RetinalDrive:
+        return self.encode_from_eye_readouts(self._eye_readouts(sim, fly))
