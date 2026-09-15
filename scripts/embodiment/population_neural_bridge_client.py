@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 from typing import Mapping, Sequence
@@ -25,6 +26,9 @@ class PopulationNeuralBridgeClient:
         if slots < 1:
             raise ValueError("slots must be >= 1")
         root = repo_root or Path(__file__).resolve().parents[2]
+        bridge_bin = os.environ.get("VF_POPULATION_BRIDGE_BIN", "population_neural_bridge").strip()
+        if not bridge_bin:
+            raise ValueError("VF_POPULATION_BRIDGE_BIN must not be empty")
         command = [
             "cargo",
             "run",
@@ -32,7 +36,7 @@ class PopulationNeuralBridgeClient:
             "-p",
             "vf-runner",
             "--bin",
-            "population_neural_bridge",
+            bridge_bin,
             "--release",
             "--",
             "--snapshot",
