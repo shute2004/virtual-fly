@@ -14,11 +14,11 @@
     #flyMissing { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; color: #79889a; text-align: center; font-size: 13px; pointer-events: none; }
     #flyBadge { position: absolute; left: 12px; top: 12px; z-index: 5; background: rgba(7,9,12,.80); border: 1px solid #27303b; border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none; }
     #flyHint { position: absolute; left: 12px; bottom: 12px; z-index: 5; background: rgba(7,9,12,.76); border: 1px solid #27303b; border-radius: 8px; padding: 7px 9px; font-size: 11px; color: #b9c5d3; pointer-events: none; }
-    #brainCard { position: absolute; right: 14px; bottom: 14px; z-index: 6; width: min(39vw, 500px); min-width: 300px; height: min(46vh, 420px); min-height: 260px; border: 1px solid #384353; border-radius: 10px; overflow: hidden; background: rgba(8,11,16,.96); box-shadow: 0 10px 35px rgba(0,0,0,.40); cursor: default; touch-action: auto; }
+    #brainCard { position: absolute; right: 14px; bottom: 14px; z-index: 6; width: min(42vw, 560px); min-width: 320px; height: min(50vh, 460px); min-height: 280px; border: 1px solid #384353; border-radius: 10px; overflow: hidden; background: rgba(8,11,16,.96); box-shadow: 0 10px 35px rgba(0,0,0,.40); cursor: default; touch-action: auto; }
     #brainTitle { height: 31px; box-sizing: border-box; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 6px 9px; font-size: 11px; color: #b9c5d3; border-bottom: 1px solid #252c36; }
     #brainScene { position: absolute; inset: 31px 0 0 0; }
     #brainScene canvas { display: block; }
-    #brainBadge { position: absolute; left: 8px; top: 39px; z-index: 2; font-size: 10px; color: #9aa7b6; pointer-events: none; }
+    #brainBadge { position: absolute; left: 8px; top: 39px; z-index: 2; font-size: 10px; color: #9aa7b6; pointer-events: none; text-shadow: 0 1px 2px #000; }
     #panel { border-left: 1px solid #252c36; background: #11161d; padding: 16px; overflow: auto; }
     h1 { margin: 0 0 6px; font-size: 17px; }
     h2 { margin: 18px 0 8px; font-size: 13px; color: #b9c5d3; }
@@ -35,7 +35,7 @@
     @media (max-width: 900px) {
       #root { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) 280px; }
       #panel { border-left: 0; border-top: 1px solid #252c36; }
-      #brainCard { width: min(58vw, 430px); min-width: 250px; height: min(42vh, 330px); }
+      #brainCard { width: min(62vw, 470px); min-width: 260px; height: min(44vh, 360px); }
     }
   </style>
   <script type="importmap">
@@ -56,15 +56,15 @@
     <div id="flyHint">ドラッグ: 周囲を回転　ホイール: ズーム　B: MaleCNS小窓の表示切替</div>
 
     <section id="brainCard">
-      <div id="brainTitle"><span>MaleCNS live activity</span><span>模式配置</span></div>
+      <div id="brainTitle"><span>MaleCNS live activity</span><span>発火残光 + synapse propagation</span></div>
       <div id="brainScene"></div>
-      <div id="brainBadge">接続・発火はMaleCNS由来 / 形状座標は模式的</div>
+      <div id="brainBadge">body ID / released connection / 発火はMaleCNS由来・座標は模式配置</div>
     </section>
   </main>
 
   <aside id="panel">
     <h1>virtual-fly live learning viewer</h1>
-    <p class="warn">メイン画面は実FlyBodyを別MuJoCo observerで再現しています。小窓のCNSは実connectomeのbody ID・released connection・発火を使いますが、ニューロン座標は解剖学的実座標ではありません。</p>
+    <p class="warn">メイン画面は実FlyBodyを別MuJoCo observerで再現しています。CNSは実connectomeのbody ID・released connection・発火を使いますが、ニューロン座標は模式配置です。</p>
 
     <h2>接続</h2>
     <label>実験ディレクトリ</label>
@@ -76,7 +76,9 @@
     <div class="metric"><span>backend</span><span id="backend">-</span></div>
     <div class="metric"><span>episode</span><span id="episode">-</span></div>
     <div class="metric"><span>control step</span><span id="step">-</span></div>
-    <div class="metric"><span>表示中の発火</span><span id="active">-</span></div>
+    <div class="metric"><span>発火ニューロン</span><span id="active">-</span></div>
+    <div class="metric"><span>発光シナプス</span><span id="activeEdges">-</span></div>
+    <div class="metric"><span>viewer graph</span><span id="graphSize">-</span></div>
     <div class="metric"><span>gate</span><span id="gate">-</span></div>
     <div class="metric"><span>event</span><span id="event">-</span></div>
 
@@ -90,7 +92,7 @@
     <div class="row">
       <label><input id="showBrainCard" type="checkbox" checked /> MaleCNS小窓</label>
       <label><input id="showEdges" type="checkbox" checked /> シナプス</label>
-      <label><input id="pulseEdges" type="checkbox" checked /> 発火で発光</label>
+      <label><input id="pulseEdges" type="checkbox" checked /> 伝播パルス</label>
       <label><input id="showShell" type="checkbox" checked /> CNS輪郭</label>
     </div>
     <div class="row"><button id="resetBrainCamera">CNS視点を戻す</button></div>
@@ -98,13 +100,13 @@
     <h2>凡例</h2>
     <div id="legend">
       <span class="dot" style="background:#93a4b8"></span><span>通常ニューロン</span>
-      <span class="dot" style="background:#56d6ff"></span><span>発火ニューロン</span>
+      <span class="dot" style="background:#56d6ff;box-shadow:0 0 8px #56d6ff"></span><span>発火ニューロン / 残光</span>
       <span class="dot" style="background:#b08cff"></span><span>dopamine neuron</span>
       <span class="dot" style="background:#69f0a5"></span><span>PAM reward event</span>
       <span class="dot" style="background:#ff6f7d"></span><span>PPL aversive event</span>
     </div>
 
-    <p class="note">MaleCNS小窓はチェックまたはBキーで一時的に消せます。CNS表示は全166,700ニューロンではなく、強結合と学習境界を含むviewer用サブグラフです。viewer操作は学習プロセスには返りません。</p>
+    <p class="note">シナプスの基礎明度はviewer graphに含まれるreleased synapse countを対数正規化しています。流れる点はpresynaptic neuronの発火から描いたviewer上の伝播表現で、個々のsynaptic currentを直接計測したものではありません。viewer操作・描画は学習へ返りません。</p>
   </aside>
 </div>
 
@@ -120,6 +122,7 @@ const requestedExperiment = new URLSearchParams(window.location.search).get('exp
 if (requestedExperiment && requestedExperiment.trim()) {
   experimentInput.value = requestedExperiment.trim().replace(/^\/+|\/+$/g, '');
 }
+
 const brainScene = new THREE.Scene();
 brainScene.background = new THREE.Color(0x080b10);
 const brainCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
@@ -134,14 +137,30 @@ const brainLight = new THREE.DirectionalLight(0xffffff, 1.0);
 brainLight.position.set(8, 12, 10);
 brainScene.add(brainLight);
 
+const ACTIVE_COLOR = new THREE.Color(0x56d6ff);
+const REWARD_COLOR = new THREE.Color(0x69f0a5);
+const AVERSIVE_COLOR = new THREE.Color(0xff6f7d);
+const EDGE_IDLE = new THREE.Color(0x18212d);
+const EDGE_ACTIVE = new THREE.Color(0x55d7ff);
+const MAX_PULSES = 320;
+
 let graph = null;
 let pointCloud = null;
+let glowCloud = null;
 let edgeLines = null;
+let pulseCloud = null;
 let shellRoot = null;
 let nodeIndex = new Map();
-let edges = [];
+let nodePositions = null;
+let nodeEnergy = new Float32Array(0);
+let nodeEventEnergy = new Float32Array(0);
 let baseNodeColors = [];
+let edgeRecords = [];
+let edgeEnergy = new Float32Array(0);
+let pulses = [];
 let lastNeuralKey = '';
+let lastAnimationTime = performance.now();
+let eventTint = REWARD_COLOR.clone();
 let poll = null;
 let frameCounter = 0;
 
@@ -273,6 +292,7 @@ document.getElementById('resetBrainCamera').addEventListener('click', resetBrain
 document.getElementById('showBrainCard').addEventListener('change', e => setBrainVisible(e.target.checked));
 document.getElementById('showEdges').addEventListener('change', e => { if (edgeLines) edgeLines.visible = e.target.checked; });
 document.getElementById('showShell').addEventListener('change', e => { if (shellRoot) shellRoot.visible = e.target.checked; });
+document.getElementById('pulseEdges').addEventListener('change', e => { if (pulseCloud) pulseCloud.visible = e.target.checked; });
 document.getElementById('reconnect').addEventListener('click', () => connect(true));
 document.getElementById('follow').addEventListener('change', configurePolling);
 
@@ -286,99 +306,249 @@ function categoryColor(node) {
   return new THREE.Color(0x93a4b8);
 }
 
+function disposeObject(object) {
+  if (!object) return;
+  brainScene.remove(object);
+  object.geometry?.dispose?.();
+  object.material?.dispose?.();
+}
+
 function buildGraph(payload) {
-  if (pointCloud) brainScene.remove(pointCloud);
-  if (edgeLines) brainScene.remove(edgeLines);
+  disposeObject(pointCloud);
+  disposeObject(glowCloud);
+  disposeObject(edgeLines);
+  disposeObject(pulseCloud);
+
   graph = payload;
   nodeIndex = new Map();
-  edges = payload.edges || [];
   const nodes = payload.nodes || [];
-  const positions = new Float32Array(nodes.length * 3);
+  const sourceEdges = payload.edges || [];
+  nodePositions = new Float32Array(nodes.length * 3);
   const colors = new Float32Array(nodes.length * 3);
   baseNodeColors = new Array(nodes.length);
+  nodeEnergy = new Float32Array(nodes.length);
+  nodeEventEnergy = new Float32Array(nodes.length);
+
   nodes.forEach((node, i) => {
     nodeIndex.set(Number(node.body_id), i);
     const p = node.position || [0,0,0];
-    positions.set([Number(p[0]), Number(p[1]), Number(p[2])], i * 3);
+    nodePositions.set([Number(p[0]), Number(p[1]), Number(p[2])], i * 3);
     const c = categoryColor(node);
     baseNodeColors[i] = c.clone();
-    colors.set([c.r, c.g, c.b], i * 3);
+    colors.set([c.r * 0.62, c.g * 0.62, c.b * 0.62], i * 3);
   });
+
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('position', new THREE.BufferAttribute(nodePositions, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   pointCloud = new THREE.Points(
     geometry,
-    new THREE.PointsMaterial({ size: 0.17, vertexColors: true, transparent: true, opacity: 0.92, sizeAttenuation: true })
+    new THREE.PointsMaterial({ size: 0.16, vertexColors: true, transparent: true, opacity: 0.88, sizeAttenuation: true })
   );
   brainScene.add(pointCloud);
 
+  const glowGeometry = new THREE.BufferGeometry();
+  glowGeometry.setAttribute('position', new THREE.BufferAttribute(nodePositions.slice(), 3));
+  glowGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(nodes.length * 3), 3));
+  glowCloud = new THREE.Points(
+    glowGeometry,
+    new THREE.PointsMaterial({
+      size: 0.42,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    })
+  );
+  brainScene.add(glowCloud);
+
+  const counts = sourceEdges.map(edge => Math.max(1, Number(edge.synapse_count || 1)));
+  const maxLog = Math.max(1, ...counts.map(value => Math.log1p(value)));
   const edgePositions = [];
-  for (const edge of edges) {
+  edgeRecords = [];
+  for (let i = 0; i < sourceEdges.length; i++) {
+    const edge = sourceEdges[i];
     const a = nodeIndex.get(Number(edge.pre));
     const b = nodeIndex.get(Number(edge.post));
     if (a === undefined || b === undefined) continue;
     edgePositions.push(
-      positions[a*3], positions[a*3+1], positions[a*3+2],
-      positions[b*3], positions[b*3+1], positions[b*3+2]
+      nodePositions[a*3], nodePositions[a*3+1], nodePositions[a*3+2],
+      nodePositions[b*3], nodePositions[b*3+1], nodePositions[b*3+2]
     );
+    edgeRecords.push({
+      pre: Number(edge.pre),
+      post: Number(edge.post),
+      a,
+      b,
+      strength: Math.log1p(Math.max(1, Number(edge.synapse_count || 1))) / maxLog,
+      preNt: Number(nodes[a]?.nt || 0),
+    });
   }
+  edgeEnergy = new Float32Array(edgeRecords.length);
+
   const edgeGeom = new THREE.BufferGeometry();
   edgeGeom.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
-  const edgeColors = new Float32Array(edgePositions.length);
-  for (let i = 0; i < edgeColors.length; i += 3) edgeColors.set([0.16,0.20,0.27], i);
-  edgeGeom.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3));
+  edgeGeom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(edgePositions.length), 3));
   edgeLines = new THREE.LineSegments(
     edgeGeom,
-    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.17 })
+    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.58, depthWrite: false })
   );
   brainScene.add(edgeLines);
+
+  const pulseGeometry = new THREE.BufferGeometry();
+  pulseGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_PULSES * 3), 3));
+  pulseGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_PULSES * 3), 3));
+  pulseGeometry.setDrawRange(0, 0);
+  pulseCloud = new THREE.Points(
+    pulseGeometry,
+    new THREE.PointsMaterial({
+      size: 0.24,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    })
+  );
+  pulseCloud.visible = document.getElementById('pulseEdges').checked;
+  brainScene.add(pulseCloud);
+
   document.getElementById('showEdges').dispatchEvent(new Event('change'));
+  document.getElementById('graphSize').textContent = `${nodes.length.toLocaleString()} / ${edgeRecords.length.toLocaleString()}`;
+  document.getElementById('activeEdges').textContent = '0';
+  pulses = [];
+}
+
+function spawnEdgePulses(activeIds, neural, now) {
+  if (!document.getElementById('pulseEdges').checked || !edgeRecords.length) return;
+  const candidates = [];
+  for (let i = 0; i < edgeRecords.length; i++) {
+    const edge = edgeRecords[i];
+    if (!activeIds.has(edge.pre)) continue;
+    const postActive = activeIds.has(edge.post);
+    const score = edge.strength * (postActive ? 1.25 : 1.0);
+    edgeEnergy[i] = Math.max(edgeEnergy[i], Math.min(1.0, 0.32 + 0.78 * score));
+    candidates.push({ i, score });
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  const available = Math.max(0, MAX_PULSES - pulses.length);
+  const limit = Math.min(available, 96, candidates.length);
+  for (let j = 0; j < limit; j++) {
+    const edgeIndex = candidates[j].i;
+    const edge = edgeRecords[edgeIndex];
+    const eventDriven = edge.preNt === 4 && (neural.reward || neural.aversive);
+    pulses.push({
+      edgeIndex,
+      born: now,
+      duration: 220 + (1.0 - edge.strength) * 420,
+      phase: Math.random() * 0.12,
+      color: eventDriven
+        ? (neural.reward ? REWARD_COLOR.clone() : AVERSIVE_COLOR.clone())
+        : ACTIVE_COLOR.clone(),
+    });
+  }
+  document.getElementById('activeEdges').textContent = candidates.length.toLocaleString();
 }
 
 function updateActivity(neural) {
   if (!pointCloud || !graph) return;
   const activeIds = new Set((neural.depolarizing_body_ids || []).map(Number));
-  const colors = pointCloud.geometry.getAttribute('color');
-  const activeColor = new THREE.Color(0x56d6ff);
-  const rewardColor = new THREE.Color(0x69f0a5);
-  const aversiveColor = new THREE.Color(0xff6f7d);
-  for (let i = 0; i < baseNodeColors.length; i++) {
-    const c = baseNodeColors[i];
-    colors.setXYZ(i, c.r * 0.64, c.g * 0.64, c.b * 0.64);
-  }
-  const nodes = graph.nodes || [];
   for (const id of activeIds) {
     const i = nodeIndex.get(id);
-    if (i !== undefined) colors.setXYZ(i, activeColor.r, activeColor.g, activeColor.b);
+    if (i !== undefined) nodeEnergy[i] = 1.0;
   }
-  if (neural.reward || neural.aversive) {
-    const eventColor = neural.reward ? rewardColor : aversiveColor;
-    for (let i = 0; i < nodes.length; i++) {
-      if (Number(nodes[i].nt || 0) === 4) colors.setXYZ(i, eventColor.r, eventColor.g, eventColor.b);
-    }
-  }
-  colors.needsUpdate = true;
 
-  if (edgeLines && document.getElementById('pulseEdges').checked) {
-    const edgeColors = edgeLines.geometry.getAttribute('color');
-    let segment = 0;
-    for (const edge of edges) {
-      const a = nodeIndex.get(Number(edge.pre));
-      const b = nodeIndex.get(Number(edge.post));
-      if (a === undefined || b === undefined) continue;
-      const lit = activeIds.has(Number(edge.pre));
-      const c = lit ? activeColor : new THREE.Color(0x293441);
-      edgeColors.setXYZ(segment * 2, c.r, c.g, c.b);
-      edgeColors.setXYZ(segment * 2 + 1, c.r, c.g, c.b);
-      segment++;
+  if (neural.reward || neural.aversive) {
+    eventTint = neural.reward ? REWARD_COLOR.clone() : AVERSIVE_COLOR.clone();
+    const nodes = graph.nodes || [];
+    for (let i = 0; i < nodes.length; i++) {
+      if (Number(nodes[i].nt || 0) === 4) nodeEventEnergy[i] = 1.0;
     }
-    edgeColors.needsUpdate = true;
-    edgeLines.material.opacity = 0.28;
   }
+
+  spawnEdgePulses(activeIds, neural, performance.now());
   document.getElementById('episode').textContent = neural.episode ?? '-';
   document.getElementById('step').textContent = neural.control_step ?? '-';
   document.getElementById('active').textContent = activeIds.size.toLocaleString();
+}
+
+function updateNeuralVisuals(now, dt) {
+  if (!pointCloud || !glowCloud) return;
+  const nodeDecay = Math.exp(-dt / 0.32);
+  const eventDecay = Math.exp(-dt / 0.48);
+  const edgeDecay = Math.exp(-dt / 0.42);
+  const colors = pointCloud.geometry.getAttribute('color');
+  const glowColors = glowCloud.geometry.getAttribute('color');
+
+  for (let i = 0; i < nodeEnergy.length; i++) {
+    nodeEnergy[i] *= nodeDecay;
+    nodeEventEnergy[i] *= eventDecay;
+    const base = baseNodeColors[i];
+    const energy = nodeEnergy[i];
+    const eventEnergy = nodeEventEnergy[i];
+    const r = base.r * (0.52 + 0.20 * energy) + ACTIVE_COLOR.r * 0.82 * energy + eventTint.r * 0.72 * eventEnergy;
+    const g = base.g * (0.52 + 0.20 * energy) + ACTIVE_COLOR.g * 0.82 * energy + eventTint.g * 0.72 * eventEnergy;
+    const b = base.b * (0.52 + 0.20 * energy) + ACTIVE_COLOR.b * 0.82 * energy + eventTint.b * 0.72 * eventEnergy;
+    colors.setXYZ(i, Math.min(1, r), Math.min(1, g), Math.min(1, b));
+    const glow = Math.min(1, energy * 0.95 + eventEnergy * 0.85);
+    glowColors.setXYZ(
+      i,
+      Math.min(1, ACTIVE_COLOR.r * energy + eventTint.r * eventEnergy) * glow,
+      Math.min(1, ACTIVE_COLOR.g * energy + eventTint.g * eventEnergy) * glow,
+      Math.min(1, ACTIVE_COLOR.b * energy + eventTint.b * eventEnergy) * glow,
+    );
+  }
+  colors.needsUpdate = true;
+  glowColors.needsUpdate = true;
+
+  if (edgeLines) {
+    const edgeColors = edgeLines.geometry.getAttribute('color');
+    for (let i = 0; i < edgeRecords.length; i++) {
+      edgeEnergy[i] *= edgeDecay;
+      const strength = edgeRecords[i].strength;
+      const active = edgeEnergy[i];
+      const idleScale = 0.17 + 0.25 * strength;
+      const r = EDGE_IDLE.r * idleScale + EDGE_ACTIVE.r * active;
+      const g = EDGE_IDLE.g * idleScale + EDGE_ACTIVE.g * active;
+      const b = EDGE_IDLE.b * idleScale + EDGE_ACTIVE.b * active;
+      edgeColors.setXYZ(i * 2, Math.min(1, r), Math.min(1, g), Math.min(1, b));
+      edgeColors.setXYZ(i * 2 + 1, Math.min(1, r), Math.min(1, g), Math.min(1, b));
+    }
+    edgeColors.needsUpdate = true;
+  }
+
+  if (pulseCloud) {
+    const position = pulseCloud.geometry.getAttribute('position');
+    const color = pulseCloud.geometry.getAttribute('color');
+    const nextPulses = [];
+    let draw = 0;
+    for (const pulse of pulses) {
+      const edge = edgeRecords[pulse.edgeIndex];
+      if (!edge) continue;
+      const progress = (now - pulse.born) / pulse.duration + pulse.phase;
+      if (progress >= 1.0) continue;
+      const t = Math.max(0, Math.min(1, progress));
+      const ax = nodePositions[edge.a * 3];
+      const ay = nodePositions[edge.a * 3 + 1];
+      const az = nodePositions[edge.a * 3 + 2];
+      const bx = nodePositions[edge.b * 3];
+      const by = nodePositions[edge.b * 3 + 1];
+      const bz = nodePositions[edge.b * 3 + 2];
+      position.setXYZ(draw, ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t);
+      const envelope = Math.sin(Math.PI * t);
+      color.setXYZ(draw, pulse.color.r * envelope, pulse.color.g * envelope, pulse.color.b * envelope);
+      nextPulses.push(pulse);
+      draw += 1;
+      if (draw >= MAX_PULSES) break;
+    }
+    pulses = nextPulses;
+    position.needsUpdate = true;
+    color.needsUpdate = true;
+    pulseCloud.geometry.setDrawRange(0, draw);
+  }
 }
 
 function updateBody(body) {
@@ -451,12 +621,15 @@ window.addEventListener('resize', resizeBrain);
 resizeBrain();
 updateFlyCameraLabels();
 
-function animate() {
+function animate(now) {
+  const dt = Math.min(0.1, Math.max(0.0, (now - lastAnimationTime) / 1000.0));
+  lastAnimationTime = now;
+  updateNeuralVisuals(now, dt);
   brainControls.update();
   if (!brainCard.hidden) brainRenderer.render(brainScene, brainCamera);
   requestAnimationFrame(animate);
 }
-animate();
+requestAnimationFrame(animate);
 connect();
 </script>
 </body>
