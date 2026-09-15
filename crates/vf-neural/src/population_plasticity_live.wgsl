@@ -138,8 +138,14 @@ fn discover_live_plasticity(
 
 /// Eager exact live-set update. One invocation owns one 32-edge bitmap word,
 /// so only P/32 lightweight invocations are dispatched. The dense numerical
-/// plasticity expression is executed only for set bits. The resulting next
-/// bitmap contains exactly edges whose updated eligibility remains non-zero.
+/// plasticity expression is executed only for set bits.
+///
+/// Both bitmap buffers receive the same updated word. Population slots may be
+/// stepped asynchronously (for example one slot receives extra DAN teaching
+/// steps while another is idle), so a process-global A/B phase must never be
+/// allowed to make an inactive slot's eligibility frontier disappear. Mirrored
+/// words make either A/B role safe on the next active step without changing any
+/// synaptic numerical state.
 @compute @workgroup_size(256)
 fn plasticity_live_step(
     @builtin(global_invocation_id) gid: vec3<u32>,
@@ -152,7 +158,7 @@ fn plasticity_live_step(
     let slot = flat_word / params.bitmap_words;
     if !slot_is_active(slot) { return; }
     let word_index = flat_word % params.bitmap_words;
-    var word = atomicLoad(&live_current[flat_word]);
+    let word = atomicLoad(&live_current[flat_word]);
     var next_word = 0u;
 
     let plastic_base = slot * params.plastic_edge_count;
@@ -194,8 +200,6 @@ fn plasticity_live_step(
         bit += 1u;
     }
 
-    // The old-current bitmap becomes the zeroed scratch bitmap for the next
-    // plasticity step after the runtime swaps A/B roles.
-    atomicStore(&live_current[flat_word], 0u);
+    atomicStore(&live_current[flat_word], next_word);
     atomicStore(&live_next[flat_word], next_word);
 }
