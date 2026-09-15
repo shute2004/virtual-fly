@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Serve the detached learning viewer and request telemetry while it is open.
 
-The viewer remains independent from training. It sends only a tiny local lease
-heartbeat to the trainer's Unix datagram control socket. Training generates body
-and neural snapshots only while that lease is alive. Browser camera gestures are
-written atomically under ``<experiment>/live/camera.json`` and are consumed only
-by ``live_body_viewer.py``'s separate MuJoCo renderer.
+The viewer remains independent from training. It holds one tiny local Unix
+stream connection to the trainer while it is open; that connection itself is the
+viewer lease. Training generates body and neural snapshots only while the stream
+is connected. Browser camera gestures are written atomically under
+``<experiment>/live/camera.json`` and are consumed only by
+``live_body_viewer.py``'s separate MuJoCo renderer.
 """
 
 from __future__ import annotations
@@ -52,32 +53,60 @@ def finite_number(payload: dict, key: str) -> float:
 
 
 class ViewerTelemetryLease:
-    """Heartbeat a running trainer without owning or blocking it."""
+    """Hold a reconnecting Unix stream to the trainer while the viewer is open."""
 
     def __init__(self, experiment: Path, *, interval_s: float = 0.4) -> None:
         self.target = viewer_control_socket_path(experiment)
         self.interval_s = float(interval_s)
         self._stop = threading.Event()
+        self._connected = threading.Event()
         self._thread = threading.Thread(
             target=self._run,
             name="flyppy-viewer-telemetry-lease",
             daemon=True,
         )
 
-    @staticmethod
-    def _send(target: Path, payload: bytes) -> None:
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
-                client.sendto(payload, str(target))
-        except OSError:
-            # The viewer may be opened before training. The next heartbeat will
-            # connect automatically once the trainer's control socket exists.
-            pass
+    @property
+    def connected(self) -> bool:
+        return self._connected.is_set()
 
     def _run(self) -> None:
-        while not self._stop.is_set():
-            self._send(self.target, b"watch")
-            self._stop.wait(self.interval_s)
+        connection: socket.socket | None = None
+        try:
+            while not self._stop.is_set():
+                if connection is None:
+                    candidate = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    candidate.settimeout(max(0.1, self.interval_s))
+                    try:
+                        candidate.connect(str(self.target))
+                    except OSError:
+                        candidate.close()
+                        self._connected.clear()
+                        self._stop.wait(self.interval_s)
+                        continue
+                    candidate.settimeout(None)
+                    connection = candidate
+                    self._connected.set()
+
+                try:
+                    connection.sendall(b"watch\n")
+                except OSError:
+                    try:
+                        connection.close()
+                    except OSError:
+                        pass
+                    connection = None
+                    self._connected.clear()
+                    continue
+
+                self._stop.wait(self.interval_s)
+        finally:
+            self._connected.clear()
+            if connection is not None:
+                try:
+                    connection.close()
+                except OSError:
+                    pass
 
     def start(self) -> None:
         self._thread.start()
@@ -85,7 +114,6 @@ class ViewerTelemetryLease:
     def close(self) -> None:
         self._stop.set()
         self._thread.join(timeout=max(1.0, self.interval_s * 3.0))
-        self._send(self.target, b"stop")
 
 
 def make_handler(root: Path, camera_path: Path, status_url: str):
@@ -199,6 +227,7 @@ def main() -> int:
     print(f"viewer_server=http://{args.bind}:{args.port}")
     print(f"observer_camera={camera_path}")
     print(f"telemetry_request={lease.target}")
+    print("telemetry_transport=unix-stream")
     try:
         server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
