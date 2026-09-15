@@ -1,35 +1,42 @@
 # Flyppy population resume probe
 
-- generated_at_utc: 2026-09-15T03:16:23+00:00
+- generated_at_utc: 2026-09-15T03:20:47+00:00
 - mutates training artifacts: false
-- overall: FAIL
+- overall: PASS
 
 ## Stages
 
 | stage | ok | seconds | error |
 |---|---|---:|---|
-| validate_inputs | no | 0.000 | FileNotFoundError: missing inputs: /Users/<local-user>/Desktop/virtual-fly/artifacts/malecns-v1.0/embodiment-groups-v0.json |
+| validate_inputs | yes | 0.000 | - |
+| read_checkpoint_manifest | yes | 0.000 | - |
+| read_curriculum_state | yes | 0.000 | - |
+| read_population_state | yes | 0.000 | - |
+| construct_flybody_slots | yes | 4.778 | - |
+| start_population_bridge | yes | 4.629 | - |
+| bridge_ping | yes | 0.000 | - |
+| load_production_checkpoint | yes | 0.404 | - |
 
 ## Details
 
 ```json
 {
+  "bridge_backend": "gpu-population:Apple M1 (Metal)",
+  "bridge_global_weight_version": 0,
+  "bridge_ping": null,
+  "checkpoint_step": 5757,
+  "constructed_slots": 2,
+  "curriculum_episodes": 72,
   "experiment": "/Users/<local-user>/Desktop/virtual-fly/artifacts/experiments/flyppy-v3",
+  "initial_global_weight_version": 0,
+  "loaded_checkpoint": {
+    "event": "checkpoint_loaded",
+    "global_weight_version": 0,
+    "ok": true,
+    "path": "/Users/<local-user>/Desktop/virtual-fly/artifacts/experiments/flyppy-v3/checkpoint",
+    "step": 5757
+  },
   "population": 2,
   "snapshot": "/Users/<local-user>/Desktop/virtual-fly/artifacts/malecns-v1.0"
 }
-```
-
-## Failure
-
-```text
-Traceback (most recent call last):
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/analysis/probe_flyppy_population_resume.py", line 156, in main
-    record_stage(stages, "validate_inputs", validate_inputs)
-    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/analysis/probe_flyppy_population_resume.py", line 67, in record_stage
-    value = fn()
-  File "/Users/<local-user>/Desktop/virtual-fly/scripts/analysis/probe_flyppy_population_resume.py", line 154, in validate_inputs
-    raise FileNotFoundError("missing inputs: " + ", ".join(missing))
-FileNotFoundError: missing inputs: /Users/<local-user>/Desktop/virtual-fly/artifacts/malecns-v1.0/embodiment-groups-v0.json
 ```
