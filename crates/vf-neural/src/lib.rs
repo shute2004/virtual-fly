@@ -9,12 +9,11 @@ mod transaction;
 #[path = "gpu30.rs"]
 pub mod gpu;
 
-// The population runtime intentionally owns several GPU buffers only to keep
-// resources referenced by bind groups alive for the lifetime of the runtime.
-// Rust therefore sees those lifetime-anchor fields as unread even though they
-// are required by the WGPU resource graph.
+// Population training now keeps slot-local mutable synapse and transaction
+// state only for PlasticFastGraph edges. The public module name remains stable
+// so the bridge/trainer protocol does not change while the runtime evolves.
 #[cfg(feature = "gpu")]
-#[allow(dead_code)]
+#[path = "gpu_population_sparse.rs"]
 pub mod gpu_population;
 
 pub use cpu::{CpuRuntime, StepSummary};
