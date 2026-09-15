@@ -10,21 +10,20 @@ mod transaction;
 #[path = "gpu30.rs"]
 pub mod gpu;
 
-// Keep the P-backed dense-incoming runtime available as a numerical reference
-// while the production-facing population module uses the outgoing propagation
-// frontier. Debug wrappers expose full slot state only for golden tests;
-// training does not call those readbacks.
+// Keep the P-backed dense-incoming runtime available as the numerical golden
+// reference. The production-facing population runtime now combines the
+// outgoing propagation frontier with an exact eager live plasticity bitmap.
 #[cfg(feature = "gpu")]
 #[path = "gpu_population_reference_debug.rs"]
 pub mod gpu_population_reference;
 
 #[cfg(feature = "gpu")]
-#[path = "gpu_population_frontier_debug.rs"]
+#[path = "gpu_population_live.rs"]
 pub mod gpu_population;
 
-// Diagnostic-only signed activity readback used by the real-Flyppy frontier
-// profiler. It includes the same numerical runtime and adds no production-path
-// behavior unless explicitly selected by the profiling bridge.
+// Diagnostic-only signed activity/readback runtime. It deliberately keeps the
+// dense-P plasticity path so profilers can inspect full internal state without
+// adding readback machinery to the production hot path.
 #[cfg(feature = "gpu")]
 #[path = "gpu_population_frontier_profiled.rs"]
 pub mod gpu_population_frontier_profiled;
