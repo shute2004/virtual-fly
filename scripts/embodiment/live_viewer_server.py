@@ -18,6 +18,8 @@ import os
 from pathlib import Path
 import socket
 import threading
+import time
+from urllib.parse import urlparse
 
 from live_telemetry import viewer_control_socket_path
 
@@ -86,7 +88,9 @@ class ViewerTelemetryLease:
         self._send(self.target, b"stop")
 
 
-def make_handler(root: Path, camera_path: Path):
+def make_handler(root: Path, camera_path: Path, status_url: str):
+    live_root = camera_path.parent
+
     class ViewerHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(root), **kwargs)
@@ -95,6 +99,42 @@ def make_handler(root: Path, camera_path: Path):
             if self.path.startswith("/artifacts/experiments/") or self.path.startswith("/api/"):
                 self.send_header("Cache-Control", "no-store, max-age=0")
             super().end_headers()
+
+        def do_GET(self) -> None:  # noqa: N802 - stdlib hook name
+            if urlparse(self.path).path == status_url:
+                status_path = live_root / "status.json"
+                body_path = live_root / "body.json"
+                if body_path.exists():
+                    try:
+                        body_mtime = body_path.stat().st_mtime_ns
+                        status_mtime = status_path.stat().st_mtime_ns if status_path.exists() else -1
+                        if status_mtime < body_mtime:
+                            body = json.loads(body_path.read_text(encoding="utf-8"))
+                            previous = (
+                                json.loads(status_path.read_text(encoding="utf-8"))
+                                if status_path.exists()
+                                else {}
+                            )
+                            payload = {
+                                "schema_version": 1,
+                                "running": True,
+                                "backend": previous.get("backend", "gpu-population"),
+                                "episode": body.get("episode"),
+                                "control_step": body.get("control_step"),
+                                "curriculum": previous.get("curriculum", {}),
+                                "viewer_attached": True,
+                                "served_at_unix_s": time.time(),
+                            }
+                            response = json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
+                            self.send_response(200)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response)
+                            return
+                    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                        pass
+            super().do_GET()
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib hook name
             if self.path != "/api/camera":
@@ -147,11 +187,12 @@ def main() -> int:
     experiment = (root / args.experiment).resolve()
     camera_path = experiment / "live" / "camera.json"
     try:
-        experiment.relative_to(root)
+        experiment_relative = experiment.relative_to(root)
     except ValueError as exc:
         raise SystemExit("experiment path must be inside viewer root") from exc
+    status_url = "/" + experiment_relative.as_posix() + "/live/status.json"
 
-    handler = make_handler(root, camera_path)
+    handler = make_handler(root, camera_path, status_url)
     server = ThreadingHTTPServer((args.bind, args.port), handler)
     lease = ViewerTelemetryLease(experiment)
     lease.start()
