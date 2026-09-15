@@ -33,6 +33,11 @@ def parse_args() -> argparse.Namespace:
         default=Path("artifacts/experiments/flyppy-v3"),
     )
     parser.add_argument("--duration", type=float, default=3.0)
+    parser.add_argument(
+        "--report",
+        type=Path,
+        default=Path("reports/flyppy/live_viewer_session_probe.md"),
+    )
     return parser.parse_args()
 
 
@@ -83,10 +88,6 @@ def main() -> int:
         "frame": live / "fly.png",
     }
 
-    print(f"experiment={experiment}")
-    print(f"control_socket={control}")
-    print(f"control_socket_exists={str(control.exists()).lower()}")
-
     before = {name: stamp(path) for name, path in paths.items()}
     started = time.monotonic()
     sends = 0
@@ -100,32 +101,15 @@ def main() -> int:
         time.sleep(0.2)
     after = {name: stamp(path) for name, path in paths.items()}
 
-    print(f"watch_packets_sent={sends}")
-    if send_failures:
-        print(f"watch_send_error={send_failures[-1]}")
-
-    for name, path in paths.items():
-        existed_before, mtime_before, size_before = before[name]
-        existed_after, mtime_after, size_after = after[name]
-        changed = existed_after and (not existed_before or mtime_after != mtime_before)
-        print(
-            f"{name}_exists={str(existed_after).lower()} "
-            f"{name}_changed={str(changed).lower()} "
-            f"{name}_size={size_after} path={path}"
-        )
-
-    print(f"status_key={read_key(paths['status'])}")
-    print(f"body_key={read_key(paths['body'])}")
-    print(f"neural_key={read_key(paths['neural'])}")
-
-    socket_ok = control.exists() and sends > 0
+    socket_exists = control.exists()
+    socket_ok = socket_exists and sends > 0
     telemetry_ok = after["body"][0] and after["neural"][0]
     telemetry_live = (
         (after["body"][1] != before["body"][1])
         or (after["neural"][1] != before["neural"][1])
     )
 
-    if not control.exists():
+    if not socket_exists:
         diagnosis = "TRAINER_CONTROL_SOCKET_MISSING"
     elif sends == 0:
         diagnosis = "VIEWER_HEARTBEAT_SEND_FAILED"
@@ -140,10 +124,64 @@ def main() -> int:
     else:
         diagnosis = "LIVE_VIEWER_PIPELINE_OK"
 
+    lines = [
+        "# Flyppy live viewer session probe",
+        "",
+        f"- experiment: `{experiment}`",
+        f"- control socket: `{control}`",
+        f"- control socket exists: `{str(socket_exists).lower()}`",
+        f"- watch packets sent: `{sends}`",
+        f"- socket ok: `{str(socket_ok).lower()}`",
+        f"- telemetry ok: `{str(telemetry_ok).lower()}`",
+        f"- telemetry live: `{str(telemetry_live).lower()}`",
+        f"- diagnosis: `{diagnosis}`",
+        "",
+        "## Files",
+        "",
+        "| item | exists | changed during probe | bytes | key | path |",
+        "|---|---|---|---:|---|---|",
+    ]
+    for name, path in paths.items():
+        existed_before, mtime_before, _ = before[name]
+        existed_after, mtime_after, size_after = after[name]
+        changed = existed_after and (not existed_before or mtime_after != mtime_before)
+        key = read_key(path) if name in {"status", "body", "neural"} else "-"
+        lines.append(
+            f"| {name} | {str(existed_after).lower()} | {str(changed).lower()} | "
+            f"{size_after} | `{key}` | `{path}` |"
+        )
+    if send_failures:
+        lines.extend(["", f"- last heartbeat error: `{send_failures[-1]}`"])
+
+    report = args.report
+    if not report.is_absolute():
+        report = ROOT / report
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    print(f"experiment={experiment}")
+    print(f"control_socket={control}")
+    print(f"control_socket_exists={str(socket_exists).lower()}")
+    print(f"watch_packets_sent={sends}")
+    if send_failures:
+        print(f"watch_send_error={send_failures[-1]}")
+    for name, path in paths.items():
+        existed_before, mtime_before, _ = before[name]
+        existed_after, mtime_after, size_after = after[name]
+        changed = existed_after and (not existed_before or mtime_after != mtime_before)
+        print(
+            f"{name}_exists={str(existed_after).lower()} "
+            f"{name}_changed={str(changed).lower()} "
+            f"{name}_size={size_after} path={path}"
+        )
+    print(f"status_key={read_key(paths['status'])}")
+    print(f"body_key={read_key(paths['body'])}")
+    print(f"neural_key={read_key(paths['neural'])}")
     print(f"socket_ok={str(socket_ok).lower()}")
     print(f"telemetry_ok={str(telemetry_ok).lower()}")
     print(f"telemetry_live={str(telemetry_live).lower()}")
     print(f"diagnosis={diagnosis}")
+    print(f"report={report}")
     return 0 if diagnosis == "LIVE_VIEWER_PIPELINE_OK" else 1
 
 
