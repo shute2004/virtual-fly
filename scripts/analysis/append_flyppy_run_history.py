@@ -28,6 +28,12 @@ FIELDS = [
     "environment_version",
     "motor_boundary",
     "backend",
+    "population",
+    "body_runtime",
+    "body_processes",
+    "vision_runtime",
+    "vision_rays_per_ommatidium",
+    "vision_framebuffer",
     "episode_start",
     "episode_end",
     "episode_count",
@@ -110,6 +116,12 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
     environment_version = str(payload.get("environment_version", "-"))
     motor_boundary = str(payload.get("motor_boundary", "-"))
     checkpoint_step = payload.get("checkpoint_neural_step", "")
+    population = payload.get("population", "")
+    body_runtime = payload.get("body_runtime", "")
+    body_processes = payload.get("body_processes", "")
+    vision_runtime = payload.get("vision_runtime", "")
+    vision_rays = payload.get("vision_rays_per_ommatidium", "")
+    vision_framebuffer = payload.get("vision_framebuffer", "")
 
     run_key = "|".join(
         [
@@ -129,6 +141,16 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
         "environment_version": environment_version,
         "motor_boundary": motor_boundary,
         "backend": payload.get("backend", "-"),
+        "population": population,
+        "body_runtime": body_runtime,
+        "body_processes": body_processes,
+        "vision_runtime": vision_runtime,
+        "vision_rays_per_ommatidium": vision_rays,
+        "vision_framebuffer": (
+            str(bool(vision_framebuffer)).lower()
+            if isinstance(vision_framebuffer, bool)
+            else vision_framebuffer
+        ),
         "episode_start": episode_start,
         "episode_end": episode_end,
         "episode_count": episode_count,
@@ -177,14 +199,19 @@ def main() -> int:
     rows = [existing for existing in rows if existing.get("run_key") != row["run_key"]]
     rows.append({key: str(row.get(key, "")) for key in FIELDS})
 
+    # Rewriting with the current field list intentionally migrates older rows:
+    # newly introduced runtime fields stay blank for historical runs whose
+    # summaries did not record them.
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        writer = csv.DictWriter(handle, fieldnames=FIELDS, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows({key: existing.get(key, "") for key in FIELDS} for existing in rows)
 
     print(f"flyppy_run_history={args.output}")
     print(f"run_key={row['run_key']}")
+    print(f"vision_runtime={row['vision_runtime']}")
+    print(f"vision_rays_per_ommatidium={row['vision_rays_per_ommatidium']}")
     print(f"elapsed_seconds={row['elapsed_seconds']}")
     print(f"control_steps_per_second={row['control_steps_per_second']}")
     print(f"success_rate={row['success_rate']}")
