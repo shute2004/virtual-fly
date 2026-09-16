@@ -19,6 +19,13 @@ import time
 from typing import Any
 
 from virtual_fly.physics import FLYBODY_V3, FLYPPY_GEOMETRY_V3
+from virtual_fly.training.checkpointing import (
+    persist_shared_checkpoint as persist_population_checkpoint,
+    population_state_snapshot,
+    prepare_population_resume,
+    recover_population_storage,
+)
+from virtual_fly.training.population_schedule import checkpoint_can_flush, launch_round_for_index
 from virtual_fly.training.curriculum import (
     AdaptiveCurriculumConfig,
     BoundaryBandConfig,
@@ -71,6 +78,8 @@ class SlotRuntime:
     aversive_events: int = 0
     boundary_ease_level: float | None = None
     boundary_attempt_index: int | None = None
+    boundary_batch_number: int | None = None
+    launch_round: int = 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,6 +108,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--telemetry-slot", type=int, default=0)
     parser.add_argument("--telemetry-stride", type=int, default=10)
     parser.add_argument("--body-telemetry-stride", type=int, default=1)
+    parser.add_argument(
+        "--launch-mode",
+        choices=("async", "wave"),
+        default="async",
+        help=(
+            "async restarts each finished slot immediately; wave waits for all currently "
+            "launched slots to finish before starting the next group from one shared weight version"
+        ),
+    )
 
     parser.add_argument(
         "--curriculum-mode",
@@ -128,22 +146,6 @@ def save_json_atomic(path: Path, payload: dict[str, object]) -> None:
     temp = path.with_name(f".{path.name}.tmp")
     temp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     temp.replace(path)
-
-
-def infer_next_episode(trajectory_path: Path) -> int:
-    if not trajectory_path.exists():
-        return 0
-    highest = -1
-    with trajectory_path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                highest = max(highest, int(json.loads(line).get("episode", -1)))
-            except (json.JSONDecodeError, TypeError, ValueError):
-                continue
-    return highest + 1
 
 
 def load_viewer_body_ids(path: Path) -> tuple[int, ...]:
@@ -316,6 +318,8 @@ def begin_episode(
     condition: SpawnCondition,
     boundary_ease_level: float | None = None,
     boundary_attempt_index: int | None = None,
+    boundary_batch_number: int | None = None,
+    launch_round: int = 0,
 ) -> None:
     slot.active = True
     slot.episode = episode
@@ -335,6 +339,8 @@ def begin_episode(
     slot.aversive_events = 0
     slot.boundary_ease_level = boundary_ease_level
     slot.boundary_attempt_index = boundary_attempt_index
+    slot.boundary_batch_number = boundary_batch_number
+    slot.launch_round = int(launch_round)
     slot.last_retinal = None
     slot.last_peripheral = None
     slot.last_body_spikes = {}
@@ -379,6 +385,8 @@ def result_for_slot(
         "curriculum_mode": curriculum_mode,
         "boundary_ease_level": slot.boundary_ease_level,
         "boundary_attempt_index": slot.boundary_attempt_index,
+        "boundary_batch_number": slot.boundary_batch_number,
+        "launch_round": slot.launch_round,
         "reward_events": slot.reward_events,
         "aversive_events": slot.aversive_events,
     }
@@ -396,11 +404,28 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     checkpoint = output / "checkpoint"
     state_path = output / "curriculum-state.json"
-    population_state_path = output / "population-state.json"
     trajectory_path = output / "trajectory.jsonl"
     commit_log_path = output / "commit-log.jsonl"
     summary_path = output / "summary.json"
-    checkpoint_exists = (checkpoint / "manifest.json").exists()
+    storage_recovery = recover_population_storage(output)
+    checkpoint_dir_recovery = storage_recovery.checkpoint_directory
+    checkpoint_exists = storage_recovery.checkpoint_exists
+    if checkpoint_dir_recovery.action not in {"active_checkpoint", "no_checkpoint"}:
+        print(f"checkpoint_directory_recovery action={checkpoint_dir_recovery.action}")
+    staged_recovery = storage_recovery.staged_state
+    if staged_recovery is not None and staged_recovery.action not in {
+        "consistent",
+        "legacy_checkpoint",
+        "none",
+    }:
+        print(
+            "checkpoint_state_recovery action={} checkpoint_v={} active_v={} pending_v={}".format(
+                staged_recovery.action,
+                staged_recovery.checkpoint_global_weight_version,
+                staged_recovery.active_global_weight_version,
+                staged_recovery.pending_global_weight_version,
+            )
+        )
 
     start_condition = SpawnCondition(
         args.curriculum_start_x_mm,
@@ -427,14 +452,30 @@ def main() -> int:
         ensure_boundary_state(state, boundary)
         state["consecutive_failures"] = 0
 
-    population_state: dict[str, object] = {}
-    if checkpoint_exists and population_state_path.exists():
-        population_state = json.loads(population_state_path.read_text(encoding="utf-8"))
-    initial_global_version = int(population_state.get("global_weight_version", 0))
-
-    start_episode = infer_next_episode(trajectory_path) if checkpoint_exists else 0
-    trajectory_mode = "a" if checkpoint_exists else "w"
-    commit_mode = "a" if checkpoint_exists and commit_log_path.exists() else "w"
+    try:
+        resume_plan = prepare_population_resume(
+            output,
+            requested_launch_mode=args.launch_mode,
+            checkpoint_exists=checkpoint_exists,
+        )
+    except (ValueError, RuntimeError) as error:
+        raise SystemExit(str(error)) from error
+    initial_global_version = resume_plan.initial_global_weight_version
+    start_episode = resume_plan.start_episode
+    reconciliation = resume_plan.reconciliation
+    if reconciliation is not None and reconciliation.changed:
+        print(
+            "resume_reconciled stable_v={} removed_commits={} removed_trajectory_lines={} "
+            "removed_episodes={} next_episode={}".format(
+                reconciliation.stable_global_weight_version,
+                reconciliation.removed_commits,
+                reconciliation.removed_trajectory_lines,
+                list(reconciliation.removed_episode_ids),
+                reconciliation.next_episode,
+            )
+        )
+    trajectory_mode = resume_plan.trajectory_mode
+    commit_mode = resume_plan.commit_mode
     viewer_ids = load_viewer_body_ids(args.viewer_graph) if args.telemetry else ()
     publisher = LiveTelemetryPublisher(output, enabled=args.telemetry)
     slots = [make_slot(args, index) for index in range(args.population)]
@@ -442,9 +483,10 @@ def main() -> int:
 
     print(
         "population_runtime=enabled population={} shared_weight=true weight_averaging=false "
-        "environment=v3 motor_boundary=whole-body telemetry={}".format(
+        "environment=v3 motor_boundary=whole-body telemetry={} launch_mode={}".format(
             args.population,
             args.telemetry,
+            args.launch_mode,
         )
     )
 
@@ -455,6 +497,7 @@ def main() -> int:
     saved_state: dict[str, object] = {}
     started = time.perf_counter()
     aggregate_control_steps = 0
+    checkpoint_pending = False
 
     with trajectory_path.open(trajectory_mode, encoding="utf-8") as trajectory, commit_log_path.open(
         commit_mode, encoding="utf-8"
@@ -476,12 +519,27 @@ def main() -> int:
                     f"global_weight_version={brain.global_weight_version}"
                 )
 
+            def persist_shared_checkpoint() -> dict[str, Any]:
+                return persist_population_checkpoint(
+                    output_dir=output,
+                    checkpoint_dir=checkpoint,
+                    curriculum_state=state,
+                    population_state=population_state_snapshot(
+                        population=args.population,
+                        global_weight_version=brain.global_weight_version,
+                        curriculum_mode=args.curriculum_mode,
+                        launch_mode=args.launch_mode,
+                    ),
+                    save_checkpoint=brain.save_checkpoint,
+                )
+
             def launch_slot(slot: SlotRuntime) -> bool:
                 nonlocal launched
                 if launched >= args.episodes:
                     return False
                 ease_level: float | None = None
                 attempt_index: int | None = None
+                batch_number: int | None = None
                 if boundary is None:
                     condition = current_adaptive_condition(state)
                 else:
@@ -494,13 +552,16 @@ def main() -> int:
                     )
                     if attempt_index is None:
                         return False
+                    batch_number = int(dict(state["boundary_band"])["batch_number"])
                     condition, ease_level = boundary_condition_for_attempt(
                         state,
                         boundary,
                         attempt_index,
+                        group_count=args.population,
                     )
                     boundary_issued_attempts.add(attempt_index)
                 episode = start_episode + launched
+                launch_round = launch_round_for_index(launched, args.population)
                 begin_episode(
                     slot,
                     episode=episode,
@@ -508,6 +569,8 @@ def main() -> int:
                     condition=condition,
                     boundary_ease_level=ease_level,
                     boundary_attempt_index=attempt_index,
+                    boundary_batch_number=batch_number,
+                    launch_round=launch_round,
                 )
                 launched += 1
                 return True
@@ -630,8 +693,11 @@ def main() -> int:
                                     "environment_version": "v3",
                                     "motor_boundary": "whole-body",
                                     "curriculum_mode": args.curriculum_mode,
+                                    "launch_mode": args.launch_mode,
                                     "boundary_ease_level": slot.boundary_ease_level,
                                     "boundary_attempt_index": slot.boundary_attempt_index,
+                                    "boundary_batch_number": slot.boundary_batch_number,
+                                    "launch_round": slot.launch_round,
                                 },
                                 separators=(",", ":"),
                             )
@@ -740,8 +806,11 @@ def main() -> int:
                         "spawn_z_mm": slot.spawn_z_mm,
                         "initial_speed_mm_s": slot.initial_speed_mm_s,
                         "curriculum_mode": args.curriculum_mode,
+                        "launch_mode": args.launch_mode,
                         "boundary_ease_level": slot.boundary_ease_level,
                         "boundary_attempt_index": slot.boundary_attempt_index,
+                        "boundary_batch_number": slot.boundary_batch_number,
+                        "launch_round": slot.launch_round,
                     }
                     commit_log.write(json.dumps(commit_record, separators=(",", ":")) + "\n")
                     commit_log.flush()
@@ -761,28 +830,33 @@ def main() -> int:
                         )
                     )
 
-                    checkpoint_due = completed % args.checkpoint_every == 0
-                    if checkpoint_due:
-                        saved_state = brain.save_checkpoint(checkpoint)
-                        save_json_atomic(state_path, state)
-                        save_json_atomic(
-                            population_state_path,
-                            {
-                                "schema_version": 1,
-                                "population": args.population,
-                                "global_weight_version": brain.global_weight_version,
-                                "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
-                                "weight_averaging": False,
-                                "curriculum_mode": args.curriculum_mode,
-                            },
-                        )
+                    if completed % args.checkpoint_every == 0:
+                        checkpoint_pending = True
 
-                    if boundary is None and launched < args.episodes:
+                    if (
+                        args.launch_mode == "async"
+                        and boundary is None
+                        and launched < args.episodes
+                    ):
                         launch_slot(slot)
                     else:
                         slot.active = False
 
-                if boundary is not None and launched < args.episodes:
+                if checkpoint_can_flush(
+                    launch_mode=args.launch_mode,
+                    checkpoint_pending=checkpoint_pending,
+                    active_slots=sum(slot.active for slot in slots),
+                ):
+                    saved_state = persist_shared_checkpoint()
+                    checkpoint_pending = False
+
+                if args.launch_mode == "wave" and launched < args.episodes:
+                    if not any(slot.active for slot in slots):
+                        for idle_slot in slots:
+                            if launched >= args.episodes:
+                                break
+                            launch_slot(idle_slot)
+                elif boundary is not None and launched < args.episodes:
                     for idle_slot in slots:
                         if launched >= args.episodes:
                             break
@@ -790,33 +864,22 @@ def main() -> int:
                             continue
                         launch_slot(idle_slot)
 
-            saved_state = brain.save_checkpoint(checkpoint)
-            save_json_atomic(state_path, state)
-            save_json_atomic(
-                population_state_path,
-                {
-                    "schema_version": 1,
-                    "population": args.population,
-                    "global_weight_version": brain.global_weight_version,
-                    "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
-                    "weight_averaging": False,
-                    "curriculum_mode": args.curriculum_mode,
-                },
-            )
+            saved_state = persist_shared_checkpoint()
             final_global_version = brain.global_weight_version
             backend_name = str(brain.ready.get("backend", "gpu-population"))
 
     elapsed = time.perf_counter() - started
     staleness_values = [int(item["staleness"]) for item in commit_records]
     summary = {
-        "schema_version": 11,
-        "experiment": "flyppy_v3_async_shared_weight_population",
+        "schema_version": 12,
+        "experiment": "flyppy_v3_shared_weight_population",
         "backend": backend_name,
         "persistent_runtime": True,
         "population": args.population,
         "shared_weight": True,
         "weight_averaging": False,
         "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
+        "launch_mode": args.launch_mode,
         "environment_version": "v3",
         "motor_boundary": "whole-body",
         "physical_spec": {

@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "left": {
+    "summary": "artifacts/experiments/flyppy-v3-scheduler-ab3/async/summary.json",
+    "launch_mode": "async",
+    "episode_start": 256,
+    "episode_end": 279,
+    "episodes": 24,
+    "first_gate_successes": 12,
+    "first_gate_rate": 0.5,
+    "second_gate_successes": 5,
+    "second_gate_rate": 0.20833333333333334,
+    "total_passed_gates": 17,
+    "mean_passed_gates": 0.7083333333333334,
+    "collision_rate": 1.0,
+    "mean_control_steps": 58.708333333333336,
+    "mean_altitude_gain_mm": -0.005494411728835802,
+    "max_altitude_gain_mm": -0.005479772148081707,
+    "elapsed_seconds": 156.75886033312418,
+    "aggregate_control_steps_per_second": 8.988327658199164,
+    "simulation_realtime_factor": 0.004494163829099582,
+    "mean_version_staleness": 2.0416666666666665,
+    "max_version_staleness": 7,
+    "reward_mean_staleness": 2.8333333333333335,
+    "no_reward_mean_staleness": 1.25,
+    "source_version_rounds": {
+      "complete_rounds": 6,
+      "mean_source_version_spread": 9.5,
+      "max_source_version_spread": 13,
+      "zero_spread_rounds": 1
+    }
+  },
+  "right": {
+    "summary": "artifacts/experiments/flyppy-v3-scheduler-ab3/wave/summary.json",
+    "launch_mode": "wave",
+    "episode_start": 256,
+    "episode_end": 279,
+    "episodes": 24,
+    "first_gate_successes": 12,
+    "first_gate_rate": 0.5,
+    "second_gate_successes": 5,
+    "second_gate_rate": 0.20833333333333334,
+    "total_passed_gates": 17,
+    "mean_passed_gates": 0.7083333333333334,
+    "collision_rate": 1.0,
+    "mean_control_steps": 58.708333333333336,
+    "mean_altitude_gain_mm": -0.005494411728835802,
+    "max_altitude_gain_mm": -0.005479772148081707,
+    "elapsed_seconds": 157.11691170791164,
+    "aggregate_control_steps_per_second": 8.967844293040859,
+    "simulation_realtime_factor": 0.00448392214652043,
+    "mean_version_staleness": 1.5,
+    "max_version_staleness": 3,
+    "reward_mean_staleness": 2.5,
+    "no_reward_mean_staleness": 0.5,
+    "source_version_rounds": {
+      "complete_rounds": 6,
+      "mean_source_version_spread": 0,
+      "max_source_version_spread": 0,
+      "zero_spread_rounds": 6
+    }
+  },
+  "left_fixed": {
+    "path": "reports/flyppy/experiments/scheduler-ab/episode255-v184/async_fixed.json",
+    "checkpoint_neural_step": 17354,
+    "conditions": [
+      {
+        "condition": "part3_frontier",
+        "first_gate_passes": 2,
+        "second_gate_passes": 0,
+        "mean_passed_gates": 0.5,
+        "collision_rate": 1.0
+      },
+      {
+        "condition": "midpoint",
+        "first_gate_passes": 2,
+        "second_gate_passes": 0,
+        "mean_passed_gates": 0.5,
+        "collision_rate": 1.0
+      },
+      {
+        "condition": "target",
+        "first_gate_passes": 1,
+        "second_gate_passes": 0,
+        "mean_passed_gates": 0.25,
+        "collision_rate": 1.0
+      }
+    ]
+  },
+  "right_fixed": {
+    "path": "reports/flyppy/experiments/scheduler-ab/episode255-v184/wave_fixed.json",
+    "checkpoint_neural_step": 17354,
+    "conditions": [
+      {
+        "condition": "part3_frontier",
+        "first_gate_passes": 2,
+        "second_gate_passes": 0,
+        "mean_passed_gates": 0.5,
+        "collision_rate": 1.0
+      },
+      {
+        "condition": "midpoint",
+        "first_gate_passes": 2,
+        "second_gate_passes": 0,
+        "mean_passed_gates": 0.5,
+        "collision_rate": 1.0
+      },
+      {
+        "condition": "target",
+        "first_gate_passes": 1,
+        "second_gate_passes": 0,
+        "mean_passed_gates": 0.25,
+        "collision_rate": 1.0
+      }
+    ]
+  }
+}

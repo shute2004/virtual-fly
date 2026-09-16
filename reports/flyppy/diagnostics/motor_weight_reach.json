@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "snapshot": "artifacts/malecns-v1.0",
+  "checkpoint": "artifacts/experiments/flyppy-v3/checkpoint",
+  "checkpoint_neural_step": 15781,
+  "synapse_scale": 0.005,
+  "weight_epsilon": 1e-07,
+  "max_hops": 4,
+  "actuated_motor_counts": {
+    "wing": 60,
+    "somatic": 208,
+    "all": 268
+  },
+  "upstream_layer_sizes": [
+    268,
+    11807,
+    38148,
+    105401,
+    9733
+  ],
+  "direct_motor": [
+    {
+      "name": "wing",
+      "motor_neurons": 60,
+      "motor_neurons_with_plastic_incoming": 0,
+      "plastic_incoming_edges": 0,
+      "incoming_weight_change": {
+        "edges": 32830,
+        "changed_edges": 0,
+        "positive_edges": 0,
+        "negative_edges": 0,
+        "sum_abs_delta": 0.0,
+        "sum_signed_delta": 0.0,
+        "max_abs_delta": 0.0,
+        "changed_fraction": 0.0,
+        "mean_abs_delta_changed": 0.0,
+        "mean_signed_delta_changed": 0.0
+      }
+    },
+    {
+      "name": "somatic",
+      "motor_neurons": 208,
+      "motor_neurons_with_plastic_incoming": 0,
+      "plastic_incoming_edges": 0,
+      "incoming_weight_change": {
+        "edges": 47558,
+        "changed_edges": 0,
+        "positive_edges": 0,
+        "negative_edges": 0,
+        "sum_abs_delta": 0.0,
+        "sum_signed_delta": 0.0,
+        "max_abs_delta": 0.0,
+        "changed_fraction": 0.0,
+        "mean_abs_delta_changed": 0.0,
+        "mean_signed_delta_changed": 0.0
+      }
+    },
+    {
+      "name": "all_actuated",
+      "motor_neurons": 268,
+      "motor_neurons_with_plastic_incoming": 0,
+      "plastic_incoming_edges": 0,
+      "incoming_weight_change": {
+        "edges": 80388,
+        "changed_edges": 0,
+        "positive_edges": 0,
+        "negative_edges": 0,
+        "sum_abs_delta": 0.0,
+        "sum_signed_delta": 0.0,
+        "max_abs_delta": 0.0,
+        "changed_fraction": 0.0,
+        "mean_abs_delta_changed": 0.0,
+        "mean_signed_delta_changed": 0.0
+      }
+    }
+  ],
+  "distance_layers": [
+    {
+      "distance": 0,
+      "neurons": 268,
+      "incoming_weight_change": {
+        "edges": 80388,
+        "changed_edges": 0,
+        "positive_edges": 0,
+        "negative_edges": 0,
+        "sum_abs_delta": 0.0,
+        "sum_signed_delta": 0.0,
+        "max_abs_delta": 0.0,
+        "changed_fraction": 0.0,
+        "mean_abs_delta_changed": 0.0,
+        "mean_signed_delta_changed": 0.0
+      }
+    },
+    {
+      "distance": 1,
+      "neurons": 11807,
+      "incoming_weight_change": {
+        "edges": 2744393,
+        "changed_edges": 248275,
+        "positive_edges": 94913,
+        "negative_edges": 153362,
+        "sum_abs_delta": 77.88786562043242,
+        "sum_signed_delta": -21.490983937634155,
+        "max_abs_delta": 0.012270092964172363,
+        "changed_fraction": 0.09046627068353548,
+        "mean_abs_delta_changed": 0.00031371610359654585,
+        "mean_signed_delta_changed": -8.656120808633232e-05
+      }
+    },
+    {
+      "distance": 2,
+      "neurons": 38148,
+      "incoming_weight_change": {
+        "edges": 9575682,
+        "changed_edges": 3779855,
+        "positive_edges": 1579109,
+        "negative_edges": 2200746,
+        "sum_abs_delta": 1809.0305496926885,
+        "sum_signed_delta": -506.19817238650285,
+        "max_abs_delta": 0.2786240875720978,
+        "changed_fraction": 0.3947348084449755,
+        "mean_abs_delta_changed": 0.0004785978694136914,
+        "mean_signed_delta_changed": -0.00013391999756247338
+      }
+    },
+    {
+      "distance": 3,
+      "neurons": 105401,
+      "incoming_weight_change": {
+        "edges": 12924189,
+        "changed_edges": 2050609,
+        "positive_edges": 867427,
+        "negative_edges": 1183182,
+        "sum_abs_delta": 316.5807182081044,
+        "sum_signed_delta": -43.11083002202213,
+        "max_abs_delta": 0.17743468284606934,
+        "changed_fraction": 0.15866442374063083,
+        "mean_abs_delta_changed": 0.00015438375536638353,
+        "mean_signed_delta_changed": -2.1023427685152134e-05
+      }
+    },
+    {
+      "distance": 4,
+      "neurons": 9733,
+      "incoming_weight_change": {
+        "edges": 220278,
+        "changed_edges": 24,
+        "positive_edges": 5,
+        "negative_edges": 19,
+        "sum_abs_delta": 9.22149047255516e-06,
+        "sum_signed_delta": -6.976071745157242e-06,
+        "max_abs_delta": 9.126961231231689e-07,
+        "changed_fraction": 0.00010895323182523902,
+        "mean_abs_delta_changed": 3.8422876968979836e-07,
+        "mean_signed_delta_changed": -2.9066965604821843e-07
+      }
+    }
+  ],
+  "global_weight_change": {
+    "edges": 25582938,
+    "changed_edges": 6078763,
+    "positive_edges": 2541454,
+    "negative_edges": 3537309,
+    "sum_abs_delta": 2203.499142742716,
+    "sum_signed_delta": -570.7999933222309,
+    "max_abs_delta": 0.2786240875720978,
+    "changed_fraction": 0.23761004306854827,
+    "mean_abs_delta_changed": 0.00036249137246224534,
+    "mean_signed_delta_changed": -9.390068231352841e-05
+  }
+}

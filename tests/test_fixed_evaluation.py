@@ -3,7 +3,9 @@ import unittest
 from virtual_fly.training.fixed_evaluation import (
     FIXED_EVAL_SUITE_V1,
     SUITE_VERSION,
+    compare_motor_outputs,
     render_markdown,
+    render_motor_comparison_markdown,
     summarize_suite,
 )
 
@@ -24,6 +26,14 @@ def row(condition: str, *, passed: int, collision: bool, gain: float, loss: floa
         "max_altitude_gain_mm": gain,
         "max_altitude_loss_mm": loss,
         "final_vx_mm_s": 250.0,
+        "wing_spikes_per_step": 0.5,
+        "somatic_spikes_per_step": 0.25,
+        "mean_active_wing_motor_units": 3.0,
+        "mean_active_somatic_motor_units": 2.0,
+        "mean_power_activation": 0.4,
+        "mean_power_lr_abs_diff": 0.1,
+        "mean_active_steering_channels": 1.5,
+        "mean_abs_leg_drive": 0.2,
     }
 
 
@@ -58,6 +68,53 @@ class FixedEvaluationTests(unittest.TestCase):
             self.assertEqual(summary["collisions"], 2)
             self.assertEqual(summary["collision_rate"], 0.5)
             self.assertEqual(summary["max_passed_gates"], 3)
+            self.assertEqual(summary["mean_wing_spikes_per_step"], 0.5)
+            self.assertEqual(summary["mean_somatic_spikes_per_step"], 0.25)
+            self.assertEqual(summary["mean_power_activation"], 0.4)
+
+    def test_compare_motor_outputs_pairs_same_condition_and_seed(self):
+        baseline_rows = [
+            row(condition.name, passed=0, collision=True, gain=-0.1, loss=1.0)
+            for condition in FIXED_EVAL_SUITE_V1
+        ]
+        trained_rows = [dict(item) for item in baseline_rows]
+        trained_rows[1]["wing_spikes_per_step"] = 1.0
+        trained_rows[1]["passed_gates"] = 1
+
+        def payload(subject, rows):
+            return {
+                "suite_version": SUITE_VERSION,
+                "evaluation_subject": subject,
+                "checkpoint": subject,
+                "checkpoint_neural_step": 0 if subject == "initial_malecns" else 100,
+                "training_episode_end": None if subject == "initial_malecns" else 255,
+                "population": 1,
+                "seed_start": 0,
+                "seed_end": 0,
+                "vision_runtime": "direct-ray",
+                "vision_rays_per_ommatidium": 13,
+                "condition_summaries": summarize_suite(rows),
+                "episode_results": rows,
+            }
+
+        comparison = compare_motor_outputs(
+            payload("initial_malecns", baseline_rows),
+            payload("trained_checkpoint", trained_rows),
+        )
+        midpoint = comparison["condition_comparison"][1]
+        self.assertEqual(midpoint["baseline_first_gate_passes"], 0)
+        self.assertEqual(midpoint["trained_first_gate_passes"], 1)
+        wing = midpoint["motor"]["mean_wing_spikes_per_step"]
+        self.assertEqual(wing["baseline"], 0.5)
+        self.assertEqual(wing["trained"], 1.0)
+        self.assertEqual(wing["relative_delta"], 1.0)
+        paired_midpoint = comparison["paired_seed_comparison"][1]
+        paired_wing = paired_midpoint["motor"]["mean_wing_spikes_per_step"]
+        self.assertEqual(paired_wing["baseline"], 0.5)
+        self.assertEqual(paired_wing["trained"], 1.0)
+        text = render_motor_comparison_markdown(comparison)
+        self.assertIn("midpoint", text)
+        self.assertIn("0.5000→1.0000", text)
 
     def test_render_markdown_records_read_only_contract(self):
         rows = [

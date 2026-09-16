@@ -15,6 +15,8 @@ pub struct CheckpointManifest {
     pub neuron_count: usize,
     pub edge_count: usize,
     pub step: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub global_weight_version: Option<u64>,
     pub membrane_file: String,
     pub spikes_file: String,
     pub refractory_file: String,
@@ -37,6 +39,32 @@ pub fn save_checkpoint(
     step: u64,
     state: &NeuralState,
 ) -> Result<CheckpointManifest> {
+    save_checkpoint_impl(directory, dataset, step, state, None)
+}
+
+pub fn save_checkpoint_with_global_weight_version(
+    directory: impl AsRef<Path>,
+    dataset: &str,
+    step: u64,
+    state: &NeuralState,
+    global_weight_version: u64,
+) -> Result<CheckpointManifest> {
+    save_checkpoint_impl(
+        directory,
+        dataset,
+        step,
+        state,
+        Some(global_weight_version),
+    )
+}
+
+fn save_checkpoint_impl(
+    directory: impl AsRef<Path>,
+    dataset: &str,
+    step: u64,
+    state: &NeuralState,
+    global_weight_version: Option<u64>,
+) -> Result<CheckpointManifest> {
     let directory = directory.as_ref();
     state.validate(state.membrane.len(), state.weights.len())?;
 
@@ -54,6 +82,7 @@ pub fn save_checkpoint(
         neuron_count: state.membrane.len(),
         edge_count: state.weights.len(),
         step,
+        global_weight_version,
         membrane_file: "membrane.f32le".to_owned(),
         spikes_file: "spikes.u32le".to_owned(),
         refractory_file: "refractory.u32le".to_owned(),
@@ -238,9 +267,11 @@ mod tests {
         let saved = save_checkpoint(&root, "synthetic:test", 42, &state).unwrap();
         assert_eq!(saved.step, 42);
         assert_eq!(saved.schema_version, 3);
+        assert_eq!(saved.global_weight_version, None);
         let (loaded_manifest, loaded) =
             load_checkpoint(&root, "synthetic:test", 3, 2).unwrap();
         assert_eq!(loaded_manifest.step, 42);
+        assert_eq!(loaded_manifest.global_weight_version, None);
         assert_eq!(loaded.membrane, state.membrane);
         assert_eq!(loaded.spikes, state.spikes);
         assert_eq!(loaded.refractory, state.refractory);
@@ -248,6 +279,39 @@ mod tests {
         assert_eq!(loaded.modulation, state.modulation);
         assert_eq!(loaded.weights, state.weights);
         assert_eq!(loaded.eligibility, state.eligibility);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn population_checkpoint_round_trips_global_weight_version() {
+        let root = std::env::temp_dir().join(format!(
+            "virtual-fly-population-checkpoint-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let state = NeuralState {
+            membrane: vec![0.0],
+            spikes: vec![0],
+            refractory: vec![0],
+            activity_trace: vec![0.0],
+            modulation: vec![0.0],
+            weights: vec![0.25],
+            eligibility: vec![0.0],
+        };
+
+        let saved = save_checkpoint_with_global_weight_version(
+            &root,
+            "synthetic:test",
+            7,
+            &state,
+            184,
+        )
+        .unwrap();
+        assert_eq!(saved.global_weight_version, Some(184));
+        let (loaded_manifest, loaded) =
+            load_checkpoint(&root, "synthetic:test", 1, 1).unwrap();
+        assert_eq!(loaded_manifest.global_weight_version, Some(184));
+        assert_eq!(loaded.weights, state.weights);
         fs::remove_dir_all(&root).unwrap();
     }
 }

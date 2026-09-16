@@ -12,7 +12,7 @@
 - plasticity: `false`
 - global weight version unchanged: `true`
 - transaction dirty edges after evaluation: {0: 0, 1: 0, 2: 0, 3: 0}
-- elapsed: 39.434 s
+- elapsed: 120.607 s
 
 ## 固定条件別
 
@@ -21,6 +21,14 @@
 | part3_frontier | 3.2670 | 11.4670 | 450.0 | 2/4 (50.0%) | 1/4 (25.0%) | 4/4 (100.0%) | 0.750 | 2 | -0.006 | 1.452 |
 | midpoint | 1.6335 | 10.1885 | 375.0 | 1/4 (25.0%) | 0/4 (0.0%) | 4/4 (100.0%) | 0.250 | 1 | -0.005 | 0.692 |
 | target | 0.0000 | 8.9100 | 300.0 | 1/4 (25.0%) | 0/4 (0.0%) | 4/4 (100.0%) | 0.250 | 1 | -0.005 | 3.146 |
+
+## Motor output
+
+| condition | wing spikes/step | somatic spikes/step | active wing units | active somatic units | power activation | L/R power diff | steering channels | abs leg drive |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| part3_frontier | 2.2401 | 3.2900 | 33.580 | 30.200 | 0.9263 | 0.0012 | 5.940 | 0.0452 |
+| midpoint | 1.5951 | 3.1766 | 30.254 | 18.181 | 0.9078 | 0.0011 | 4.482 | 0.1028 |
+| target | 2.8145 | 4.7720 | 36.310 | 36.332 | 0.9179 | 0.0015 | 8.205 | 0.1091 |
 
 ## Episode一覧
 

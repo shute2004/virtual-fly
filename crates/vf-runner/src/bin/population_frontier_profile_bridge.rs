@@ -12,7 +12,9 @@ use vf_neural::{
     ConnectomeSnapshot, NeuralParams, OutgoingPropagationGraph, PlasticFastGraph, Stimulus,
     gpu_population_frontier_profiled::GpuPopulationRuntime,
 };
-use vf_runner::checkpoint::{load_checkpoint, save_checkpoint};
+use vf_runner::checkpoint::{
+    load_checkpoint, save_checkpoint_with_global_weight_version,
+};
 
 #[derive(Debug, Parser)]
 #[command(name = "population-frontier-profile-bridge")]
@@ -347,6 +349,15 @@ fn main() -> Result<()> {
                         snapshot.neuron_count(),
                         snapshot.edge_count(),
                     )?;
+                    if let Some(checkpoint_version) = manifest.global_weight_version {
+                        if checkpoint_version != requested_version {
+                            bail!(
+                                "checkpoint global weight version {} does not match requested resume version {}",
+                                checkpoint_version,
+                                requested_version,
+                            );
+                        }
+                    }
                     runtime.load_global_weights(&state.weights)?;
                     neural_step = manifest.step;
                     global_weight_version = requested_version;
@@ -367,7 +378,13 @@ fn main() -> Result<()> {
             Request::SaveCheckpoint { path } => {
                 let result = (|| -> Result<()> {
                     let state = runtime.global_state()?;
-                    let manifest = save_checkpoint(&path, &snapshot.manifest.dataset, neural_step, &state)?;
+                    let manifest = save_checkpoint_with_global_weight_version(
+                        &path,
+                        &snapshot.manifest.dataset,
+                        neural_step,
+                        &state,
+                        global_weight_version,
+                    )?;
                     write_json(
                         &mut stdout,
                         &CheckpointResponse {

@@ -59,98 +59,86 @@ bash scripts/dev/bootstrap.sh
 
 MaleCNSデータや生成済みartifactが存在する場合は可能な範囲で再利用します。
 
-## 通常のFlyppy学習
+## 通常のFlyppy v3学習
 
-標準launcherはpersistent runtimeです。1つのPythonプロセス、1つのMuJoCo simulation、1つのMaleCNS GPU runtimeを複数episodeで使い続けます。
+現行production launcherは、shared-weight population、個別MN→筋肉境界、direct-ray視覚を使うFlyppy v3経路です。
 
 ```bash
-bash scripts/dev/train_flyppy.sh \
-  --episodes 24 \
-  --trajectory-stride 10
+bash scripts/dev/train_flyppy_v3_population.sh
 ```
 
-現在の実験ディレクトリは次です。
+既定では次を使います。
+
+- population: 4
+- episodes: 24
+- curriculum: `boundary-band`
+- launch mode: `async`
+- vision: `direct-ray`, 13 rays/ommatidium
+- body runtime: packed/process-isolated
+
+実験ディレクトリの既定値は次です。
 
 ```text
-artifacts/experiments/flyppy-v1/
+artifacts/experiments/flyppy-v3/
+├── checkpoint/
 ├── curriculum-state.json
+├── population-state.json
 ├── trajectory.jsonl
+├── commit-log.jsonl
 ├── summary.json
-├── live/
-└── checkpoint/
+└── live/
 ```
 
-`artifacts/` は巨大・高頻度データ用でGitには含めません。GitHubで結果をレビューするため、学習終了時に自動で以下へ小さいレポートを書き出します。
+`artifacts/` は巨大・高頻度データ用でGitには含めません。小さい結果は `reports/flyppy/` へ出力します。
 
 ```text
 reports/flyppy/latest.md
 reports/flyppy/latest.csv
+reports/flyppy/population_latest.md
+reports/flyppy/history.csv
 ```
 
-checkpointが存在する場合は自動で継続します。通常の継続学習で `--fresh` は使わないでください。
+checkpointが存在する場合は自動で継続します。中断時はpersist済みglobal weight versionを確定点として、未保存commit/trajectoryをresume時に整合させます。
 
-## 現在の第2gate境界帯カリキュラム
+### curriculum / scheduler
 
-固定条件テストで次の鋭い境界が確認されています。
+`boundary-band` は24 attemptを固定したまま評価し、batch境界でのみ難易度を更新します。非同期slotの終了順がcurriculum自体を動かさないようにするためです。
 
-```text
-難しい端: x=10.500, z=5.2900, vx=350.00  -> 24/24失敗
-易しい端: x=10.625, z=5.3525, vx=356.25  -> 24/24成功
-```
-
-次の学習では、この2点の間を5段階に分け、24episodeのbatch内で順序を決定論的にshuffleして提示します。
-
-```text
-ease level 0.00  難しい端  4回
-ease level 0.25             5回
-ease level 0.50             6回
-ease level 0.75             5回
-ease level 1.00  易しい端  4回
-```
-
-1episodeの成功/失敗ごとに条件を往復させず、24episode単位で成功率を見ます。
-
-- 成功率80%以上: 境界帯全体を少し難しくする。
-- 成功率40%以上80%未満: 同じ境界帯を継続する。
-- 成功率40%未満: 以前に学習済みの易しい側へ少し戻す。
-
-難化時は最終的な `x=9.0, z=5.0, vx=300` へ向かって帯域全体を移動します。
-
-実行:
+production既定は `async` です。`wave` は同一launch roundを同一CNS weight versionから開始する比較・診断用schedulerで、既存experimentの途中で `async ↔ wave` を切り替えることはできません。比較するときは同じcheckpointから別experimentへforkします。
 
 ```bash
-bash scripts/dev/train_flyppy_gate2_band.sh \
-  --episodes 24 \
-  --trajectory-stride 10
+bash scripts/dev/run_flyppy_scheduler_ab.sh
 ```
 
-これは第1gateを省略して第2gateだけを部分練習する段階です。第2gateが安定した後に、全gateを戻した連続飛行へ移行します。
+現在の詳細な実行条件とA/B結果は [`docs/flyppy/README.md`](docs/flyppy/README.md) を参照してください。
 
 ## 3D学習viewer
 
-viewerは学習とは別プロセスです。
+viewerは学習とは別プロセスで、production trainingへ状態を返さないobserverです。telemetryはviewer接続時だけ生成します。
 
 ```bash
-bash scripts/dev/view_learning.sh
+bash scripts/dev/view_flyppy_v3.sh
 ```
 
-FlyBody姿勢は学習側から毎control step配信し、observer側でMuJoCoのgeneralized positionとして補間して約30fpsで描画します。MaleCNS活動telemetryは低頻度のままなので、viewerのために大規模neural readbackを毎step行いません。
+別experimentへ接続する場合:
+
+```bash
+VF_EXPERIMENT_DIR=artifacts/experiments/<name> bash scripts/dev/view_flyppy_v3.sh
+```
 
 - FlyBody: メイン表示。ドラッグで回転、ホイールでズーム。
-- MaleCNS: 右下の模式3D小窓。`B` キーまたはcheckboxで非表示可能。
-- viewer操作・補間結果は学習へ返りません。
+- MaleCNS: neural activity / propagationをobserverとして表示。
+- viewer接続・切断によって学習意味論は変えません。
 
-## 凍結評価
+## 固定評価
 
-学習済みCNSとbaselineを比較する評価器も、学習と同じ個別MN→筋肉経路を使います。評価中はplasticityとreinforcementを無効にします。
+学習済みCNSを固定条件で比較する評価器も、productionと同じ個別MN→筋肉経路を使います。評価では各neural stepを `plasticity=false` にし、weightを変更しません。
 
 ```bash
-uv run python scripts/embodiment/evaluate_flyppy.py \
-  --learned-checkpoint artifacts/experiments/flyppy-v1/checkpoint \
-  --episodes 4
+bash scripts/dev/evaluate_flyppy_v3_fixed.sh
 ```
 
-baseline checkpointを指定しない場合は初期MaleCNS stateと比較します。
+現行結果は `reports/flyppy/fixed_evaluation_latest.md`、過去checkpointの固定評価は `reports/flyppy/evaluations/history/` に保存します。
 
 ## Pythonコード構成
 
@@ -170,6 +158,8 @@ src/virtual_fly/training/curriculum.py
 
 ## 主なドキュメント
 
+- [`docs/README.md`](docs/README.md) — ドキュメント全体の案内
+- [`docs/flyppy/README.md`](docs/flyppy/README.md) — 現行Flyppy v3の実行・検証状態
 - [`docs/requirements.md`](docs/requirements.md) — 要件定義
 - [`docs/architecture.md`](docs/architecture.md) — システム設計
 - [`docs/scientific-model.md`](docs/scientific-model.md) — 神経系・可塑性モデル

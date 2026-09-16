@@ -164,6 +164,7 @@ def main() -> int:
         "",
         f"- backend: `{payload.get('backend', '-')}`",
         f"- curriculum mode: `{curriculum_mode}`",
+        f"- launch mode: `{payload.get('launch_mode', 'async')}`",
     ]
     if training_gate_index is None:
         lines.append("- adaptive training criterion: first gate pass (`passed_gates > 0`)")

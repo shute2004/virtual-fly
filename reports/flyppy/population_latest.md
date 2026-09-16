@@ -4,46 +4,47 @@
 - population: 4
 - body runtime: `packed-process`
 - body processes: 4
+- launch mode: `async`
 - vision runtime: `direct-ray`
 - rays/ommatidium: 13
 - RGB framebuffer: false
 - shared weight: true
 - weight averaging: false
 - episodes: 24
-- elapsed: 31.016 s
-- aggregate control steps: 940
-- aggregate control steps/s: 30.307
-- simulated biological seconds: 0.470000
-- first gate pass: 6/24
+- elapsed: 50.371 s
+- aggregate control steps: 1326
+- aggregate control steps/s: 26.325
+- simulated biological seconds: 0.663000
+- first gate pass: 12/24
 - max passed gates: 2
-- global weight version: 112 -> 136
-- mean version staleness: 2.750
-- max version staleness: 9
+- global weight version: 160 -> 184
+- mean version staleness: 2.083
+- max version staleness: 7
 - commit semantics: episode-local additive+clamp transaction rebased onto latest global weight
 
 | ep | slot | source v | commit from | commit v | stale | steps | passed | collision |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 184 | 0 | 112 | 119 | 120 | 7 | 92 | 1 | true |
-| 185 | 1 | 112 | 112 | 113 | 0 | 28 | 0 | true |
-| 186 | 2 | 112 | 118 | 119 | 6 | 87 | 1 | true |
-| 187 | 3 | 112 | 113 | 114 | 1 | 28 | 0 | true |
-| 188 | 1 | 113 | 115 | 116 | 2 | 26 | 0 | true |
-| 189 | 3 | 114 | 114 | 115 | 0 | 25 | 0 | true |
-| 190 | 3 | 115 | 117 | 118 | 2 | 24 | 0 | true |
-| 191 | 1 | 116 | 116 | 117 | 0 | 23 | 0 | true |
-| 192 | 1 | 117 | 121 | 122 | 4 | 23 | 0 | true |
-| 193 | 3 | 118 | 120 | 121 | 2 | 22 | 0 | true |
-| 194 | 2 | 119 | 128 | 129 | 9 | 83 | 1 | true |
-| 195 | 0 | 120 | 129 | 130 | 9 | 91 | 1 | true |
-| 196 | 3 | 121 | 123 | 124 | 2 | 27 | 0 | true |
-| 197 | 1 | 122 | 122 | 123 | 0 | 23 | 0 | true |
-| 198 | 1 | 123 | 124 | 125 | 1 | 23 | 0 | true |
-| 199 | 3 | 124 | 125 | 126 | 1 | 22 | 0 | true |
-| 200 | 1 | 125 | 126 | 127 | 1 | 20 | 0 | true |
-| 201 | 3 | 126 | 127 | 128 | 1 | 20 | 0 | true |
-| 202 | 1 | 127 | 130 | 131 | 3 | 20 | 0 | true |
-| 203 | 3 | 128 | 131 | 132 | 3 | 19 | 0 | true |
-| 204 | 2 | 129 | 134 | 135 | 5 | 80 | 1 | true |
-| 205 | 0 | 130 | 135 | 136 | 5 | 92 | 2 | true |
-| 206 | 1 | 131 | 133 | 134 | 2 | 22 | 0 | true |
-| 207 | 3 | 132 | 132 | 133 | 0 | 20 | 0 | true |
+| 232 | 0 | 160 | 167 | 168 | 7 | 89 | 2 | true |
+| 233 | 1 | 160 | 160 | 161 | 0 | 23 | 0 | true |
+| 234 | 2 | 160 | 166 | 167 | 6 | 86 | 1 | true |
+| 235 | 3 | 160 | 161 | 162 | 1 | 27 | 0 | true |
+| 236 | 1 | 161 | 162 | 163 | 1 | 24 | 0 | true |
+| 237 | 3 | 162 | 163 | 164 | 1 | 27 | 0 | true |
+| 238 | 1 | 163 | 164 | 165 | 1 | 22 | 0 | true |
+| 239 | 3 | 164 | 165 | 166 | 1 | 28 | 0 | true |
+| 240 | 1 | 165 | 168 | 169 | 3 | 24 | 0 | true |
+| 241 | 3 | 166 | 169 | 170 | 3 | 27 | 0 | true |
+| 242 | 2 | 167 | 174 | 175 | 7 | 82 | 1 | true |
+| 243 | 0 | 168 | 175 | 176 | 7 | 88 | 1 | true |
+| 244 | 1 | 169 | 170 | 171 | 1 | 22 | 0 | true |
+| 245 | 3 | 170 | 171 | 172 | 1 | 22 | 0 | true |
+| 246 | 1 | 171 | 172 | 173 | 1 | 23 | 0 | true |
+| 247 | 3 | 172 | 173 | 174 | 1 | 27 | 0 | true |
+| 248 | 2 | 175 | 176 | 177 | 1 | 83 | 1 | true |
+| 249 | 0 | 176 | 177 | 178 | 1 | 86 | 2 | true |
+| 250 | 2 | 177 | 178 | 179 | 1 | 82 | 1 | true |
+| 251 | 0 | 178 | 179 | 180 | 1 | 88 | 1 | true |
+| 252 | 2 | 179 | 180 | 181 | 1 | 83 | 1 | true |
+| 253 | 0 | 180 | 181 | 182 | 1 | 92 | 2 | true |
+| 254 | 2 | 181 | 182 | 183 | 1 | 82 | 1 | true |
+| 255 | 0 | 182 | 183 | 184 | 1 | 89 | 2 | true |

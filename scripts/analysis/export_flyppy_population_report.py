@@ -53,6 +53,7 @@ def main() -> int:
     vision_framebuffer = payload.get("vision_framebuffer")
     body_runtime = str(payload.get("body_runtime", "unknown"))
     body_processes = payload.get("body_processes")
+    launch_mode = str(payload.get("launch_mode", "async"))
 
     lines = [
         "# Flyppy shared-weight population latest run",
@@ -61,6 +62,7 @@ def main() -> int:
         f"- population: {payload.get('population', '-')}",
         f"- body runtime: `{body_runtime}`",
         f"- body processes: {body_processes if body_processes is not None else '-'}",
+        f"- launch mode: `{launch_mode}`",
         f"- vision runtime: `{vision_runtime}`",
         f"- rays/ommatidium: {vision_rays if vision_rays is not None else '-'}",
         f"- RGB framebuffer: {str(bool(vision_framebuffer)).lower() if vision_framebuffer is not None else '-'}",

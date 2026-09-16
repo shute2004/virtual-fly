@@ -13,6 +13,20 @@ from typing import Iterable, Mapping
 
 
 SUITE_VERSION = "flyppy-v3-fixed-v1"
+MOTOR_OUTPUT_METRICS: tuple[str, ...] = (
+    "mean_wing_spikes_per_step",
+    "mean_somatic_spikes_per_step",
+    "mean_active_wing_motor_units",
+    "mean_active_somatic_motor_units",
+    "mean_power_activation",
+    "mean_power_lr_abs_diff",
+    "mean_active_steering_channels",
+    "mean_abs_leg_drive",
+)
+MOTOR_OUTPUT_ROW_KEYS = {
+    "mean_wing_spikes_per_step": "wing_spikes_per_step",
+    "mean_somatic_spikes_per_step": "somatic_spikes_per_step",
+}
 
 
 @dataclass(frozen=True)
@@ -60,6 +74,10 @@ def _mean(rows: list[Mapping[str, object]], key: str) -> float:
     return mean(float(row[key]) for row in rows) if rows else 0.0
 
 
+def _mean_optional(rows: list[Mapping[str, object]], key: str) -> float:
+    return mean(float(row.get(key, 0.0)) for row in rows) if rows else 0.0
+
+
 def summarize_condition(
     condition: FixedEvalCondition,
     rows: Iterable[Mapping[str, object]],
@@ -90,6 +108,14 @@ def summarize_condition(
         "mean_max_altitude_gain_mm": _mean(items, "max_altitude_gain_mm"),
         "mean_max_altitude_loss_mm": _mean(items, "max_altitude_loss_mm"),
         "mean_final_vx_mm_s": _mean(items, "final_vx_mm_s"),
+        "mean_wing_spikes_per_step": _mean_optional(items, "wing_spikes_per_step"),
+        "mean_somatic_spikes_per_step": _mean_optional(items, "somatic_spikes_per_step"),
+        "mean_active_wing_motor_units": _mean_optional(items, "mean_active_wing_motor_units"),
+        "mean_active_somatic_motor_units": _mean_optional(items, "mean_active_somatic_motor_units"),
+        "mean_power_activation": _mean_optional(items, "mean_power_activation"),
+        "mean_power_lr_abs_diff": _mean_optional(items, "mean_power_lr_abs_diff"),
+        "mean_active_steering_channels": _mean_optional(items, "mean_active_steering_channels"),
+        "mean_abs_leg_drive": _mean_optional(items, "mean_abs_leg_drive"),
     }
 
 
@@ -107,6 +133,222 @@ def summarize_suite(rows: Iterable[Mapping[str, object]]) -> list[dict[str, obje
         summarize_condition(condition, by_name[condition.name])
         for condition in FIXED_EVAL_SUITE_V1
     ]
+
+
+def _motor_value(row: Mapping[str, object], key: str) -> float:
+    if key in row:
+        return float(row[key])
+    row_key = MOTOR_OUTPUT_ROW_KEYS.get(key)
+    return float(row.get(row_key, 0.0)) if row_key is not None else 0.0
+
+
+def _motor_pair(baseline: Mapping[str, object], trained: Mapping[str, object]) -> dict[str, object]:
+    metrics: dict[str, dict[str, float | None]] = {}
+    for key in MOTOR_OUTPUT_METRICS:
+        before = _motor_value(baseline, key)
+        after = _motor_value(trained, key)
+        metrics[key] = {
+            "baseline": before,
+            "trained": after,
+            "delta": after - before,
+            "relative_delta": None if abs(before) <= 1e-12 else (after - before) / abs(before),
+        }
+    return metrics
+
+
+def compare_motor_outputs(
+    baseline_payload: Mapping[str, object],
+    trained_payload: Mapping[str, object],
+) -> dict[str, object]:
+    """Compare two fixed-suite evaluations under identical frozen conditions."""
+
+    for key in ("suite_version", "population", "seed_start", "seed_end", "vision_runtime", "vision_rays_per_ommatidium"):
+        if baseline_payload.get(key) != trained_payload.get(key):
+            raise ValueError(
+                f"fixed-evaluation comparison requires matching {key}: "
+                f"{baseline_payload.get(key)!r} != {trained_payload.get(key)!r}"
+            )
+
+    baseline_rows = {
+        (str(row["condition"]), int(row["course_seed"])): row
+        for row in list(baseline_payload["episode_results"])
+    }
+    trained_rows = {
+        (str(row["condition"]), int(row["course_seed"])): row
+        for row in list(trained_payload["episode_results"])
+    }
+    if baseline_rows.keys() != trained_rows.keys():
+        raise ValueError("fixed-evaluation comparison requires identical condition/seed pairs")
+
+    baseline_summaries = {
+        str(item["condition"]["name"]): item
+        for item in list(baseline_payload["condition_summaries"])
+    }
+    trained_summaries = {
+        str(item["condition"]["name"]): item
+        for item in list(trained_payload["condition_summaries"])
+    }
+    if baseline_summaries.keys() != trained_summaries.keys():
+        raise ValueError("fixed-evaluation comparison requires identical condition summaries")
+
+    condition_comparison: list[dict[str, object]] = []
+    for condition in FIXED_EVAL_SUITE_V1:
+        before = baseline_summaries[condition.name]
+        after = trained_summaries[condition.name]
+        condition_comparison.append(
+            {
+                "condition": condition.name,
+                "baseline_first_gate_passes": int(before["first_gate_passes"]),
+                "trained_first_gate_passes": int(after["first_gate_passes"]),
+                "baseline_second_gate_passes": int(before["second_gate_passes"]),
+                "trained_second_gate_passes": int(after["second_gate_passes"]),
+                "motor": _motor_pair(before, after),
+            }
+        )
+
+    paired_seed_comparison: list[dict[str, object]] = []
+    for condition in FIXED_EVAL_SUITE_V1:
+        seeds = sorted(seed for name, seed in baseline_rows if name == condition.name)
+        for seed in seeds:
+            before = baseline_rows[(condition.name, seed)]
+            after = trained_rows[(condition.name, seed)]
+            paired_seed_comparison.append(
+                {
+                    "condition": condition.name,
+                    "course_seed": seed,
+                    "baseline_passed_gates": int(before["passed_gates"]),
+                    "trained_passed_gates": int(after["passed_gates"]),
+                    "baseline_control_steps": int(before["control_steps"]),
+                    "trained_control_steps": int(after["control_steps"]),
+                    "motor": _motor_pair(before, after),
+                }
+            )
+
+    return {
+        "schema_version": 1,
+        "suite_version": baseline_payload["suite_version"],
+        "baseline_subject": baseline_payload.get("evaluation_subject", "baseline"),
+        "baseline_checkpoint": baseline_payload["checkpoint"],
+        "baseline_checkpoint_neural_step": baseline_payload["checkpoint_neural_step"],
+        "trained_subject": trained_payload.get("evaluation_subject", "trained_checkpoint"),
+        "trained_checkpoint": trained_payload["checkpoint"],
+        "trained_checkpoint_neural_step": trained_payload["checkpoint_neural_step"],
+        "trained_training_episode_end": trained_payload.get("training_episode_end"),
+        "population": baseline_payload["population"],
+        "seed_start": baseline_payload["seed_start"],
+        "seed_end": baseline_payload["seed_end"],
+        "vision_runtime": baseline_payload["vision_runtime"],
+        "vision_rays_per_ommatidium": baseline_payload["vision_rays_per_ommatidium"],
+        "condition_comparison": condition_comparison,
+        "paired_seed_comparison": paired_seed_comparison,
+    }
+
+
+def _format_relative(value: object) -> str:
+    if value is None:
+        return "n/a"
+    return f"{float(value):+.1%}"
+
+
+def render_motor_comparison_markdown(payload: Mapping[str, object]) -> str:
+    conditions = list(payload["condition_comparison"])
+    pairs = list(payload["paired_seed_comparison"])
+    lines = [
+        "# Flyppy固定評価: motor出力比較",
+        "",
+        f"- suite: `{payload['suite_version']}`",
+        f"- baseline: `{payload['baseline_subject']}` / step {payload['baseline_checkpoint_neural_step']}",
+        f"- trained: `{payload['trained_subject']}` / episode {payload.get('trained_training_episode_end')} / step {payload['trained_checkpoint_neural_step']}",
+        f"- population / seeds: {payload['population']} / {payload['seed_start']}..{payload['seed_end']}",
+        f"- vision: `{payload['vision_runtime']}` / {payload['vision_rays_per_ommatidium']} rays/ommatidium",
+        "",
+        "## 条件集計",
+        "",
+        "| condition | first gate | second gate | wing spikes/step | somatic spikes/step | steering channels | L/R power diff |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in conditions:
+        motor = row["motor"]
+        wing = motor["mean_wing_spikes_per_step"]
+        somatic = motor["mean_somatic_spikes_per_step"]
+        steering = motor["mean_active_steering_channels"]
+        lr = motor["mean_power_lr_abs_diff"]
+        lines.append(
+            "| {condition} | {first0}→{first1} | {second0}→{second1} | "
+            "{wing0:.4f}→{wing1:.4f} ({wing_pct}) | {som0:.4f}→{som1:.4f} ({som_pct}) | "
+            "{steer0:.3f}→{steer1:.3f} ({steer_pct}) | {lr0:.4f}→{lr1:.4f} ({lr_pct}) |".format(
+                condition=row["condition"],
+                first0=row["baseline_first_gate_passes"],
+                first1=row["trained_first_gate_passes"],
+                second0=row["baseline_second_gate_passes"],
+                second1=row["trained_second_gate_passes"],
+                wing0=float(wing["baseline"]),
+                wing1=float(wing["trained"]),
+                wing_pct=_format_relative(wing["relative_delta"]),
+                som0=float(somatic["baseline"]),
+                som1=float(somatic["trained"]),
+                som_pct=_format_relative(somatic["relative_delta"]),
+                steer0=float(steering["baseline"]),
+                steer1=float(steering["trained"]),
+                steer_pct=_format_relative(steering["relative_delta"]),
+                lr0=float(lr["baseline"]),
+                lr1=float(lr["trained"]),
+                lr_pct=_format_relative(lr["relative_delta"]),
+            )
+        )
+
+    lines.extend(
+        [
+            "",
+            "## condition × course seed",
+            "",
+            "| condition | seed | gates | steps | wing spikes/step | somatic spikes/step | steering channels | L/R power diff |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in pairs:
+        motor = row["motor"]
+        wing = motor["mean_wing_spikes_per_step"]
+        somatic = motor["mean_somatic_spikes_per_step"]
+        steering = motor["mean_active_steering_channels"]
+        lr = motor["mean_power_lr_abs_diff"]
+        lines.append(
+            "| {condition} | {seed} | {g0}→{g1} | {s0}→{s1} | "
+            "{w0:.3f}→{w1:.3f} ({wp}) | {m0:.3f}→{m1:.3f} ({mp}) | "
+            "{st0:.3f}→{st1:.3f} ({stp}) | {lr0:.4f}→{lr1:.4f} ({lrp}) |".format(
+                condition=row["condition"],
+                seed=row["course_seed"],
+                g0=row["baseline_passed_gates"],
+                g1=row["trained_passed_gates"],
+                s0=row["baseline_control_steps"],
+                s1=row["trained_control_steps"],
+                w0=float(wing["baseline"]),
+                w1=float(wing["trained"]),
+                wp=_format_relative(wing["relative_delta"]),
+                m0=float(somatic["baseline"]),
+                m1=float(somatic["trained"]),
+                mp=_format_relative(somatic["relative_delta"]),
+                st0=float(steering["baseline"]),
+                st1=float(steering["trained"]),
+                stp=_format_relative(steering["relative_delta"]),
+                lr0=float(lr["baseline"]),
+                lr1=float(lr["trained"]),
+                lrp=_format_relative(lr["relative_delta"]),
+            )
+        )
+
+    lines.extend(
+        [
+            "",
+            "## 読み方",
+            "",
+            "同一condition・course seedでも、学習済みCNSではmotor出力が変わるため閉ループ軌跡とepisode長も変わり得る。",
+            "したがってこの表は『同一の外界時系列へ対するopen-loop応答差』ではなく、固定初期条件から始めた閉ループmotor出力差を示す。",
+            "motor出力が変化していれば、上流の可塑変化が固定motor synapseを介してactuated motor neuronへ伝播していることと整合する。",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def render_markdown(payload: Mapping[str, object]) -> str:
@@ -155,6 +397,31 @@ def render_markdown(payload: Mapping[str, object]) -> str:
                 max_gates=int(item["max_passed_gates"]),
                 gain=float(item["mean_max_altitude_gain_mm"]),
                 loss=float(item["mean_max_altitude_loss_mm"]),
+            )
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Motor output",
+            "",
+            "| condition | wing spikes/step | somatic spikes/step | active wing units | active somatic units | power activation | L/R power diff | steering channels | abs leg drive |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for item in conditions:
+        lines.append(
+            "| {name} | {wing:.4f} | {somatic:.4f} | {active_wing:.3f} | {active_somatic:.3f} | "
+            "{power:.4f} | {power_diff:.4f} | {steering:.3f} | {leg:.4f} |".format(
+                name=item["condition"]["name"],
+                wing=float(item.get("mean_wing_spikes_per_step", 0.0)),
+                somatic=float(item.get("mean_somatic_spikes_per_step", 0.0)),
+                active_wing=float(item.get("mean_active_wing_motor_units", 0.0)),
+                active_somatic=float(item.get("mean_active_somatic_motor_units", 0.0)),
+                power=float(item.get("mean_power_activation", 0.0)),
+                power_diff=float(item.get("mean_power_lr_abs_diff", 0.0)),
+                steering=float(item.get("mean_active_steering_channels", 0.0)),
+                leg=float(item.get("mean_abs_leg_drive", 0.0)),
             )
         )
 

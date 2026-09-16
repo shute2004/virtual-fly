@@ -21,6 +21,9 @@ target/
 .idea/
 .vscode/
 
+# Runtime logs created by local physics/viewer processes
+MUJOCO_LOG.TXT
+
 # External datasets and generated artifacts
 data/raw/
 data/cache/

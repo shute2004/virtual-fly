@@ -308,6 +308,75 @@ def _shuffled_levels(batch_size: int, seed: int, batch_number: int) -> list[floa
     return levels
 
 
+def _group_balanced_levels(
+    batch_size: int,
+    seed: int,
+    batch_number: int,
+    group_count: int,
+) -> list[float]:
+    """Distribute the fixed level multiset as evenly as possible across groups.
+
+    Attempt ``i`` is assigned to group ``i % group_count``.  A global shuffle can
+    therefore give different course seeds very different difficulty mixtures even
+    when every seed gets the same episode count.  This allocator preserves the
+    exact global level counts while keeping each level's per-group count balanced
+    as closely as the integer totals allow.
+    """
+
+    if group_count < 1:
+        raise ValueError("boundary group_count must be >= 1")
+    if group_count > batch_size:
+        raise ValueError("boundary group_count cannot exceed batch_size")
+
+    levels = (0.0, 0.25, 0.5, 0.75, 1.0)
+    counts = _level_counts(batch_size)
+    target_sizes = [len(range(group, batch_size, group_count)) for group in range(group_count)]
+    buckets: list[list[float]] = [[] for _ in range(group_count)]
+    per_level = [[0] * len(levels) for _ in range(group_count)]
+    loads = [0] * group_count
+    rng = random.Random(int(seed) + int(batch_number) * 104729 + int(group_count) * 1009)
+
+    for level_index, (level, count) in enumerate(zip(levels, counts, strict=True)):
+        tie_order = list(range(group_count))
+        rng.shuffle(tie_order)
+        priority = {group: rank for rank, group in enumerate(tie_order)}
+        for _ in range(count):
+            candidates = [
+                group for group in range(group_count) if loads[group] < target_sizes[group]
+            ]
+            if not candidates:
+                raise RuntimeError("boundary level allocator exhausted group capacity")
+            min_level_count = min(per_level[group][level_index] for group in candidates)
+            candidates = [
+                group
+                for group in candidates
+                if per_level[group][level_index] == min_level_count
+            ]
+            min_load = min(loads[group] for group in candidates)
+            candidates = [group for group in candidates if loads[group] == min_load]
+            group = min(candidates, key=priority.__getitem__)
+            buckets[group].append(level)
+            per_level[group][level_index] += 1
+            loads[group] += 1
+
+    if loads != target_sizes:
+        raise RuntimeError(
+            f"boundary level allocator produced group sizes {loads}, expected {target_sizes}"
+        )
+    for group, bucket in enumerate(buckets):
+        group_rng = random.Random(
+            int(seed) + int(batch_number) * 104729 + int(group_count) * 1009 + group * 65537
+        )
+        group_rng.shuffle(bucket)
+
+    schedule: list[float] = []
+    for attempt in range(batch_size):
+        group = attempt % group_count
+        local_index = attempt // group_count
+        schedule.append(buckets[group][local_index])
+    return schedule
+
+
 def _interpolate(hard: SpawnCondition, easy: SpawnCondition, ease_level: float) -> SpawnCondition:
     return SpawnCondition(
         hard.x_mm + (easy.x_mm - hard.x_mm) * ease_level,
@@ -320,6 +389,8 @@ def boundary_condition_for_attempt(
     state: MutableMapping[str, Any],
     config: BoundaryBandConfig,
     attempt_index: int,
+    *,
+    group_count: int | None = None,
 ) -> tuple[SpawnCondition, float]:
     """Return one fixed condition from the current boundary batch.
 
@@ -337,7 +408,16 @@ def boundary_condition_for_attempt(
             f"boundary attempt_index must be in [0, {config.batch_size - 1}], got {attempt}"
         )
     batch_number = int(payload["batch_number"])
-    levels = _shuffled_levels(config.batch_size, config.seed, batch_number)
+    levels = (
+        _shuffled_levels(config.batch_size, config.seed, batch_number)
+        if group_count is None
+        else _group_balanced_levels(
+            config.batch_size,
+            config.seed,
+            batch_number,
+            group_count,
+        )
+    )
     level = levels[attempt]
     hard = _condition_from_dict(payload["hard"])
     easy = _condition_from_dict(payload["easy"])

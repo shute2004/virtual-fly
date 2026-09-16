@@ -13,7 +13,7 @@ from virtual_fly.training.curriculum import (
 )
 
 
-def config() -> BoundaryBandConfig:
+def config(*, seed: int = 0) -> BoundaryBandConfig:
     return BoundaryBandConfig(
         hard=SpawnCondition(10.500, 5.2900, 350.0),
         easy=SpawnCondition(10.625, 5.3525, 356.25),
@@ -23,7 +23,7 @@ def config() -> BoundaryBandConfig:
         ease_success_rate=0.40,
         harden_step=SpawnCondition(0.125, 0.0625, 6.25),
         ease_step=SpawnCondition(0.0625, 0.03125, 3.125),
-        seed=0,
+        seed=seed,
     )
 
 
@@ -95,6 +95,72 @@ class BoundaryBandCurriculumTests(unittest.TestCase):
         self.assertEqual(state_a["successful_first_gates"], state_b["successful_first_gates"])
         self.assertEqual(state_a["consecutive_failures"], 0)
         self.assertEqual(state_b["consecutive_failures"], 0)
+
+    def test_async_group_schedule_balances_ease_levels_across_course_seeds(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        by_group: dict[int, list[float]] = {group: [] for group in range(4)}
+        all_levels: list[float] = []
+        for attempt in range(24):
+            _, level = boundary_condition_for_attempt(
+                state,
+                config(),
+                attempt,
+                group_count=4,
+            )
+            all_levels.append(level)
+            by_group[attempt % 4].append(level)
+
+        self.assertEqual(
+            Counter(all_levels),
+            Counter({0.0: 4, 0.25: 5, 0.5: 6, 0.75: 5, 1.0: 4}),
+        )
+        self.assertEqual({group: len(levels) for group, levels in by_group.items()}, {0: 6, 1: 6, 2: 6, 3: 6})
+        for level in (0.0, 0.25, 0.5, 0.75, 1.0):
+            counts = [Counter(by_group[group])[level] for group in range(4)]
+            self.assertLessEqual(max(counts) - min(counts), 1)
+
+    def test_async_group_schedule_stays_balanced_across_batches_and_seeds(self) -> None:
+        for seed in (0, 1, 7, 42, 104729):
+            for batch_number in range(5):
+                state: dict[str, object] = {
+                    "successful_first_gates": 0,
+                    "consecutive_failures": 0,
+                    "boundary_band": {
+                        "batch_number": batch_number,
+                        "attempts_in_batch": 0,
+                        "successes_in_batch": 0,
+                        "completed_attempt_indices": [],
+                        "group_attempts": {},
+                        "group_successes": {},
+                        "last_batch_success_rate": None,
+                        "last_batch_raw_success_rate": None,
+                        "last_batch_group_success_rates": {},
+                        "last_batch_aggregation": None,
+                        "last_adjustment": None,
+                        "harder_shifts": 0,
+                        "easier_shifts": 0,
+                        "hard": {"x_mm": 10.5, "z_mm": 5.29, "speed_mm_s": 350.0},
+                        "easy": {"x_mm": 10.625, "z_mm": 5.3525, "speed_mm_s": 356.25},
+                    },
+                }
+                cfg = config(seed=seed)
+                by_group: dict[int, Counter[float]] = {
+                    group: Counter() for group in range(4)
+                }
+                for attempt in range(cfg.batch_size):
+                    _, level = boundary_condition_for_attempt(
+                        state,
+                        cfg,
+                        attempt,
+                        group_count=4,
+                    )
+                    by_group[attempt % 4][level] += 1
+                for level in (0.0, 0.25, 0.5, 0.75, 1.0):
+                    counts = [by_group[group][level] for group in range(4)]
+                    self.assertLessEqual(max(counts) - min(counts), 1)
 
     def test_async_group_assignment_is_static_and_resume_safe(self) -> None:
         state: dict[str, object] = {

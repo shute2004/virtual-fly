@@ -174,6 +174,14 @@ def empty_slot_state(condition, course_seed: int) -> dict[str, object]:
         "final_vx_mm_s": condition.speed_mm_s,
         "reward_events": 0,
         "aversive_events": 0,
+        "wing_spikes_total": 0,
+        "somatic_spikes_total": 0,
+        "active_wing_units_sum": 0.0,
+        "active_somatic_units_sum": 0.0,
+        "power_activation_sum": 0.0,
+        "power_lr_abs_diff_sum": 0.0,
+        "active_steering_channels_sum": 0.0,
+        "abs_leg_drive_sum": 0.0,
     }
 
 
@@ -254,6 +262,38 @@ def run_condition(
             state["max_z_mm"] = max(float(state["max_z_mm"]), position[2])
             state["final_vx_mm_s"] = velocity[0]
 
+            motor = dict(act.get("motor") or {})
+            state["wing_spikes_total"] = int(state["wing_spikes_total"]) + int(
+                motor.get("spikes", 0)
+            )
+            state["somatic_spikes_total"] = int(state["somatic_spikes_total"]) + int(
+                motor.get("somatic_spikes", 0)
+            )
+            state["active_wing_units_sum"] = float(state["active_wing_units_sum"]) + float(
+                motor.get("active_motor_units", 0)
+            )
+            state["active_somatic_units_sum"] = float(
+                state["active_somatic_units_sum"]
+            ) + float(motor.get("active_somatic_units", 0))
+            dlm_left = float(motor.get("dlm_left", 0.0))
+            dlm_right = float(motor.get("dlm_right", 0.0))
+            dvm_left = float(motor.get("dvm_left", 0.0))
+            dvm_right = float(motor.get("dvm_right", 0.0))
+            state["power_activation_sum"] = float(state["power_activation_sum"]) + (
+                dlm_left + dlm_right + dvm_left + dvm_right
+            ) / 4.0
+            state["power_lr_abs_diff_sum"] = float(
+                state["power_lr_abs_diff_sum"]
+            ) + (abs(dlm_left - dlm_right) + abs(dvm_left - dvm_right)) / 2.0
+            steering = dict(motor.get("steering") or {})
+            state["active_steering_channels_sum"] = float(
+                state["active_steering_channels_sum"]
+            ) + len(steering)
+            leg_drive = dict(motor.get("leg_drive") or {})
+            state["abs_leg_drive_sum"] = float(state["abs_leg_drive_sum"]) + (
+                sum(abs(float(value)) for value in leg_drive.values()) / 18.0
+            )
+
             if bool(act["passed_gate"]):
                 state["passed_gates"] = int(state["passed_gates"]) + 1
                 state["reward_events"] = int(state["reward_events"]) + 1
@@ -289,6 +329,7 @@ def run_condition(
     rows: list[dict[str, object]] = []
     for slot_id in range(population):
         state = states[slot_id]
+        steps = max(1, int(state["control_steps"]))
         rows.append(
             {
                 "condition": state["condition"],
@@ -308,6 +349,18 @@ def run_condition(
                 "final_vx_mm_s": float(state["final_vx_mm_s"]),
                 "reward_events": int(state["reward_events"]),
                 "aversive_events": int(state["aversive_events"]),
+                "wing_spikes_total": int(state["wing_spikes_total"]),
+                "somatic_spikes_total": int(state["somatic_spikes_total"]),
+                "wing_spikes_per_step": int(state["wing_spikes_total"]) / steps,
+                "somatic_spikes_per_step": int(state["somatic_spikes_total"]) / steps,
+                "mean_active_wing_motor_units": float(state["active_wing_units_sum"]) / steps,
+                "mean_active_somatic_motor_units": float(state["active_somatic_units_sum"]) / steps,
+                "mean_power_activation": float(state["power_activation_sum"]) / steps,
+                "mean_power_lr_abs_diff": float(state["power_lr_abs_diff_sum"]) / steps,
+                "mean_active_steering_channels": float(
+                    state["active_steering_channels_sum"]
+                ) / steps,
+                "mean_abs_leg_drive": float(state["abs_leg_drive_sum"]) / steps,
             }
         )
     return rows

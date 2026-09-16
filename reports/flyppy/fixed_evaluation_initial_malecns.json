@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at_utc": "2026-09-15T14:01:05.177774+00:00",
+  "generated_at_utc": "2026-09-15T23:39:46.137944+00:00",
   "suite_version": "flyppy-v3-fixed-v1",
   "evaluation_subject": "initial_malecns",
   "checkpoint": "initial MaleCNS snapshot weights",
@@ -23,7 +23,7 @@
     "2": 0,
     "3": 0
   },
-  "elapsed_seconds": 39.43388625001535,
+  "elapsed_seconds": 120.60688750003465,
   "conditions": [
     {
       "name": "part3_frontier",
@@ -70,7 +70,15 @@
       "mean_control_steps": 60.75,
       "mean_max_altitude_gain_mm": -0.005523894007664509,
       "mean_max_altitude_loss_mm": 1.452263121926729,
-      "mean_final_vx_mm_s": 140.13787302390182
+      "mean_final_vx_mm_s": 140.13787302390182,
+      "mean_wing_spikes_per_step": 2.2401331867057674,
+      "mean_somatic_spikes_per_step": 3.2899560117302054,
+      "mean_active_wing_motor_units": 33.580156402737046,
+      "mean_active_somatic_motor_units": 30.200054985337243,
+      "mean_power_activation": 0.926308349167235,
+      "mean_power_lr_abs_diff": 0.001171054775859309,
+      "mean_active_steering_channels": 5.94024926686217,
+      "mean_abs_leg_drive": 0.04523304767607776
     },
     {
       "condition": {
@@ -94,7 +102,15 @@
       "mean_control_steps": 52.0,
       "mean_max_altitude_gain_mm": -0.0054364430308062595,
       "mean_max_altitude_loss_mm": 0.6923972547265431,
-      "mean_final_vx_mm_s": 208.98323174100494
+      "mean_final_vx_mm_s": 208.98323174100494,
+      "mean_wing_spikes_per_step": 1.595094813078495,
+      "mean_somatic_spikes_per_step": 3.176594784696344,
+      "mean_active_wing_motor_units": 30.25407930807656,
+      "mean_active_somatic_motor_units": 18.180979200892203,
+      "mean_power_activation": 0.9077616454316761,
+      "mean_power_lr_abs_diff": 0.0010888469461080529,
+      "mean_active_steering_channels": 4.4818400148255,
+      "mean_abs_leg_drive": 0.1027601976854587
     },
     {
       "condition": {
@@ -118,7 +134,15 @@
       "mean_control_steps": 79.75,
       "mean_max_altitude_gain_mm": -0.005352281469093612,
       "mean_max_altitude_loss_mm": 3.1460485302433314,
-      "mean_final_vx_mm_s": 155.31994079177957
+      "mean_final_vx_mm_s": 155.31994079177957,
+      "mean_wing_spikes_per_step": 2.8145132645132644,
+      "mean_somatic_spikes_per_step": 4.772022422022422,
+      "mean_active_wing_motor_units": 36.310497835497834,
+      "mean_active_somatic_motor_units": 36.331784881784884,
+      "mean_power_activation": 0.917865957441576,
+      "mean_power_lr_abs_diff": 0.0014636025977670737,
+      "mean_active_steering_channels": 8.204520479520479,
+      "mean_abs_leg_drive": 0.10914678867916822
     }
   ],
   "episode_results": [
@@ -145,7 +169,17 @@
       "max_altitude_loss_mm": 2.793835633598011,
       "final_vx_mm_s": 391.8710074655043,
       "reward_events": 2,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 418,
+      "somatic_spikes_total": 594,
+      "wing_spikes_per_step": 4.494623655913978,
+      "somatic_spikes_per_step": 6.387096774193548,
+      "mean_active_wing_motor_units": 42.956989247311824,
+      "mean_active_somatic_motor_units": 58.516129032258064,
+      "mean_power_activation": 0.9465833868056384,
+      "mean_power_lr_abs_diff": 0.0024286400031603285,
+      "mean_active_steering_channels": 11.806451612903226,
+      "mean_abs_leg_drive": 0.08647343848891025
     },
     {
       "condition": "part3_frontier",
@@ -170,7 +204,17 @@
       "max_altitude_loss_mm": 0.19672470662512787,
       "final_vx_mm_s": 77.73300403678122,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 0,
+      "somatic_spikes_total": 0,
+      "wing_spikes_per_step": 0.0,
+      "somatic_spikes_per_step": 0.0,
+      "mean_active_wing_motor_units": 24.0,
+      "mean_active_somatic_motor_units": 2.0,
+      "mean_power_activation": 0.9097918132465818,
+      "mean_power_lr_abs_diff": 0.0,
+      "mean_active_steering_channels": 0.0,
+      "mean_abs_leg_drive": 0.0
     },
     {
       "condition": "part3_frontier",
@@ -195,7 +239,17 @@
       "max_altitude_loss_mm": 2.558708600837921,
       "final_vx_mm_s": 109.89199198754861,
       "reward_events": 1,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 393,
+      "somatic_spikes_total": 596,
+      "wing_spikes_per_step": 4.465909090909091,
+      "somatic_spikes_per_step": 6.7727272727272725,
+      "mean_active_wing_motor_units": 43.36363636363637,
+      "mean_active_somatic_motor_units": 58.28409090909091,
+      "mean_power_activation": 0.940124780898304,
+      "mean_power_lr_abs_diff": 0.002255579100276908,
+      "mean_active_steering_channels": 11.954545454545455,
+      "mean_abs_leg_drive": 0.09445875221540079
     },
     {
       "condition": "part3_frontier",
@@ -220,7 +274,17 @@
       "max_altitude_loss_mm": 0.25978354664585623,
       "final_vx_mm_s": -18.94451139422682,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 0,
+      "somatic_spikes_total": 0,
+      "wing_spikes_per_step": 0.0,
+      "somatic_spikes_per_step": 0.0,
+      "mean_active_wing_motor_units": 24.0,
+      "mean_active_somatic_motor_units": 2.0,
+      "mean_power_activation": 0.9087334157184163,
+      "mean_power_lr_abs_diff": 0.0,
+      "mean_active_steering_channels": 0.0,
+      "mean_abs_leg_drive": 0.0
     },
     {
       "condition": "midpoint",
@@ -245,7 +309,17 @@
       "max_altitude_loss_mm": 0.7627753219436748,
       "final_vx_mm_s": 351.41755609650784,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 108,
+      "somatic_spikes_total": 208,
+      "wing_spikes_per_step": 2.0,
+      "somatic_spikes_per_step": 3.8518518518518516,
+      "mean_active_wing_motor_units": 31.51851851851852,
+      "mean_active_somatic_motor_units": 21.796296296296298,
+      "mean_power_activation": 0.9085002306096089,
+      "mean_power_lr_abs_diff": 0.0013082913937567911,
+      "mean_active_steering_channels": 5.277777777777778,
+      "mean_abs_leg_drive": 0.09887582181766731
     },
     {
       "condition": "midpoint",
@@ -270,7 +344,17 @@
       "max_altitude_loss_mm": 0.563638899632041,
       "final_vx_mm_s": 67.87005927741252,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 62,
+      "somatic_spikes_total": 137,
+      "wing_spikes_per_step": 1.2916666666666667,
+      "somatic_spikes_per_step": 2.8541666666666665,
+      "mean_active_wing_motor_units": 29.145833333333332,
+      "mean_active_somatic_motor_units": 14.791666666666666,
+      "mean_power_activation": 0.9053595205579367,
+      "mean_power_lr_abs_diff": 0.0013294677822654685,
+      "mean_active_steering_channels": 3.7916666666666665,
+      "mean_abs_leg_drive": 0.09949920135073675
     },
     {
       "condition": "midpoint",
@@ -295,7 +379,17 @@
       "max_altitude_loss_mm": 0.5083596261381498,
       "final_vx_mm_s": -3.431286067219235,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 44,
+      "somatic_spikes_total": 98,
+      "wing_spikes_per_step": 0.9361702127659575,
+      "somatic_spikes_per_step": 2.0851063829787235,
+      "mean_active_wing_motor_units": 27.06382978723404,
+      "mean_active_somatic_motor_units": 10.085106382978724,
+      "mean_power_activation": 0.9049674158520177,
+      "mean_power_lr_abs_diff": 0.0,
+      "mean_active_steering_channels": 2.4680851063829787,
+      "mean_abs_leg_drive": 0.08013353550811067
     },
     {
       "condition": "midpoint",
@@ -320,7 +414,17 @@
       "max_altitude_loss_mm": 0.934815171192307,
       "final_vx_mm_s": 420.0765976573187,
       "reward_events": 1,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 127,
+      "somatic_spikes_total": 231,
+      "wing_spikes_per_step": 2.152542372881356,
+      "somatic_spikes_per_step": 3.9152542372881354,
+      "mean_active_wing_motor_units": 33.28813559322034,
+      "mean_active_somatic_motor_units": 26.050847457627118,
+      "mean_power_activation": 0.9122194147071414,
+      "mean_power_lr_abs_diff": 0.0017176286084099517,
+      "mean_active_steering_channels": 6.389830508474576,
+      "mean_abs_leg_drive": 0.13253223206532008
     },
     {
       "condition": "target",
@@ -345,7 +449,17 @@
       "max_altitude_loss_mm": 1.3423233790025018,
       "final_vx_mm_s": -15.312365025309907,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 164,
+      "somatic_spikes_total": 312,
+      "wing_spikes_per_step": 2.484848484848485,
+      "somatic_spikes_per_step": 4.7272727272727275,
+      "mean_active_wing_motor_units": 35.78787878787879,
+      "mean_active_somatic_motor_units": 32.36363636363637,
+      "mean_power_activation": 0.9139677861802571,
+      "mean_power_lr_abs_diff": 0.002487947173616016,
+      "mean_active_steering_channels": 7.803030303030303,
+      "mean_abs_leg_drive": 0.10804354899635787
     },
     {
       "condition": "target",
@@ -370,7 +484,17 @@
       "max_altitude_loss_mm": 1.6872115986033647,
       "final_vx_mm_s": 306.9203205106785,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 139,
+      "somatic_spikes_total": 268,
+      "wing_spikes_per_step": 1.9857142857142858,
+      "somatic_spikes_per_step": 3.8285714285714287,
+      "mean_active_wing_motor_units": 32.75714285714286,
+      "mean_active_somatic_motor_units": 26.87142857142857,
+      "mean_power_activation": 0.9064200673374874,
+      "mean_power_lr_abs_diff": 0.0005666331625405529,
+      "mean_active_steering_channels": 6.328571428571428,
+      "mean_abs_leg_drive": 0.11225392350446566
     },
     {
       "condition": "target",
@@ -395,7 +519,17 @@
       "max_altitude_loss_mm": 1.4836322169543212,
       "final_vx_mm_s": 124.33551438775159,
       "reward_events": 0,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 171,
+      "somatic_spikes_total": 276,
+      "wing_spikes_per_step": 2.590909090909091,
+      "somatic_spikes_per_step": 4.181818181818182,
+      "mean_active_wing_motor_units": 35.03030303030303,
+      "mean_active_somatic_motor_units": 31.348484848484848,
+      "mean_power_activation": 0.9141694120162301,
+      "mean_power_lr_abs_diff": 0.0012561693068484589,
+      "mean_active_steering_channels": 7.378787878787879,
+      "mean_abs_leg_drive": 0.12335008610933576
     },
     {
       "condition": "target",
@@ -420,7 +554,17 @@
       "max_altitude_loss_mm": 8.071026926413138,
       "final_vx_mm_s": 205.33629329399812,
       "reward_events": 1,
-      "aversive_events": 1
+      "aversive_events": 1,
+      "wing_spikes_total": 491,
+      "somatic_spikes_total": 743,
+      "wing_spikes_per_step": 4.196581196581197,
+      "somatic_spikes_per_step": 6.35042735042735,
+      "mean_active_wing_motor_units": 41.666666666666664,
+      "mean_active_somatic_motor_units": 54.743589743589745,
+      "mean_power_activation": 0.9369065642323294,
+      "mean_power_lr_abs_diff": 0.0015436607480632674,
+      "mean_active_steering_channels": 11.307692307692308,
+      "mean_abs_leg_drive": 0.09293959610651355
     }
   ]
 }

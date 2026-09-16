@@ -2,22 +2,30 @@
 
 このディレクトリにはFlyBody/MaleCNS統合用の実行scriptと互換層があります。
 
-## 現行Flyppy経路
+## 現行Flyppy v3経路
 
-学習・評価で参照してよい主要ファイル:
+production学習で参照する主要ファイル:
 
-- `train_flyppy_curriculum.py` — persistent Flyppy trainer。
+- `train_flyppy_population_packed.py` — production CLI。packed body-process構成を選びprocess trainerへ接続する。
+- `train_flyppy_population_process.py` — production shared-weight population trainer。
+- `train_flyppy_population.py` — 同じ学習意味論を確認するreference trainer。
+- `flyppy_body_worker.py` / `flyppy_packed_body_worker.py` — MuJoCo/FlyBody body worker。
+- `population_neural_bridge_client.py` — Rust shared-weight neural runtimeへのbridge client。
 - `flybody_runtime.py` — CNS motor decoderを持たない共通FlyBody/MuJoCo runtime。
-- `flybody_muscle_adapter.py` — 現行の個別wing MN由来muscle state → physical torque境界。
-- `wing_muscle_periphery.py` — individual MN spike → motor-unit/muscle state。
+- `flybody_v3_adapter.py` / `flybody_muscle_adapter.py` — v3個別MN由来muscle state → physical torque境界。
+- `wing_muscle_periphery.py` / `whole_body_periphery.py` — individual MN spike → motor-unit/muscle state。
 - `malecns_retina.py` — FlyBody eye → released MaleCNS R1-R6 current。
+- `direct_ommatidia_sensor_bodyexclude.py` — production image-free ommatidial sensing。
 - `flyppy_course.py` / `flyppy_world.py` — 物理course。
-- `evaluate_flyppy.py` — plasticity/reinforcementを止めた現行経路の評価。
-- `live_telemetry.py` / `live_body_viewer.py` / `live_viewer_server.py` — 読み取り専用viewer。
+- `live_telemetry.py` / `live_body_viewer.py` / `live_viewer_server.py` — observer-only viewer。
 
-カリキュラムpolicyの再利用ロジックは `src/virtual_fly/training/curriculum.py` にあります。
+固定評価は `scripts/analysis/evaluate_flyppy_fixed.py` を使う。
+
+再利用するtrainingロジックは `src/virtual_fly/training/` に置く。現在、curriculum、scheduler、checkpoint/resume、fixed evaluation、experiment forkをpackage側へ分離している。
 
 ## Legacy / historical diagnostics
+
+`train_flyppy_curriculum.py` と `evaluate_flyppy.py` はpopulation production化前の経路を再現・比較するために残している。新規production開発の入口にはしない。
 
 `flybody_adapter.py` の `FlyBodyWingAdapter` / `WingDrive` は旧 **DNg02 population activity → wing amplitude** 試作用です。現行学習・評価では使用しません。現行 `FlyBodyMuscleAdapter` はこのclassを継承していません。
 

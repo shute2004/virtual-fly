@@ -1,0 +1,887 @@
+{
+  "schema_version": 1,
+  "suite_version": "flyppy-v3-fixed-v1",
+  "baseline_subject": "initial_malecns",
+  "baseline_checkpoint": "initial MaleCNS snapshot weights",
+  "baseline_checkpoint_neural_step": 0,
+  "trained_subject": "trained_checkpoint",
+  "trained_checkpoint": "artifacts/experiments/flyppy-v3/checkpoint",
+  "trained_checkpoint_neural_step": 15781,
+  "trained_training_episode_end": 255,
+  "population": 4,
+  "seed_start": 0,
+  "seed_end": 3,
+  "vision_runtime": "direct-ray",
+  "vision_rays_per_ommatidium": 13,
+  "condition_comparison": [
+    {
+      "condition": "part3_frontier",
+      "baseline_first_gate_passes": 2,
+      "trained_first_gate_passes": 2,
+      "baseline_second_gate_passes": 1,
+      "trained_second_gate_passes": 0,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 2.2401331867057674,
+          "trained": 2.1805830039525693,
+          "delta": -0.05955018275319812,
+          "relative_delta": -0.02658332241431134
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 3.2899560117302054,
+          "trained": 3.2918725296442686,
+          "delta": 0.0019165179140632205,
+          "relative_delta": 0.000582536030035038
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 33.580156402737046,
+          "trained": 33.46405632411067,
+          "delta": -0.11610007862637417,
+          "relative_delta": -0.0034574013662697265
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 30.200054985337243,
+          "trained": 28.577692687747035,
+          "delta": -1.6223622975902074,
+          "relative_delta": -0.05372050807119054
+        },
+        "mean_power_activation": {
+          "baseline": 0.926308349167235,
+          "trained": 0.9261138892994889,
+          "delta": -0.00019445986774613289,
+          "relative_delta": -0.00020992995250550768
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.001171054775859309,
+          "trained": 0.0008157494773700957,
+          "delta": -0.00035530529848921337,
+          "relative_delta": -0.3034062161853135
+        },
+        "mean_active_steering_channels": {
+          "baseline": 5.94024926686217,
+          "trained": 5.972208498023715,
+          "delta": 0.03195923116154464,
+          "relative_delta": 0.0053801161745568515
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.04523304767607776,
+          "trained": 0.04775919905627885,
+          "delta": 0.00252615138020109,
+          "relative_delta": 0.05584747236779906
+        }
+      }
+    },
+    {
+      "condition": "midpoint",
+      "baseline_first_gate_passes": 1,
+      "trained_first_gate_passes": 2,
+      "baseline_second_gate_passes": 0,
+      "trained_second_gate_passes": 0,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 1.595094813078495,
+          "trained": 2.3459739323064244,
+          "delta": 0.7508791192279294,
+          "relative_delta": 0.47074262487177837
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 3.176594784696344,
+          "trained": 3.711393883193378,
+          "delta": 0.5347990984970341,
+          "relative_delta": 0.1683560966206637
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 30.25407930807656,
+          "trained": 33.15933319595418,
+          "delta": 2.905253887877624,
+          "relative_delta": 0.09602850109215004
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 18.180979200892203,
+          "trained": 26.017888482475573,
+          "delta": 7.83690928158337,
+          "relative_delta": 0.4310499008325573
+        },
+        "mean_power_activation": {
+          "baseline": 0.9077616454316761,
+          "trained": 0.9190793519702192,
+          "delta": 0.011317706538543026,
+          "relative_delta": 0.012467707349720658
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0010888469461080529,
+          "trained": 0.0017438450913633797,
+          "delta": 0.0006549981452553268,
+          "relative_delta": 0.6015520800205536
+        },
+        "mean_active_steering_channels": {
+          "baseline": 4.4818400148255,
+          "trained": 6.563184105232429,
+          "delta": 2.0813440904069287,
+          "relative_delta": 0.46439499926861305
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.1027601976854587,
+          "trained": 0.09849463451446619,
+          "delta": -0.004265563170992512,
+          "relative_delta": -0.04150987704450591
+        }
+      }
+    },
+    {
+      "condition": "target",
+      "baseline_first_gate_passes": 1,
+      "trained_first_gate_passes": 1,
+      "baseline_second_gate_passes": 0,
+      "trained_second_gate_passes": 0,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 2.8145132645132644,
+          "trained": 3.0042052089399176,
+          "delta": 0.18969194442665316,
+          "relative_delta": 0.06739777950894044
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 4.772022422022422,
+          "trained": 4.4615887919498824,
+          "delta": -0.31043363007253966,
+          "relative_delta": -0.06505284397657447
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 36.310497835497834,
+          "trained": 35.735302145655865,
+          "delta": -0.5751956898419692,
+          "relative_delta": -0.01584103011883376
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 36.331784881784884,
+          "trained": 33.628623231349835,
+          "delta": -2.7031616504350495,
+          "relative_delta": -0.0744021153717194
+        },
+        "mean_power_activation": {
+          "baseline": 0.917865957441576,
+          "trained": 0.9203282084489796,
+          "delta": 0.002462251007403604,
+          "relative_delta": 0.0026825823394374354
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0014636025977670737,
+          "trained": 0.0034413892478646338,
+          "delta": 0.00197778665009756,
+          "relative_delta": 1.3513139790233664
+        },
+        "mean_active_steering_channels": {
+          "baseline": 8.204520479520479,
+          "trained": 7.805845757043252,
+          "delta": -0.39867472247722713,
+          "relative_delta": -0.04859208085010814
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.10914678867916822,
+          "trained": 0.10262461854761507,
+          "delta": -0.006522170131553151,
+          "relative_delta": -0.05975595077492164
+        }
+      }
+    }
+  ],
+  "paired_seed_comparison": [
+    {
+      "condition": "part3_frontier",
+      "course_seed": 0,
+      "baseline_passed_gates": 2,
+      "trained_passed_gates": 1,
+      "baseline_control_steps": 93,
+      "trained_control_steps": 92,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 4.494623655913978,
+          "trained": 4.608695652173913,
+          "delta": 0.11407199625993503,
+          "relative_delta": 0.025379654670272627
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 6.387096774193548,
+          "trained": 6.565217391304348,
+          "delta": 0.17812061711079963,
+          "relative_delta": 0.027887571365832267
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 42.956989247311824,
+          "trained": 42.66304347826087,
+          "delta": -0.29394576905095704,
+          "relative_delta": -0.006842792621211266
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 58.516129032258064,
+          "trained": 58.41304347826087,
+          "delta": -0.10308555399719666,
+          "relative_delta": -0.0017616605148363265
+        },
+        "mean_power_activation": {
+          "baseline": 0.9465833868056384,
+          "trained": 0.9429737392160863,
+          "delta": -0.0036096475895520674,
+          "relative_delta": -0.0038133434833810737
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0024286400031603285,
+          "trained": 0.0005236616110815249,
+          "delta": -0.0019049783920788035,
+          "relative_delta": -0.7843807190855387
+        },
+        "mean_active_steering_channels": {
+          "baseline": 11.806451612903226,
+          "trained": 11.945652173913043,
+          "delta": 0.13920056100981704,
+          "relative_delta": 0.01179021145165117
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.08647343848891025,
+          "trained": 0.11636128467069785,
+          "delta": 0.02988784618178761,
+          "relative_delta": 0.3456303658564539
+        }
+      }
+    },
+    {
+      "condition": "part3_frontier",
+      "course_seed": 1,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 0,
+      "baseline_control_steps": 29,
+      "trained_control_steps": 29,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 24.0,
+          "trained": 24.0,
+          "delta": 0.0,
+          "relative_delta": 0.0
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 2.0,
+          "trained": 2.0,
+          "delta": 0.0,
+          "relative_delta": 0.0
+        },
+        "mean_power_activation": {
+          "baseline": 0.9097918132465818,
+          "trained": 0.9097918132465818,
+          "delta": 0.0,
+          "relative_delta": 0.0
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_active_steering_channels": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        }
+      }
+    },
+    {
+      "condition": "part3_frontier",
+      "course_seed": 2,
+      "baseline_passed_gates": 1,
+      "trained_passed_gates": 1,
+      "baseline_control_steps": 88,
+      "trained_control_steps": 88,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 4.465909090909091,
+          "trained": 4.113636363636363,
+          "delta": -0.3522727272727275,
+          "relative_delta": -0.07888040712468199
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 6.7727272727272725,
+          "trained": 6.6022727272727275,
+          "delta": -0.17045454545454497,
+          "relative_delta": -0.025167785234899258
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 43.36363636363637,
+          "trained": 43.19318181818182,
+          "delta": -0.17045454545454675,
+          "relative_delta": -0.003930817610062923
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 58.28409090909091,
+          "trained": 51.89772727272727,
+          "delta": -6.386363636363633,
+          "relative_delta": -0.10957301618249167
+        },
+        "mean_power_activation": {
+          "baseline": 0.940124780898304,
+          "trained": 0.9429565890168715,
+          "delta": 0.002831808118567536,
+          "relative_delta": 0.00301216197690449
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.002255579100276908,
+          "trained": 0.0027393362983988575,
+          "delta": 0.0004837571981219494,
+          "relative_delta": 0.21447139586572714
+        },
+        "mean_active_steering_channels": {
+          "baseline": 11.954545454545455,
+          "trained": 11.943181818181818,
+          "delta": -0.011363636363636687,
+          "relative_delta": -0.0009505703422053502
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.09445875221540079,
+          "trained": 0.07467551155441755,
+          "delta": -0.019783240660983234,
+          "relative_delta": -0.2094378784071819
+        }
+      }
+    },
+    {
+      "condition": "part3_frontier",
+      "course_seed": 3,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 0,
+      "baseline_control_steps": 33,
+      "trained_control_steps": 33,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 24.0,
+          "trained": 24.0,
+          "delta": 0.0,
+          "relative_delta": 0.0
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 2.0,
+          "trained": 2.0,
+          "delta": 0.0,
+          "relative_delta": 0.0
+        },
+        "mean_power_activation": {
+          "baseline": 0.9087334157184163,
+          "trained": 0.9087334157184163,
+          "delta": 0.0,
+          "relative_delta": 0.0
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_active_steering_channels": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.0,
+          "trained": 0.0,
+          "delta": 0.0,
+          "relative_delta": null
+        }
+      }
+    },
+    {
+      "condition": "midpoint",
+      "course_seed": 0,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 1,
+      "baseline_control_steps": 54,
+      "trained_control_steps": 105,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 2.0,
+          "trained": 4.942857142857143,
+          "delta": 2.942857142857143,
+          "relative_delta": 1.4714285714285715
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 3.8518518518518516,
+          "trained": 7.180952380952381,
+          "delta": 3.3291005291005296,
+          "relative_delta": 0.8642857142857144
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 31.51851851851852,
+          "trained": 45.12380952380953,
+          "delta": 13.605291005291008,
+          "relative_delta": 0.4316602316602317
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 21.796296296296298,
+          "trained": 60.21904761904762,
+          "delta": 38.422751322751324,
+          "relative_delta": 1.762811020754946
+        },
+        "mean_power_activation": {
+          "baseline": 0.9085002306096089,
+          "trained": 0.9500612243846547,
+          "delta": 0.04156099377504574,
+          "relative_delta": 0.04574681697896551
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0013082913937567911,
+          "trained": 0.0020277122908363256,
+          "delta": 0.0007194208970795345,
+          "relative_delta": 0.5498934721367382
+        },
+        "mean_active_steering_channels": {
+          "baseline": 5.277777777777778,
+          "trained": 13.438095238095238,
+          "delta": 8.160317460317462,
+          "relative_delta": 1.5461654135338347
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.09887582181766731,
+          "trained": 0.12184463484714407,
+          "delta": 0.02296881302947676,
+          "relative_delta": 0.23229959162142358
+        }
+      }
+    },
+    {
+      "condition": "midpoint",
+      "course_seed": 1,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 0,
+      "baseline_control_steps": 48,
+      "trained_control_steps": 47,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 1.2916666666666667,
+          "trained": 1.0425531914893618,
+          "delta": -0.24911347517730498,
+          "relative_delta": -0.1928620452985587
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 2.8541666666666665,
+          "trained": 2.1702127659574466,
+          "delta": -0.6839539007092199,
+          "relative_delta": -0.23963348346016466
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 29.145833333333332,
+          "trained": 28.085106382978722,
+          "delta": -1.06072695035461,
+          "relative_delta": -0.036393776709807917
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 14.791666666666666,
+          "trained": 11.574468085106384,
+          "delta": -3.2171985815602824,
+          "relative_delta": -0.21750074917590642
+        },
+        "mean_power_activation": {
+          "baseline": 0.9053595205579367,
+          "trained": 0.9064760091702808,
+          "delta": 0.0011164886123441464,
+          "relative_delta": 0.0012331991733583354
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0013294677822654685,
+          "trained": 0.0019005616661426673,
+          "delta": 0.0005710938838771988,
+          "relative_delta": 0.42956579429403774
+        },
+        "mean_active_steering_channels": {
+          "baseline": 3.7916666666666665,
+          "trained": 3.5531914893617023,
+          "delta": -0.23847517730496426,
+          "relative_delta": -0.06289455225625432
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.09949920135073675,
+          "trained": 0.08930685063383043,
+          "delta": -0.010192350716906329,
+          "relative_delta": -0.10243650781656106
+        }
+      }
+    },
+    {
+      "condition": "midpoint",
+      "course_seed": 2,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 0,
+      "baseline_control_steps": 47,
+      "trained_control_steps": 47,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 0.9361702127659575,
+          "trained": 1.0425531914893618,
+          "delta": 0.1063829787234043,
+          "relative_delta": 0.11363636363636367
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 2.0851063829787235,
+          "trained": 1.6808510638297873,
+          "delta": -0.4042553191489362,
+          "relative_delta": -0.19387755102040816
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 27.06382978723404,
+          "trained": 27.106382978723403,
+          "delta": 0.0425531914893611,
+          "relative_delta": 0.001572327044025135
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 10.085106382978724,
+          "trained": 8.617021276595745,
+          "delta": -1.4680851063829792,
+          "relative_delta": -0.14556962025316458
+        },
+        "mean_power_activation": {
+          "baseline": 0.9049674158520177,
+          "trained": 0.905568909154017,
+          "delta": 0.0006014933019993229,
+          "relative_delta": 0.0006646574135854639
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0,
+          "trained": 0.0008279295595852756,
+          "delta": 0.0008279295595852756,
+          "relative_delta": null
+        },
+        "mean_active_steering_channels": {
+          "baseline": 2.4680851063829787,
+          "trained": 2.702127659574468,
+          "delta": 0.23404255319148914,
+          "relative_delta": 0.09482758620689646
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.08013353550811067,
+          "trained": 0.0687429709096826,
+          "delta": -0.011390564598428077,
+          "relative_delta": -0.1421447902704254
+        }
+      }
+    },
+    {
+      "condition": "midpoint",
+      "course_seed": 3,
+      "baseline_passed_gates": 1,
+      "trained_passed_gates": 1,
+      "baseline_control_steps": 59,
+      "trained_control_steps": 59,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 2.152542372881356,
+          "trained": 2.3559322033898304,
+          "delta": 0.20338983050847448,
+          "relative_delta": 0.09448818897637791
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 3.9152542372881354,
+          "trained": 3.8135593220338984,
+          "delta": -0.10169491525423702,
+          "relative_delta": -0.025974025974025906
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 33.28813559322034,
+          "trained": 32.32203389830509,
+          "delta": -0.9661016949152526,
+          "relative_delta": -0.029022403258655755
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 26.050847457627118,
+          "trained": 23.661016949152543,
+          "delta": -2.3898305084745743,
+          "relative_delta": -0.09173715029277807
+        },
+        "mean_power_activation": {
+          "baseline": 0.9122194147071414,
+          "trained": 0.914211265171924,
+          "delta": 0.001991850464782563,
+          "relative_delta": 0.0021835212369625194
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0017176286084099517,
+          "trained": 0.0022191768488892503,
+          "delta": 0.0005015482404792987,
+          "relative_delta": 0.29200039986734583
+        },
+        "mean_active_steering_channels": {
+          "baseline": 6.389830508474576,
+          "trained": 6.559322033898305,
+          "delta": 0.16949152542372925,
+          "relative_delta": 0.026525198938992113
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.13253223206532008,
+          "trained": 0.11408408166720767,
+          "delta": -0.018448150398112415,
+          "relative_delta": -0.13919746246347095
+        }
+      }
+    },
+    {
+      "condition": "target",
+      "course_seed": 0,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 0,
+      "baseline_control_steps": 66,
+      "trained_control_steps": 66,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 2.484848484848485,
+          "trained": 2.4545454545454546,
+          "delta": -0.030303030303030276,
+          "relative_delta": -0.0121951219512195
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 4.7272727272727275,
+          "trained": 3.893939393939394,
+          "delta": -0.8333333333333335,
+          "relative_delta": -0.1762820512820513
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 35.78787878787879,
+          "trained": 33.25757575757576,
+          "delta": -2.530303030303031,
+          "relative_delta": -0.07070279424216767
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 32.36363636363637,
+          "trained": 26.454545454545453,
+          "delta": -5.909090909090914,
+          "relative_delta": -0.18258426966292146
+        },
+        "mean_power_activation": {
+          "baseline": 0.9139677861802571,
+          "trained": 0.911777696445973,
+          "delta": -0.0021900897342841397,
+          "relative_delta": -0.0023962439020276363
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.002487947173616016,
+          "trained": 0.0022355549033891494,
+          "delta": -0.00025239227022686665,
+          "relative_delta": -0.10144599246455716
+        },
+        "mean_active_steering_channels": {
+          "baseline": 7.803030303030303,
+          "trained": 6.5,
+          "delta": -1.3030303030303028,
+          "relative_delta": -0.16699029126213588
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.10804354899635787,
+          "trained": 0.09672217154213159,
+          "delta": -0.011321377454226289,
+          "relative_delta": -0.10478531628582406
+        }
+      }
+    },
+    {
+      "condition": "target",
+      "course_seed": 1,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 0,
+      "baseline_control_steps": 70,
+      "trained_control_steps": 69,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 1.9857142857142858,
+          "trained": 2.6956521739130435,
+          "delta": 0.7099378881987577,
+          "relative_delta": 0.35752267751016575
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 3.8285714285714287,
+          "trained": 3.2753623188405796,
+          "delta": -0.5532091097308491,
+          "relative_delta": -0.14449491672074416
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 32.75714285714286,
+          "trained": 33.405797101449274,
+          "delta": 0.6486542443064138,
+          "relative_delta": 0.019801917619471854
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 26.87142857142857,
+          "trained": 23.07246376811594,
+          "delta": -3.7989648033126286,
+          "relative_delta": -0.14137561734815737
+        },
+        "mean_power_activation": {
+          "baseline": 0.9064200673374874,
+          "trained": 0.9183681714460055,
+          "delta": 0.011948104108518098,
+          "relative_delta": 0.013181641204849298
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0005666331625405529,
+          "trained": 0.002330259133073844,
+          "delta": 0.0017636259705332909,
+          "relative_delta": 3.112465148749693
+        },
+        "mean_active_steering_channels": {
+          "baseline": 6.328571428571428,
+          "trained": 6.304347826086956,
+          "delta": -0.024223602484472195,
+          "relative_delta": -0.003827657277456103
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.11225392350446566,
+          "trained": 0.09972476619271581,
+          "delta": -0.012529157311749847,
+          "relative_delta": -0.1116144266552199
+        }
+      }
+    },
+    {
+      "condition": "target",
+      "course_seed": 2,
+      "baseline_passed_gates": 0,
+      "trained_passed_gates": 0,
+      "baseline_control_steps": 66,
+      "trained_control_steps": 65,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 2.590909090909091,
+          "trained": 3.0615384615384613,
+          "delta": 0.4706293706293705,
+          "relative_delta": 0.18164642375168685
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 4.181818181818182,
+          "trained": 4.092307692307692,
+          "delta": -0.08951048951048968,
+          "relative_delta": -0.021404682274247532
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 35.03030303030303,
+          "trained": 34.184615384615384,
+          "delta": -0.8456876456876472,
+          "relative_delta": -0.024141602342294427
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 31.348484848484848,
+          "trained": 27.123076923076923,
+          "delta": -4.225407925407925,
+          "relative_delta": -0.134788266349407
+        },
+        "mean_power_activation": {
+          "baseline": 0.9141694120162301,
+          "trained": 0.9177448487353047,
+          "delta": 0.003575436719074565,
+          "relative_delta": 0.003911131429336302
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0012561693068484589,
+          "trained": 0.00232174272540214,
+          "delta": 0.0010655734185536813,
+          "relative_delta": 0.8482721339745561
+        },
+        "mean_active_steering_channels": {
+          "baseline": 7.378787878787879,
+          "trained": 7.046153846153846,
+          "delta": -0.3326340326340329,
+          "relative_delta": -0.045079766229663594
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.12335008610933576,
+          "trained": 0.10024650593203903,
+          "delta": -0.02310358017729673,
+          "relative_delta": -0.18730088406114323
+        }
+      }
+    },
+    {
+      "condition": "target",
+      "course_seed": 3,
+      "baseline_passed_gates": 1,
+      "trained_passed_gates": 1,
+      "baseline_control_steps": 117,
+      "trained_control_steps": 118,
+      "motor": {
+        "mean_wing_spikes_per_step": {
+          "baseline": 4.196581196581197,
+          "trained": 3.805084745762712,
+          "delta": -0.39149645081848483,
+          "relative_delta": -0.09328937830094242
+        },
+        "mean_somatic_spikes_per_step": {
+          "baseline": 6.35042735042735,
+          "trained": 6.584745762711864,
+          "delta": 0.2343184122845141,
+          "relative_delta": 0.03689805415516575
+        },
+        "mean_active_wing_motor_units": {
+          "baseline": 41.666666666666664,
+          "trained": 42.09322033898305,
+          "delta": 0.42655367231638763,
+          "relative_delta": 0.010237288135593305
+        },
+        "mean_active_somatic_motor_units": {
+          "baseline": 54.743589743589745,
+          "trained": 57.86440677966102,
+          "delta": 3.120817036071273,
+          "relative_delta": 0.05700789901956892
+        },
+        "mean_power_activation": {
+          "baseline": 0.9369065642323294,
+          "trained": 0.9334221171686351,
+          "delta": -0.003484447063694329,
+          "relative_delta": -0.0037190977165896697
+        },
+        "mean_power_lr_abs_diff": {
+          "baseline": 0.0015436607480632674,
+          "trained": 0.006878000229593401,
+          "delta": 0.005334339481530134,
+          "relative_delta": 3.4556423671605234
+        },
+        "mean_active_steering_channels": {
+          "baseline": 11.307692307692308,
+          "trained": 11.372881355932204,
+          "delta": 0.0651890482398958,
+          "relative_delta": 0.00576501787155541
+        },
+        "mean_abs_leg_drive": {
+          "baseline": 0.09293959610651355,
+          "trained": 0.11380503052357387,
+          "delta": 0.02086543441706032,
+          "relative_delta": 0.22450532702065393
+        }
+      }
+    }
+  ]
+}

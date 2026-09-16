@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 from typing import Mapping, Sequence
 
 
@@ -29,8 +30,19 @@ class PopulationNeuralBridgeClient:
         bridge_bin = os.environ.get("VF_POPULATION_BRIDGE_BIN", "population_neural_bridge").strip()
         if not bridge_bin:
             raise ValueError("VF_POPULATION_BRIDGE_BIN must not be empty")
+        cargo_bin = os.environ.get("VF_CARGO_BIN", "").strip()
+        if not cargo_bin:
+            cargo_bin = shutil.which("cargo") or ""
+        if not cargo_bin:
+            fallback = Path.home() / ".cargo" / "bin" / "cargo"
+            if fallback.is_file():
+                cargo_bin = str(fallback)
+        if not cargo_bin:
+            raise PopulationNeuralBridgeError(
+                "cargo executable not found; set VF_CARGO_BIN or install cargo in PATH"
+            )
         command = [
-            "cargo",
+            cargo_bin,
             "run",
             "-q",
             "-p",

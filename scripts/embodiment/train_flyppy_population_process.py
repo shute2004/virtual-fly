@@ -29,6 +29,13 @@ from flyppy_course import FlyppyCourse
 from live_telemetry import LiveTelemetryPublisher
 from population_neural_bridge_client import PopulationNeuralBridgeClient
 from virtual_fly.physics import FLYBODY_V3
+from virtual_fly.training.checkpointing import (
+    persist_shared_checkpoint as persist_population_checkpoint,
+    population_state_snapshot,
+    prepare_population_resume,
+    recover_population_storage,
+)
+from virtual_fly.training.population_schedule import checkpoint_can_flush, launch_round_for_index
 from virtual_fly.training.curriculum import (
     SpawnCondition,
     boundary_condition_for_attempt,
@@ -66,6 +73,8 @@ class ProcessSlotState:
     last_body_spikes: dict[int, bool] | None = None
     boundary_ease_level: float | None = None
     boundary_attempt_index: int | None = None
+    boundary_batch_number: int | None = None
+    launch_round: int = 0
 
 
 def worker_config(args) -> dict[str, object]:
@@ -88,6 +97,8 @@ def reset_slot(
     condition: SpawnCondition,
     boundary_ease_level: float | None = None,
     boundary_attempt_index: int | None = None,
+    boundary_batch_number: int | None = None,
+    launch_round: int = 0,
 ) -> None:
     slot.active = True
     slot.episode = int(episode)
@@ -107,6 +118,8 @@ def reset_slot(
     slot.aversive_events = 0
     slot.boundary_ease_level = boundary_ease_level
     slot.boundary_attempt_index = boundary_attempt_index
+    slot.boundary_batch_number = boundary_batch_number
+    slot.launch_round = int(launch_round)
     slot.last_retinal = None
     slot.last_motor = None
     slot.last_body_spikes = {}
@@ -150,6 +163,8 @@ def result_for_slot(
         "curriculum_mode": curriculum_mode,
         "boundary_ease_level": slot.boundary_ease_level,
         "boundary_attempt_index": slot.boundary_attempt_index,
+        "boundary_batch_number": slot.boundary_batch_number,
+        "launch_round": slot.launch_round,
         "reward_events": slot.reward_events,
         "aversive_events": slot.aversive_events,
     }
@@ -175,11 +190,28 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     checkpoint = output / "checkpoint"
     state_path = output / "curriculum-state.json"
-    population_state_path = output / "population-state.json"
     trajectory_path = output / "trajectory.jsonl"
     commit_log_path = output / "commit-log.jsonl"
     summary_path = output / "summary.json"
-    checkpoint_exists = (checkpoint / "manifest.json").exists()
+    storage_recovery = recover_population_storage(output)
+    checkpoint_dir_recovery = storage_recovery.checkpoint_directory
+    checkpoint_exists = storage_recovery.checkpoint_exists
+    if checkpoint_dir_recovery.action not in {"active_checkpoint", "no_checkpoint"}:
+        print(f"checkpoint_directory_recovery action={checkpoint_dir_recovery.action}")
+    staged_recovery = storage_recovery.staged_state
+    if staged_recovery is not None and staged_recovery.action not in {
+        "consistent",
+        "legacy_checkpoint",
+        "none",
+    }:
+        print(
+            "checkpoint_state_recovery action={} checkpoint_v={} active_v={} pending_v={}".format(
+                staged_recovery.action,
+                staged_recovery.checkpoint_global_weight_version,
+                staged_recovery.active_global_weight_version,
+                staged_recovery.pending_global_weight_version,
+            )
+        )
 
     start_condition = SpawnCondition(
         args.curriculum_start_x_mm,
@@ -208,14 +240,30 @@ def main() -> int:
         # it neutral once an experiment switches to asynchronous batch updates.
         state["consecutive_failures"] = 0
 
-    population_state: dict[str, object] = {}
-    if checkpoint_exists and population_state_path.exists():
-        population_state = json.loads(population_state_path.read_text(encoding="utf-8"))
-    initial_global_version = int(population_state.get("global_weight_version", 0))
-
-    start_episode = reference.infer_next_episode(trajectory_path) if checkpoint_exists else 0
-    trajectory_mode = "a" if checkpoint_exists else "w"
-    commit_mode = "a" if checkpoint_exists and commit_log_path.exists() else "w"
+    try:
+        resume_plan = prepare_population_resume(
+            output,
+            requested_launch_mode=args.launch_mode,
+            checkpoint_exists=checkpoint_exists,
+        )
+    except (ValueError, RuntimeError) as error:
+        raise SystemExit(str(error)) from error
+    initial_global_version = resume_plan.initial_global_weight_version
+    start_episode = resume_plan.start_episode
+    reconciliation = resume_plan.reconciliation
+    if reconciliation is not None and reconciliation.changed:
+        print(
+            "resume_reconciled stable_v={} removed_commits={} removed_trajectory_lines={} "
+            "removed_episodes={} next_episode={}".format(
+                reconciliation.stable_global_weight_version,
+                reconciliation.removed_commits,
+                reconciliation.removed_trajectory_lines,
+                list(reconciliation.removed_episode_ids),
+                reconciliation.next_episode,
+            )
+        )
+    trajectory_mode = resume_plan.trajectory_mode
+    commit_mode = resume_plan.commit_mode
     # Loading the small immutable viewer-ID list once has no per-step cost. The
     # expensive viewer-specific neural reads and body snapshots remain gated by
     # telemetry_active below.
@@ -241,9 +289,10 @@ def main() -> int:
     telemetry_mode = "always" if args.telemetry else "viewer-demand"
     print(
         "population_runtime=enabled population={} shared_weight=true weight_averaging=false "
-        "environment=v3 motor_boundary=whole-body body_runtime=process telemetry={}".format(
+        "environment=v3 motor_boundary=whole-body body_runtime=process telemetry={} launch_mode={}".format(
             args.population,
             telemetry_mode,
+            args.launch_mode,
         )
     )
 
@@ -255,6 +304,7 @@ def main() -> int:
     started = time.perf_counter()
     aggregate_control_steps = 0
     backend_name = "gpu-population"
+    checkpoint_pending = False
 
     try:
         with trajectory_path.open(trajectory_mode, encoding="utf-8") as trajectory, commit_log_path.open(
@@ -277,6 +327,21 @@ def main() -> int:
                         f"global_weight_version={brain.global_weight_version}"
                     )
 
+                def persist_shared_checkpoint() -> dict[str, Any]:
+                    return persist_population_checkpoint(
+                        output_dir=output,
+                        checkpoint_dir=checkpoint,
+                        curriculum_state=state,
+                        population_state=population_state_snapshot(
+                            population=args.population,
+                            global_weight_version=brain.global_weight_version,
+                            curriculum_mode=args.curriculum_mode,
+                            launch_mode=args.launch_mode,
+                            body_runtime="process-isolated",
+                        ),
+                        save_checkpoint=brain.save_checkpoint,
+                    )
+
                 def launch_slot(slot: ProcessSlotState) -> bool:
                     """Launch one episode without letting async completion order pick difficulty."""
 
@@ -285,6 +350,7 @@ def main() -> int:
                         return False
                     ease_level: float | None = None
                     attempt_index: int | None = None
+                    batch_number: int | None = None
                     if boundary is None:
                         condition = current_adaptive_condition(state)
                     else:
@@ -297,13 +363,16 @@ def main() -> int:
                         )
                         if attempt_index is None:
                             return False
+                        batch_number = int(dict(state["boundary_band"])["batch_number"])
                         condition, ease_level = boundary_condition_for_attempt(
                             state,
                             boundary,
                             attempt_index,
+                            group_count=args.population,
                         )
                         boundary_issued_attempts.add(attempt_index)
                     episode = start_episode + launched
+                    launch_round = launch_round_for_index(launched, args.population)
                     reset_slot(
                         slot,
                         by_slot[slot.slot],
@@ -312,6 +381,8 @@ def main() -> int:
                         condition=condition,
                         boundary_ease_level=ease_level,
                         boundary_attempt_index=attempt_index,
+                        boundary_batch_number=batch_number,
+                        launch_round=launch_round,
                     )
                     launched += 1
                     return True
@@ -470,8 +541,11 @@ def main() -> int:
                                         "environment_version": "v3",
                                         "motor_boundary": "whole-body",
                                         "curriculum_mode": args.curriculum_mode,
+                                        "launch_mode": args.launch_mode,
                                         "boundary_ease_level": slot.boundary_ease_level,
                                         "boundary_attempt_index": slot.boundary_attempt_index,
+                                        "boundary_batch_number": slot.boundary_batch_number,
+                                        "launch_round": slot.launch_round,
                                     },
                                     separators=(",", ":"),
                                 )
@@ -591,8 +665,11 @@ def main() -> int:
                             "spawn_z_mm": slot.spawn_z_mm,
                             "initial_speed_mm_s": slot.initial_speed_mm_s,
                             "curriculum_mode": args.curriculum_mode,
+                            "launch_mode": args.launch_mode,
                             "boundary_ease_level": slot.boundary_ease_level,
                             "boundary_attempt_index": slot.boundary_attempt_index,
+                            "boundary_batch_number": slot.boundary_batch_number,
+                            "launch_round": slot.launch_round,
                         }
                         commit_log.write(
                             json.dumps(commit_record, separators=(",", ":")) + "\n"
@@ -614,34 +691,42 @@ def main() -> int:
                             )
                         )
 
-                        checkpoint_due = completed % args.checkpoint_every == 0
-                        if checkpoint_due:
-                            saved_state = brain.save_checkpoint(checkpoint)
-                            reference.save_json_atomic(state_path, state)
-                            reference.save_json_atomic(
-                                population_state_path,
-                                {
-                                    "schema_version": 1,
-                                    "population": args.population,
-                                    "global_weight_version": brain.global_weight_version,
-                                    "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
-                                    "weight_averaging": False,
-                                    "body_runtime": "process-isolated",
-                                    "curriculum_mode": args.curriculum_mode,
-                                },
-                            )
+                        if completed % args.checkpoint_every == 0:
+                            checkpoint_pending = True
 
-                        if boundary is None and launched < args.episodes:
+                        if (
+                            args.launch_mode == "async"
+                            and boundary is None
+                            and launched < args.episodes
+                        ):
                             launch_slot(slot)
                         else:
                             slot.active = False
 
-                    if boundary is not None and launched < args.episodes:
-                        # Fill every currently idle slot from the fixed schedule
-                        # for this batch.  Once all batch conditions have been
-                        # launched, fast-failing slots remain idle until the last
-                        # outstanding old-band outcome arrives; this is the small
-                        # throughput cost that removes completion-order bias.
+                    if checkpoint_can_flush(
+                        launch_mode=args.launch_mode,
+                        checkpoint_pending=checkpoint_pending,
+                        active_slots=sum(slot.active for slot in slots),
+                    ):
+                        saved_state = persist_shared_checkpoint()
+                        checkpoint_pending = False
+
+                    if args.launch_mode == "wave" and launched < args.episodes:
+                        # Every slot in a wave starts from the same global weight
+                        # version.  Do not let fast-finishing slots begin another
+                        # trajectory while slower slots are still experiencing the
+                        # previous version.  Commits may still arrive in completion
+                        # order, but the next wave starts only after all prior
+                        # trajectories have terminated and committed.
+                        if not any(slot.active for slot in slots):
+                            for idle_slot in slots:
+                                if launched >= args.episodes:
+                                    break
+                                launch_slot(idle_slot)
+                    elif boundary is not None and launched < args.episodes:
+                        # Async boundary-band mode keeps the fixed per-slot attempt
+                        # assignment but immediately refills an idle slot while
+                        # conditions for that slot remain in the current batch.
                         for idle_slot in slots:
                             if launched >= args.episodes:
                                 break
@@ -649,20 +734,7 @@ def main() -> int:
                                 continue
                             launch_slot(idle_slot)
 
-                saved_state = brain.save_checkpoint(checkpoint)
-                reference.save_json_atomic(state_path, state)
-                reference.save_json_atomic(
-                    population_state_path,
-                    {
-                        "schema_version": 1,
-                        "population": args.population,
-                        "global_weight_version": brain.global_weight_version,
-                        "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
-                        "weight_averaging": False,
-                        "body_runtime": "process-isolated",
-                        "curriculum_mode": args.curriculum_mode,
-                    },
-                )
+                saved_state = persist_shared_checkpoint()
                 final_global_version = brain.global_weight_version
                 backend_name = str(brain.ready.get("backend", "gpu-population"))
     finally:
@@ -675,8 +747,8 @@ def main() -> int:
     elapsed = time.perf_counter() - started
     staleness_values = [int(item["staleness"]) for item in commit_records]
     summary = {
-        "schema_version": 12,
-        "experiment": "flyppy_v3_async_shared_weight_population",
+        "schema_version": 13,
+        "experiment": "flyppy_v3_shared_weight_population",
         "backend": backend_name,
         "persistent_runtime": True,
         "population": args.population,
@@ -684,6 +756,7 @@ def main() -> int:
         "weight_averaging": False,
         "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
         "body_runtime": "process-isolated",
+        "launch_mode": args.launch_mode,
         "environment_version": "v3",
         "motor_boundary": "whole-body",
         "physical_spec": {

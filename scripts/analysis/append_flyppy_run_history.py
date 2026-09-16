@@ -57,6 +57,7 @@ FIELDS = [
     "mean_max_altitude_gain_mm",
     "checkpoint_neural_step",
     "curriculum_mode",
+    "launch_mode",
     "curriculum_episodes_total",
     "spawn_x_mm_after_run",
     "spawn_z_mm_after_run",
@@ -116,6 +117,7 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
     environment_version = str(payload.get("environment_version", "-"))
     motor_boundary = str(payload.get("motor_boundary", "-"))
     checkpoint_step = payload.get("checkpoint_neural_step", "")
+    launch_mode = payload.get("launch_mode", "")
     population = payload.get("population", "")
     body_runtime = payload.get("body_runtime", "")
     body_processes = payload.get("body_processes", "")
@@ -131,6 +133,7 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
             str(episode_start),
             str(episode_end),
             str(checkpoint_step),
+            str(launch_mode),
         ]
     )
 
@@ -174,6 +177,7 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
         "mean_max_altitude_gain_mm": f"{mean_max_altitude_gain:.6f}",
         "checkpoint_neural_step": checkpoint_step,
         "curriculum_mode": payload.get("curriculum_mode", curriculum.get("curriculum_mode", "-")),
+        "launch_mode": launch_mode,
         "curriculum_episodes_total": curriculum.get("curriculum_episodes", ""),
         "spawn_x_mm_after_run": curriculum.get("spawn_x_mm", ""),
         "spawn_z_mm_after_run": curriculum.get("spawn_z_mm", ""),

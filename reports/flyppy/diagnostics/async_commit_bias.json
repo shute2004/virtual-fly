@@ -1,0 +1,263 @@
+{
+  "schema_version": 3,
+  "commit_log": "artifacts/experiments/flyppy-v3/commit-log.jsonl",
+  "records": 184,
+  "analysis_max_commit_version": 184,
+  "unpersisted_commits_ignored": 18,
+  "episode_start": 72,
+  "episode_end": 255,
+  "windows": [
+    {
+      "name": "all",
+      "episode_start": 72,
+      "episode_end": 255,
+      "all": {
+        "episodes": 184,
+        "reward_episodes": 55,
+        "reward_events": 62,
+        "aversive_events": 184,
+        "mean_control_steps": 49.130434782608695,
+        "mean_staleness": 2.380434782608696,
+        "max_staleness": 9,
+        "mean_commit_rank": 0.5
+      },
+      "reward": {
+        "episodes": 55,
+        "reward_episodes": 55,
+        "reward_events": 62,
+        "aversive_events": 55,
+        "mean_control_steps": 91.14545454545454,
+        "mean_staleness": 4.909090909090909,
+        "max_staleness": 9,
+        "mean_commit_rank": 0.5459513164431197
+      },
+      "no_reward": {
+        "episodes": 129,
+        "reward_episodes": 0,
+        "reward_events": 0,
+        "aversive_events": 129,
+        "mean_control_steps": 31.217054263565892,
+        "mean_staleness": 1.302325581395349,
+        "max_staleness": 4,
+        "mean_commit_rank": 0.48040835345448385
+      },
+      "correlation_control_steps_staleness": 0.6759364903691355,
+      "source_version_rounds": {
+        "complete_rounds": 8,
+        "mean_source_version_spread": 7.25,
+        "max_source_version_spread": 13,
+        "zero_spread_rounds": 2
+      },
+      "slot_summaries": {
+        "0": {
+          "episodes": 33,
+          "reward_episodes": 28,
+          "reward_events": 35,
+          "aversive_events": 33,
+          "mean_control_steps": 89.6969696969697,
+          "mean_staleness": 4.454545454545454,
+          "max_staleness": 9,
+          "mean_commit_rank": 0.46613677761218747
+        },
+        "1": {
+          "episodes": 71,
+          "reward_episodes": 3,
+          "reward_events": 3,
+          "aversive_events": 71,
+          "mean_control_steps": 33.140845070422536,
+          "mean_staleness": 1.1830985915492958,
+          "max_staleness": 4,
+          "mean_commit_rank": 0.4408527668744709
+        },
+        "2": {
+          "episodes": 24,
+          "reward_episodes": 24,
+          "reward_events": 24,
+          "aversive_events": 24,
+          "mean_control_steps": 87.125,
+          "mean_staleness": 5.125,
+          "max_staleness": 9,
+          "mean_commit_rank": 0.6147540983606558
+        },
+        "3": {
+          "episodes": 56,
+          "reward_episodes": 0,
+          "reward_events": 0,
+          "aversive_events": 56,
+          "mean_control_steps": 29.214285714285715,
+          "mean_staleness": 1.5,
+          "max_staleness": 3,
+          "mean_commit_rank": 0.5457650273224044
+        }
+      }
+    },
+    {
+      "name": "last48",
+      "episode_start": 208,
+      "episode_end": 255,
+      "all": {
+        "episodes": 48,
+        "reward_episodes": 18,
+        "reward_events": 23,
+        "aversive_events": 48,
+        "mean_control_steps": 47.583333333333336,
+        "mean_staleness": 2.3958333333333335,
+        "max_staleness": 9,
+        "mean_commit_rank": 0.5
+      },
+      "reward": {
+        "episodes": 18,
+        "reward_episodes": 18,
+        "reward_events": 23,
+        "aversive_events": 18,
+        "mean_control_steps": 86,
+        "mean_staleness": 4.222222222222222,
+        "max_staleness": 9,
+        "mean_commit_rank": 0.6808510638297872
+      },
+      "no_reward": {
+        "episodes": 30,
+        "reward_episodes": 0,
+        "reward_events": 0,
+        "aversive_events": 30,
+        "mean_control_steps": 24.533333333333335,
+        "mean_staleness": 1.3,
+        "max_staleness": 3,
+        "mean_commit_rank": 0.39148936170212767
+      },
+      "correlation_control_steps_staleness": 0.6004068813880062,
+      "source_version_rounds": {
+        "complete_rounds": 8,
+        "mean_source_version_spread": 7.25,
+        "max_source_version_spread": 13,
+        "zero_spread_rounds": 2
+      },
+      "slot_summaries": {
+        "0": {
+          "episodes": 9,
+          "reward_episodes": 9,
+          "reward_events": 14,
+          "aversive_events": 9,
+          "mean_control_steps": 88.88888888888889,
+          "mean_staleness": 4.333333333333333,
+          "max_staleness": 9,
+          "mean_commit_rank": 0.6926713947990544
+        },
+        "1": {
+          "episodes": 15,
+          "reward_episodes": 0,
+          "reward_events": 0,
+          "aversive_events": 15,
+          "mean_control_steps": 23.533333333333335,
+          "mean_staleness": 1.2,
+          "max_staleness": 3,
+          "mean_commit_rank": 0.3801418439716312
+        },
+        "2": {
+          "episodes": 9,
+          "reward_episodes": 9,
+          "reward_events": 9,
+          "aversive_events": 9,
+          "mean_control_steps": 83.11111111111111,
+          "mean_staleness": 4.111111111111111,
+          "max_staleness": 8,
+          "mean_commit_rank": 0.6690307328605201
+        },
+        "3": {
+          "episodes": 15,
+          "reward_episodes": 0,
+          "reward_events": 0,
+          "aversive_events": 15,
+          "mean_control_steps": 25.533333333333335,
+          "mean_staleness": 1.4,
+          "max_staleness": 3,
+          "mean_commit_rank": 0.40283687943262414
+        }
+      }
+    },
+    {
+      "name": "last24",
+      "episode_start": 232,
+      "episode_end": 255,
+      "all": {
+        "episodes": 24,
+        "reward_episodes": 12,
+        "reward_events": 16,
+        "aversive_events": 24,
+        "mean_control_steps": 55.25,
+        "mean_staleness": 2.0833333333333335,
+        "max_staleness": 7,
+        "mean_commit_rank": 0.5
+      },
+      "reward": {
+        "episodes": 12,
+        "reward_episodes": 12,
+        "reward_events": 16,
+        "aversive_events": 12,
+        "mean_control_steps": 85.83333333333333,
+        "mean_staleness": 2.9166666666666665,
+        "max_staleness": 7,
+        "mean_commit_rank": 0.717391304347826
+      },
+      "no_reward": {
+        "episodes": 12,
+        "reward_episodes": 0,
+        "reward_events": 0,
+        "aversive_events": 12,
+        "mean_control_steps": 24.666666666666668,
+        "mean_staleness": 1.25,
+        "max_staleness": 3,
+        "mean_commit_rank": 0.2826086956521739
+      },
+      "correlation_control_steps_staleness": 0.3902848646924667,
+      "source_version_rounds": {
+        "complete_rounds": 6,
+        "mean_source_version_spread": 9.166666666666666,
+        "max_source_version_spread": 13,
+        "zero_spread_rounds": 1
+      },
+      "slot_summaries": {
+        "0": {
+          "episodes": 6,
+          "reward_episodes": 6,
+          "reward_events": 10,
+          "aversive_events": 6,
+          "mean_control_steps": 88.66666666666667,
+          "mean_staleness": 3,
+          "max_staleness": 7,
+          "mean_commit_rank": 0.7391304347826086
+        },
+        "1": {
+          "episodes": 6,
+          "reward_episodes": 0,
+          "reward_events": 0,
+          "aversive_events": 6,
+          "mean_control_steps": 23,
+          "mean_staleness": 1.1666666666666667,
+          "max_staleness": 3,
+          "mean_commit_rank": 0.2608695652173913
+        },
+        "2": {
+          "episodes": 6,
+          "reward_episodes": 6,
+          "reward_events": 6,
+          "aversive_events": 6,
+          "mean_control_steps": 83,
+          "mean_staleness": 2.8333333333333335,
+          "max_staleness": 7,
+          "mean_commit_rank": 0.6956521739130435
+        },
+        "3": {
+          "episodes": 6,
+          "reward_episodes": 0,
+          "reward_events": 0,
+          "aversive_events": 6,
+          "mean_control_steps": 26.333333333333332,
+          "mean_staleness": 1.3333333333333333,
+          "max_staleness": 3,
+          "mean_commit_rank": 0.30434782608695654
+        }
+      }
+    }
+  ]
+}

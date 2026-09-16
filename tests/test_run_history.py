@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+import unittest
+
+
+MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts/analysis/append_flyppy_run_history.py"
+SPEC = importlib.util.spec_from_file_location("append_flyppy_run_history", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+build_row = MODULE.build_row
+
+
+def summary(launch_mode: str) -> dict[str, object]:
+    return {
+        "experiment": "flyppy_v3_shared_weight_population",
+        "environment_version": "v3",
+        "motor_boundary": "whole-body",
+        "backend": "gpu-population:test",
+        "population": 4,
+        "body_runtime": "packed-process",
+        "body_processes": 4,
+        "vision_runtime": "direct-ray",
+        "vision_rays_per_ommatidium": 13,
+        "vision_framebuffer": False,
+        "episode_start": 256,
+        "episode_end": 279,
+        "elapsed_seconds": 12.0,
+        "control_dt_seconds": 0.0005,
+        "checkpoint_neural_step": 17000,
+        "curriculum_mode": "boundary-band",
+        "launch_mode": launch_mode,
+        "curriculum": {"curriculum_episodes": 280},
+        "episode_results": [
+            {
+                "episode": 256,
+                "control_steps": 100,
+                "passed_gates": 1,
+                "collision": True,
+                "finished": False,
+                "max_x_mm": 20.0,
+                "max_z_mm": 11.5,
+                "min_z_mm": 9.0,
+                "spawn_z_mm": 11.0,
+            }
+        ],
+    }
+
+
+class RunHistoryTests(unittest.TestCase):
+    def test_launch_mode_is_recorded_and_disambiguates_run_key(self) -> None:
+        async_row = build_row(summary("async"))
+        wave_row = build_row(summary("wave"))
+        self.assertEqual(async_row["launch_mode"], "async")
+        self.assertEqual(wave_row["launch_mode"], "wave")
+        self.assertNotEqual(async_row["run_key"], wave_row["run_key"])
+
+    def test_legacy_summary_leaves_launch_mode_blank(self) -> None:
+        payload = summary("async")
+        payload.pop("launch_mode")
+        row = build_row(payload)
+        self.assertEqual(row["launch_mode"], "")
+
+
+if __name__ == "__main__":
+    unittest.main()

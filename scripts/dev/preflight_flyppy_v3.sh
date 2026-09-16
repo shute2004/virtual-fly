@@ -3,9 +3,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+source "$ROOT/scripts/dev/lib/runtime.sh"
+vf_resolve_python "$ROOT"
+PYTHON_RUNNER=("${VF_PYTHON[@]}")
 
 printf '== Flyppy v3 syntax ==\n'
-uv run python -m py_compile \
+"${PYTHON_RUNNER[@]}" -m py_compile \
   scripts/embodiment/flybody_muscle_adapter.py \
   scripts/embodiment/flybody_v3_adapter.py \
   scripts/embodiment/flybody_v3_physical_spec_smoke.py \
@@ -16,20 +19,20 @@ uv run python -m py_compile \
   scripts/embodiment/train_flyppy_curriculum.py
 
 printf '\n== Official measured wingbeat ==\n'
-uv run python scripts/dev/prefetch_flybody_flight_data.py
+"${PYTHON_RUNNER[@]}" scripts/dev/prefetch_flybody_flight_data.py
 
 printf '\n== Upstream FlyBody source ==\n'
-uv run python scripts/dev/prefetch_upstream_flybody_source.py
+"${PYTHON_RUNNER[@]}" scripts/dev/prefetch_upstream_flybody_source.py
 
 printf '\n== Flyppy v3 course geometry ==\n'
-uv run python scripts/embodiment/flyppy_course.py
+"${PYTHON_RUNNER[@]}" scripts/embodiment/flyppy_course.py
 
 printf '\n== Flyppy v3 physical scale / gate clearance ==\n'
-uv run python scripts/embodiment/flybody_v3_physical_spec_smoke.py
+"${PYTHON_RUNNER[@]}" scripts/embodiment/flybody_v3_physical_spec_smoke.py
 
 printf '\n== Flyppy v3 upstream fluid-force equivalence ==\n'
-uv run python scripts/embodiment/flybody_v3_upstream_force_vector_ab.py
-uv run python - <<'PY'
+"${PYTHON_RUNNER[@]}" scripts/embodiment/flybody_v3_upstream_force_vector_ab.py
+"${PYTHON_RUNNER[@]}" - <<'PY'
 import json
 from pathlib import Path
 
@@ -47,7 +50,7 @@ print("flybody_v3_upstream_force_equivalence=PASS")
 PY
 
 printf '\n== Flyppy v3 production virtual-muscle capability ==\n'
-uv run python scripts/embodiment/flybody_v3_production_muscle_capability.py
+"${PYTHON_RUNNER[@]}" scripts/embodiment/flybody_v3_production_muscle_capability.py
 
 # Stable open-loop flight under a fixed symmetric muscle state is useful diagnostic
 # information but is not an upstream FlyBody requirement.  The source vision-flight
@@ -55,7 +58,7 @@ uv run python scripts/embodiment/flybody_v3_production_muscle_capability.py
 # control is allowed to provide attitude stabilization.  Record this sweep without
 # turning instability into a training veto or producing a misleading traceback.
 printf '\n== Flyppy v3 symmetric open-loop flight diagnostic ==\n'
-uv run python scripts/embodiment/flybody_v3_vertical_flight_capability.py --nonblocking
+"${PYTHON_RUNNER[@]}" scripts/embodiment/flybody_v3_vertical_flight_capability.py --nonblocking
 
 printf '\nflyppy_v3_preflight=PASS\n'
 printf 'physical_spec=%s/artifacts/embodiment/flybody-physical-spec-v3.json\n' "$ROOT"
