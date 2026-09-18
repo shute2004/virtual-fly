@@ -6,7 +6,7 @@ weight history. Each spawned child process owns one complete physical fly:
 FlyBody/MuJoCo, compound-eye rendering, retinal transduction, whole-body
 periphery, and Flyppy course state.
 
-The neural learning semantics intentionally match train_flyppy_population.py:
+The neural learning semantics use the shared ``virtual_fly.training.flyppy_config`` contract:
 there is no weight averaging. Episode-local additive+clamp plasticity
 transactions are rebased onto the latest global weights when a slot commits.
 """
@@ -23,9 +23,8 @@ import shutil
 import time
 from typing import Any
 
-import train_flyppy_population as reference
 from flyppy_body_worker import FlyppyBodyProcess, spawn_body_processes
-from flyppy_course import FlyppyCourse
+from virtual_fly.embodiment.course import FlyppyCourse
 from live_telemetry import LiveTelemetryPublisher
 from population_neural_bridge_client import PopulationNeuralBridgeClient
 from virtual_fly.physics import FLYBODY_V3
@@ -36,6 +35,19 @@ from virtual_fly.training.checkpointing import (
     recover_population_storage,
 )
 from virtual_fly.training.population_schedule import checkpoint_can_flush, launch_round_for_index
+from virtual_fly.training.flyppy_config import (
+    adaptive_config,
+    fixed_spawn_condition,
+    gate_collision_aversive_current,
+    load_viewer_body_ids,
+    parse_args,
+    population_boundary_config,
+    run_reproducibility_metadata,
+    save_json_atomic,
+    target_condition,
+    validate,
+    write_run_provenance,
+)
 from virtual_fly.training.curriculum import (
     GateHeightCurriculumConfig,
     SpawnCondition,
@@ -238,7 +250,7 @@ def result_for_slot(
 
 
 def main() -> int:
-    args = reference.parse_args()
+    args = parse_args()
     probe_seed = int(args.fixed_course_seed) if args.fixed_course_seed is not None else int(args.seed)
     probe_course = FlyppyCourse(
         seed=probe_seed,
@@ -246,7 +258,7 @@ def main() -> int:
         environment_version=args.environment_version,
     )
     first_gate = probe_course.gates[0]
-    reference.validate(args, first_gate)
+    validate(args, first_gate)
 
     timeout_s = float(os.environ.get("VF_FLYPPY_BODY_WORKER_TIMEOUT_S", "120"))
     if not math.isfinite(timeout_s) or timeout_s <= 0.0:
@@ -289,16 +301,16 @@ def main() -> int:
     state = load_curriculum_state(
         state_path,
         start=start_condition,
-        target=reference.target_condition(args),
+        target=target_condition(args),
         checkpoint_exists=checkpoint_exists,
     )
     state["curriculum_mode"] = args.curriculum_mode
     state["environment_version"] = args.environment_version
     state["flight_body_version"] = getattr(args, "flight_body_version", "v3")
     state["motor_boundary"] = "whole-body"
-    adaptive = reference.adaptive_config(args, first_gate)
+    adaptive = adaptive_config(args, first_gate)
     boundary = (
-        reference.population_boundary_config(args, first_gate, state)
+        population_boundary_config(args, first_gate, state)
         if args.curriculum_mode == "boundary-band"
         else None
     )
@@ -342,13 +354,13 @@ def main() -> int:
         raise SystemExit(str(error)) from error
     initial_global_version = resume_plan.initial_global_weight_version
     start_episode = resume_plan.start_episode
-    reproducibility = reference.run_reproducibility_metadata(
+    reproducibility = run_reproducibility_metadata(
         args,
         body_runtime="process-isolated",
         vision_mode_override="raster",
         vision_rays_override=0,
     )
-    provenance_path = reference.write_run_provenance(
+    provenance_path = write_run_provenance(
         output,
         start_episode=start_episode,
         initial_global_weight_version=initial_global_version,
@@ -373,7 +385,7 @@ def main() -> int:
     # Loading the small immutable viewer-ID list once has no per-step cost. The
     # expensive viewer-specific neural reads and body snapshots remain gated by
     # telemetry_active below.
-    viewer_ids = reference.load_viewer_body_ids(args.viewer_graph)
+    viewer_ids = load_viewer_body_ids(args.viewer_graph)
     publisher = LiveTelemetryPublisher(output, enabled=bool(args.telemetry))
 
     workers = spawn_body_processes(
@@ -574,7 +586,7 @@ def main() -> int:
                                 course.source_gate_offset + target_local_index
                             )
                         boundary_issued_attempts.add(attempt_index)
-                    fixed_spawn = reference.fixed_spawn_condition(args)
+                    fixed_spawn = fixed_spawn_condition(args)
                     if fixed_spawn is not None:
                         condition = fixed_spawn
                     episode = start_episode + launched
@@ -732,7 +744,7 @@ def main() -> int:
                             slot.collision = True
                             slot.collision_reason = act["collision_reason"]
                             slot.aversive_events += 1
-                            aversive_current_applied, gate_miss_distance_mm = reference.gate_collision_aversive_current(
+                            aversive_current_applied, gate_miss_distance_mm = gate_collision_aversive_current(
                                 args,
                                 act.get("gate_miss_distance_mm"),
                                 act["collision_reason"],
@@ -1126,7 +1138,7 @@ def main() -> int:
         "elapsed_seconds": elapsed,
         "teaching_signal": "gate pass -> PAM reward DAN current; gate collision -> PPL current graded by vertical miss distance; floor/ceiling -> full PPL current; focused frontier episodes create local success experience but never count as mastery; only full-course evaluation episodes advance the arbitrary gate-count frontier",
     }
-    reference.save_json_atomic(summary_path, summary)
+    save_json_atomic(summary_path, summary)
     publisher.publish_status(
         running=False,
         backend=backend_name,
