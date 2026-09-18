@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--viewer-graph", type=Path, default=Path("artifacts/embodiment/neural-viewer-graph-v1.json"))
     p.add_argument("--output-dir", type=Path, default=Path("artifacts/experiments/flyppy-post-final-video"))
     p.add_argument("--top-changed", type=int, default=400)
+    p.add_argument("--neural-width", type=int, default=480)
     p.add_argument("--fps", type=float, default=60.0)
     p.add_argument("--jpeg-quality", type=int, default=3)
     return p.parse_args()
@@ -148,18 +149,28 @@ def static_neural_panel(graph: dict, projected: dict[int, tuple[int, int]], chan
 
     panel = Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
     d = ImageDraw.Draw(panel)
-    title = font(27); small = font(19); tiny = font(16)
-    d.text((24, 18), "MaleCNS neural activity", font=title, fill=(238, 242, 247))
-    d.text((24, 52), "2,448-neuron viewer subset / 5,868 connections", font=tiny, fill=(158, 168, 182))
+    compact = width < 700
+    title = font(24 if compact else 27)
+    small = font(17 if compact else 19)
+    tiny = font(14 if compact else 16)
+    d.text((20 if compact else 24, 18), "MaleCNS activity" if compact else "MaleCNS neural activity", font=title, fill=(238, 242, 247))
+    d.text((20 if compact else 24, 50), "2,448 neurons / 5,868 edges" if compact else "2,448-neuron viewer subset / 5,868 connections", font=tiny, fill=(158, 168, 182))
     if after:
-        d.text((width-355, 20), "learned synaptic Δw: v240 → v966", font=small, fill=(220, 226, 234))
-        d.line((width-340, 52, width-305, 52), fill=(73, 221, 145), width=3)
-        d.text((width-295, 41), "strengthened", font=tiny, fill=(174, 184, 196))
-        d.line((width-178, 52, width-143, 52), fill=(244, 145, 72), width=3)
-        d.text((width-133, 41), "weakened", font=tiny, fill=(174, 184, 196))
+        if compact:
+            d.text((20, 72), "synaptic Δw  v240 → v966", font=small, fill=(220, 226, 234))
+            d.line((22, 103, 52, 103), fill=(73, 221, 145), width=3)
+            d.text((60, 94), "strengthened", font=tiny, fill=(174, 184, 196))
+            d.line((178, 103, 208, 103), fill=(244, 145, 72), width=3)
+            d.text((216, 94), "weakened", font=tiny, fill=(174, 184, 196))
+        else:
+            d.text((width-355, 20), "learned synaptic Δw: v240 → v966", font=small, fill=(220, 226, 234))
+            d.line((width-340, 52, width-305, 52), fill=(73, 221, 145), width=3)
+            d.text((width-295, 41), "strengthened", font=tiny, fill=(174, 184, 196))
+            d.line((width-178, 52, width-143, 52), fill=(244, 145, 72), width=3)
+            d.text((width-133, 41), "weakened", font=tiny, fill=(174, 184, 196))
     else:
-        d.text((width-250, 20), "baseline connectivity", font=small, fill=(185, 194, 207))
-    d.text((24, height-33), "bright nodes = active neurons    evaluation plasticity = OFF", font=tiny, fill=(163, 174, 188))
+        d.text((20 if compact else width-250, 72 if compact else 20), "baseline connectivity", font=small, fill=(185, 194, 207))
+    d.text((20 if compact else 24, height-30), "bright = active · plasticity OFF" if compact else "bright nodes = active neurons    evaluation plasticity = OFF", font=tiny, fill=(163, 174, 188))
     return panel
 
 
@@ -173,7 +184,8 @@ def active_panel(base: Image.Image, frame: dict, projected: dict[int, tuple[int,
             continue
         draw.ellipse((p[0]-3, p[1]-3, p[0]+3, p[1]+3), fill=(255, 245, 180, 245))
         draw.ellipse((p[0]-6, p[1]-6, p[0]+6, p[1]+6), outline=(255, 245, 180, 85), width=1)
-    draw.text((image.width-190, image.height-32), f"active: {len(active):4d}", font=font(17), fill=(226, 231, 239, 255))
+    active_x = max(20, image.width - (145 if image.width < 700 else 190))
+    draw.text((active_x, image.height-30), f"active: {len(active):4d}", font=font(15 if image.width < 700 else 17), fill=(226, 231, 239, 255))
     return image
 
 
@@ -223,9 +235,14 @@ def main() -> int:
 
     changed = viewer_edge_deltas(snapshot, graph, before_checkpoint, after_checkpoint)
     changed = [row for row in changed if row["abs_delta"] > 1e-7][: max(1, int(args.top_changed))]
-    _, projected, _ = make_projection(graph, 960, 540)
-    before_panel = static_neural_panel(graph, projected, changed, after=False, width=960, height=540)
-    after_panel = static_neural_panel(graph, projected, changed, after=True, width=960, height=540)
+    neural_width = int(args.neural_width)
+    if neural_width < 320:
+        raise ValueError("--neural-width must be >= 320")
+    body_width = 960
+    row_height = 540
+    _, projected, _ = make_projection(graph, neural_width, row_height)
+    before_panel = static_neural_panel(graph, projected, changed, after=False, width=neural_width, height=row_height)
+    after_panel = static_neural_panel(graph, projected, changed, after=True, width=neural_width, height=row_height)
 
     before_images = frame_files(before_frames_dir)
     after_images = frame_files(after_frames_dir)
@@ -247,9 +264,9 @@ def main() -> int:
         body_after = label_body(Image.open(after_images[ai]).convert("RGB"), title="AFTER · learned CNS state", version=int(after_playback["global_weight_version"]), status=after_status[ai])
         neural_before = active_panel(before_panel, before_playback["frames"][bi], projected)
         neural_after = active_panel(after_panel, after_playback["frames"][ai], projected)
-        canvas = Image.new("RGB", (1920, 1080), (0, 0, 0))
-        canvas.paste(body_before, (0, 0)); canvas.paste(neural_before, (960, 0))
-        canvas.paste(body_after, (0, 540)); canvas.paste(neural_after, (960, 540))
+        canvas = Image.new("RGB", (body_width + neural_width, row_height * 2), (0, 0, 0))
+        canvas.paste(body_before, (0, 0)); canvas.paste(neural_before, (body_width, 0))
+        canvas.paste(body_after, (0, row_height)); canvas.paste(neural_after, (body_width, row_height))
         canvas.save(output_frames / f"frame-{i:05d}.jpg", quality=95, subsampling=0)
         if i % 120 == 0:
             print(f"rendered {i}/{total}", flush=True)
@@ -276,6 +293,10 @@ def main() -> int:
         "highlighted_changed_edges": len(changed),
         "frame_count": total,
         "fps": float(args.fps),
+        "video_width": body_width + neural_width,
+        "video_height": row_height * 2,
+        "body_width": body_width,
+        "neural_width": neural_width,
     }
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(metadata, ensure_ascii=False))
