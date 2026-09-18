@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -134,18 +133,6 @@ def static_neural_panel(graph: dict, projected: dict[int, tuple[int, int]], chan
         p = projected[int(node["body_id"])]
         draw.ellipse((p[0]-1, p[1]-1, p[0]+1, p[1]+1), fill=(168, 176, 190, 95))
 
-    if after and changed_edges:
-        max_delta = max(edge["abs_delta"] for edge in changed_edges)
-        for edge in reversed(changed_edges):
-            a = projected.get(edge["pre"]); b = projected.get(edge["post"])
-            if a is None or b is None:
-                continue
-            strength = math.sqrt(edge["abs_delta"] / max(1e-12, max_delta))
-            alpha = int(70 + 175 * strength)
-            line_width = 1 + int(2.5 * strength)
-            color = (73, 221, 145, alpha) if edge["delta"] > 0 else (244, 145, 72, alpha)
-            draw.line((a, b), fill=color, width=line_width)
-
     return Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
 
 
@@ -164,9 +151,15 @@ def active_panel(base: Image.Image, frame: dict, projected: dict[int, tuple[int,
 
 def label_body(image: Image.Image, label: str) -> Image.Image:
     out = image.copy()
-    draw = ImageDraw.Draw(out, "RGBA")
-    draw.rounded_rectangle((18, 16, 168, 66), radius=12, fill=(4, 7, 11, 190))
-    draw.text((34, 24), label, font=font(29), fill=(250, 251, 253, 255))
+    draw = ImageDraw.Draw(out)
+    draw.text(
+        (24, 22),
+        label,
+        font=font(31),
+        fill=(250, 251, 253),
+        stroke_width=2,
+        stroke_fill=(18, 20, 24),
+    )
     return out
 
 def frame_files(directory: Path) -> list[Path]:
@@ -244,7 +237,7 @@ def main() -> int:
         "viewer_nodes": len(graph["nodes"]),
         "viewer_edges": len(graph["edges"]),
         "changed_viewer_edges": sum(row["abs_delta"] > 1e-7 for row in viewer_edge_deltas(snapshot, graph, before_checkpoint, after_checkpoint)),
-        "highlighted_changed_edges": len(changed),
+        "highlighted_changed_edges": 0,
         "frame_count": total,
         "fps": float(args.fps),
         "video_width": body_width + neural_width,
