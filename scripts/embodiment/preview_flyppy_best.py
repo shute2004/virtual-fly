@@ -19,68 +19,24 @@ from flyppy_packed_body_worker import spawn_packed_body_processes
 from live_telemetry import LiveTelemetryPublisher
 from population_neural_bridge_client import PopulationNeuralBridgeClient
 
+from virtual_fly.playback.config import (
+    DEFAULT_CALIBRATION,
+    DEFAULT_COURSE_SEED,
+    DEFAULT_PRODUCTION,
+    DEFAULT_SNAPSHOT,
+    DEFAULT_SPAWN_X_MM,
+    DEFAULT_SPAWN_Z_MM,
+    DEFAULT_SPEED_MM_S,
+    DEFAULT_VIEWER_GRAPH,
+    absolute,
+    ensure_runtime_environment,
+    load_json,
+    load_viewer_ids,
+)
+
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PRODUCTION = Path("artifacts/experiments/flyppy-v4")
 DEFAULT_PREVIEW = Path("artifacts/experiments/flyppy-best-preview")
-DEFAULT_SNAPSHOT = Path("artifacts/malecns-v1.0")
-DEFAULT_VIEWER_GRAPH = Path("artifacts/embodiment/neural-viewer-graph-v1.json")
-DEFAULT_CALIBRATION = Path("artifacts/embodiment/neural-runtime-calibration-v1.json")
-
-# Best current fixed/presentation condition for the v4 production checkpoint:
-# part3_frontier, course seed 22. It starts ~13.1 mm before gate 1; gate 1 and
-# gate 2 centers differ by ~6.07 mm, and the frozen checkpoint clears both gates.
-# These are fixed evaluation coordinates, not a hand-authored flight controller.
-DEFAULT_SPAWN_X_MM = 3.267
-DEFAULT_SPAWN_Z_MM = 11.467
-DEFAULT_SPEED_MM_S = 450.0
-DEFAULT_COURSE_SEED = 22
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--production", type=Path, default=DEFAULT_PRODUCTION)
-    parser.add_argument("--preview-dir", type=Path, default=DEFAULT_PREVIEW)
-    parser.add_argument("--snapshot", type=Path, default=DEFAULT_SNAPSHOT)
-    parser.add_argument("--viewer-graph", type=Path, default=DEFAULT_VIEWER_GRAPH)
-    parser.add_argument("--calibration", type=Path, default=DEFAULT_CALIBRATION)
-    parser.add_argument("--environment-version", choices=("v3", "v4", "v5", "v6", "v7"), default="v7")
-    parser.add_argument("--course-seed", type=int, default=DEFAULT_COURSE_SEED)
-    parser.add_argument("--gate-count", type=int, default=6)
-    parser.add_argument("--spawn-x-mm", type=float, default=DEFAULT_SPAWN_X_MM)
-    parser.add_argument("--spawn-z-mm", type=float, default=DEFAULT_SPAWN_Z_MM)
-    parser.add_argument("--initial-speed-mm-s", type=float, default=DEFAULT_SPEED_MM_S)
-    parser.add_argument("--physics-steps", type=int, default=10)
-    parser.add_argument("--max-control-steps", type=int, default=1800)
-    parser.add_argument("--photoreceptor-current-gain", type=float, default=2.0)
-    parser.add_argument("--reward-current", type=float, default=2.0)
-    parser.add_argument("--aversive-current", type=float, default=2.0)
-    parser.add_argument("--reinforcement-steps", type=int, default=4)
-    parser.add_argument("--neural-telemetry-stride", type=int, default=5)
-    parser.add_argument("--terminal-hold-s", type=float, default=1.25)
-    parser.add_argument("--timeout-s", type=float, default=120.0)
-    return parser.parse_args()
-
-
-def absolute(path: Path) -> Path:
-    return path if path.is_absolute() else (ROOT / path).resolve()
-
-
-def load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_viewer_ids(path: Path) -> tuple[int, ...]:
-    payload = load_json(path)
-    return tuple(sorted({int(node["body_id"]) for node in payload.get("nodes", [])}))
-
-
-def ensure_runtime_environment(calibration: Path) -> None:
-    os.environ.setdefault("VF_FLYPPY_VISION_MODE", "direct-ray")
-    os.environ.setdefault("VF_FLYPPY_OMMATIDIA_RAYS", "13")
-    if not os.environ.get("VF_NEURAL_SYNAPSE_SCALE", "").strip():
-        payload = load_json(calibration)
-        os.environ["VF_NEURAL_SYNAPSE_SCALE"] = str(float(payload["synapse_scale"]))
 
 
 def wait_for_viewer(publisher: LiveTelemetryPublisher) -> None:

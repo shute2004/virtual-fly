@@ -22,7 +22,6 @@ unchanged.
 from __future__ import annotations
 
 import multiprocessing as mp
-import os
 from pathlib import Path
 import traceback
 from types import SimpleNamespace
@@ -57,30 +56,11 @@ def _capture_physics_trace(config: dict[str, Any]) -> bool:
     return bool(config.get("capture_physics_trace", False))
 
 
-def _vision_config() -> tuple[str, int]:
-    mode = os.environ.get("VF_FLYPPY_VISION_MODE", "raster").strip().lower()
-    aliases = {
-        "raster": "raster",
-        "flygym": "raster",
-        "reference": "raster",
-        "direct": "direct-ray",
-        "ray": "direct-ray",
-        "direct-ray": "direct-ray",
-    }
-    try:
-        resolved = aliases[mode]
-    except KeyError as exc:
-        raise ValueError(
-            "VF_FLYPPY_VISION_MODE must be raster or direct-ray"
-        ) from exc
-    raw_rays = os.environ.get("VF_FLYPPY_OMMATIDIA_RAYS", "7").strip()
-    try:
-        rays = int(raw_rays)
-    except ValueError as exc:
-        raise ValueError("VF_FLYPPY_OMMATIDIA_RAYS must be a positive integer") from exc
-    if rays < 1:
-        raise ValueError("VF_FLYPPY_OMMATIDIA_RAYS must be a positive integer")
-    return resolved, rays
+def _vision_config(config: dict[str, Any]) -> tuple[str, int]:
+    from virtual_fly.runtime.vision import VisionRuntimeConfig
+
+    resolved = VisionRuntimeConfig.from_worker_mapping(config)
+    return resolved.mode, resolved.rays_per_ommatidium
 
 
 def _worker_main(
@@ -105,7 +85,7 @@ def _worker_main(
             slot_id: build_flyppy_stack(body_config, slot_id)
             for slot_id in slot_ids
         }
-        vision_mode, rays_per_ommatidium = _vision_config()
+        vision_mode, rays_per_ommatidium = _vision_config(config)
         direct_sensors = (
             {
                 slot_id: BodyExcludedDirectOmmatidialSensor(

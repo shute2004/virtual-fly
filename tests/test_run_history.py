@@ -1,16 +1,8 @@
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
 import unittest
 
-
-MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts/analysis/append_flyppy_run_history.py"
-SPEC = importlib.util.spec_from_file_location("append_flyppy_run_history", MODULE_PATH)
-assert SPEC is not None and SPEC.loader is not None
-MODULE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(MODULE)
-build_row = MODULE.build_row
+from virtual_fly.reporting.history import build_row
 
 
 def summary(launch_mode: str) -> dict[str, object]:

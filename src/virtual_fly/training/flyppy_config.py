@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from virtual_fly.paths import REPO_ROOT
+from virtual_fly.runtime.vision import VisionRuntimeConfig
 from virtual_fly.semantics import (
     BODY_VERSIONS,
     HALTERE_FULL_KIND,
@@ -40,18 +41,8 @@ from virtual_fly.training.curriculum import (
 ROOT = REPO_ROOT
 
 def normalized_vision_config() -> tuple[str, int]:
-    raw_mode = str(os.environ.get("VF_FLYPPY_VISION_MODE", "raster")).strip().lower()
-    aliases = {
-        "raster": "raster",
-        "flygym": "raster",
-        "reference": "raster",
-        "direct": "direct-ray",
-        "ray": "direct-ray",
-        "direct-ray": "direct-ray",
-    }
-    mode = aliases.get(raw_mode, raw_mode)
-    rays = int(os.environ.get("VF_FLYPPY_OMMATIDIA_RAYS", "7"))
-    return mode, rays
+    config = VisionRuntimeConfig.from_environment(default_mode="raster", default_rays=7)
+    return config.mode, config.rays_per_ommatidium
 
 
 def run_reproducibility_metadata(

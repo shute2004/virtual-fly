@@ -21,6 +21,7 @@ import sys
 
 from virtual_fly.training import population_process as trainer
 from virtual_fly.runtime.packed_slot import spawn_packed_slot_handles
+from virtual_fly.runtime.vision import VisionRuntimeConfig
 
 
 _RESOLVED_BODY_PROCESSES: int | None = None
@@ -47,12 +48,14 @@ def _spawn_packed(
         if process_count < 1:
             raise SystemExit("VF_FLYPPY_BODY_PROCESSES must be positive")
 
+    vision = VisionRuntimeConfig.from_environment(default_mode="raster", default_rays=7)
+    worker_config = vision.apply_to_worker_mapping(config)
     handles, resolved = spawn_packed_slot_handles(
         population=population,
         process_count=process_count,
         physics_steps=physics_steps,
         timeout_s=timeout_s,
-        config=config,
+        config=worker_config,
     )
     _RESOLVED_BODY_PROCESSES = int(resolved)
     if handles:
