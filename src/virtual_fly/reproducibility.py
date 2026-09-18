@@ -7,19 +7,21 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-MALECNS_DATASET = "male-cns:v1.0"
-MALECNS_RUNTIME_SEMANTICS = "male-cns-v1-class-dan-v1"
-MODULATOR_ROLE_DEFINITION = "consensus_nt=dopamine AND released annotation class=DAN"
-NEURAL_RUNTIME_SEMANTICS = "signed-activity-local-dynamics-v1"
-PLASTICITY_SEMANTICS = "local-three-factor-dopamine-eligibility-v1"
-POPULATION_CHECKPOINT_SEMANTICS = "global-weights-only-v1"
-POPULATION_NEURAL_STEP_SEMANTICS = "aggregate-slot-neural-step-count-v1"
-HALTERE_FULL_KIND = "male-cns-haltere-campaniform-afferents"
-HALTERE_TIMING_KIND = "male-cns-haltere-timing-afferents-inferred-v1"
-HALTERE_EXPECTED_COUNTS = {HALTERE_FULL_KIND: 195, HALTERE_TIMING_KIND: 97}
-NEUTRAL_TRIM_KIND = "flybody-task-independent-neutral-wing-trim"
-NEUTRAL_TRIM_SEMANTICS = "flybody-neutral-trim-v1"
-
+from virtual_fly.semantics import (
+    HALTERE_EXPECTED_COUNTS,
+    HALTERE_FULL_KIND,
+    HALTERE_TIMING_KIND,
+    MALECNS_DATASET,
+    MALECNS_RUNTIME_SEMANTICS,
+    MODULATOR_ROLE_DEFINITION,
+    NEURAL_RUNTIME_SEMANTICS,
+    NEUTRAL_TRIM_KIND,
+    NEUTRAL_TRIM_SEMANTICS,
+    PLASTICITY_SEMANTICS,
+    POPULATION_CHECKPOINT_SEMANTICS,
+    POPULATION_NEURAL_STEP_SEMANTICS,
+    VISION_MODES,
+)
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -288,7 +290,7 @@ def compatibility_warnings(
         warnings.append(
             f"body=v8 has no matching environment v8; environment={environment_version} is a deliberate mixed-generation configuration"
         )
-    if vision_mode not in {"direct-ray", "raster"}:
+    if vision_mode not in VISION_MODES:
         warnings.append(f"unrecognized vision mode in provenance: {vision_mode}")
     if haltere_gain > 0.0 and haltere_kind not in {HALTERE_FULL_KIND, HALTERE_TIMING_KIND}:
         warnings.append("enabled haltere feedback uses an unknown sensory-map kind")

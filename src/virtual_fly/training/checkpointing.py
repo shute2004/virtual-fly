@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from virtual_fly.semantics import (
+    POPULATION_CHECKPOINT_SEMANTICS,
+    POPULATION_NEURAL_STEP_SEMANTICS,
+)
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import json
@@ -23,8 +28,6 @@ from .resume import (
 COMMIT_SEMANTICS = (
     "episode-local additive+clamp transaction rebased onto latest global weight"
 )
-POPULATION_CHECKPOINT_SEMANTICS = "global-weights-only-v1"
-POPULATION_NEURAL_STEP_SEMANTICS = "aggregate-slot-neural-step-count-v1"
 
 
 @dataclass(frozen=True)

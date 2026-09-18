@@ -14,9 +14,15 @@ from pathlib import Path
 from typing import Any
 
 from virtual_fly.paths import REPO_ROOT
-from virtual_fly.reproducibility import (
+from virtual_fly.semantics import (
+    BODY_VERSIONS,
     HALTERE_FULL_KIND,
     HALTERE_TIMING_KIND,
+    HALTERE_TRANSDUCTIONS,
+    PRODUCTION_ENVIRONMENT_VERSIONS,
+    SHARED_WEIGHT_COMMIT_SEMANTICS,
+)
+from virtual_fly.reproducibility import (
     build_run_provenance,
     compatibility_warnings,
     validate_derived_artifact,
@@ -122,7 +128,7 @@ def run_reproducibility_metadata(
             "population": int(args.population),
             "launch_mode": str(args.launch_mode),
             "curriculum_mode": str(args.curriculum_mode),
-            "shared_weight_commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
+            "shared_weight_commit_semantics": SHARED_WEIGHT_COMMIT_SEMANTICS,
             "neural_synapse_scale": os.environ.get("VF_NEURAL_SYNAPSE_SCALE"),
         },
     }
@@ -175,7 +181,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gate-count", type=int, default=6)
     parser.add_argument(
         "--environment-version",
-        choices=("v3", "v4", "v5", "v6", "v7"),
+        choices=PRODUCTION_ENVIRONMENT_VERSIONS,
         default="v3",
         help=(
             "v4 preserves the historical tall-corridor/narrow-hole-range course; "
@@ -184,7 +190,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--flight-body-version",
-        choices=("v3", "v4", "v5", "v6", "v7", "v8"),
+        choices=BODY_VERSIONS,
         default="v3",
         help=(
             "v3 preserves the fixed-hover wing seam; v4 adds A-IFM power-modulated "
@@ -216,7 +222,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--haltere-current-gain", type=float, default=0.0, help="current gain for physical haltere campaniform feedback; 0 preserves historical behavior")
     parser.add_argument(
         "--haltere-transduction",
-        choices=("angular-acceleration-v1", "interaction-load-v2"),
+        choices=HALTERE_TRANSDUCTIONS,
         default="angular-acceleration-v1",
         help="physical haltere campaniform transduction model",
     )
