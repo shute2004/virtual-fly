@@ -102,6 +102,11 @@ def main() -> int:
     neurotransmitters = np.fromfile(
         snapshot / str(manifest["neurotransmitters_file"]), dtype=np.uint8
     )
+    role_file = manifest.get("modulator_roles_file")
+    if role_file:
+        modulator_roles = np.fromfile(snapshot / str(role_file), dtype=np.uint8)
+    else:
+        modulator_roles = (neurotransmitters == NT_DOPAMINE).astype(np.uint8)
 
     if row_offsets.size != n + 1:
         raise RuntimeError("row_offsets length does not match manifest neuron_count")
@@ -109,6 +114,8 @@ def main() -> int:
         raise RuntimeError("edge arrays do not match manifest edge_count")
     if neurotransmitters.size != n:
         raise RuntimeError("neurotransmitters length does not match neuron_count")
+    if modulator_roles.size != n:
+        raise RuntimeError("modulator_roles length does not match neuron_count")
     if int(row_offsets[-1]) != e:
         raise RuntimeError("final row offset does not match edge_count")
 
@@ -134,7 +141,7 @@ def main() -> int:
         pres = np.asarray(pre_indices[begin:end], dtype=np.uint32)
         nts = neurotransmitters[pres]
         fast_mask = np.isin(nts, tuple(FAST_CODES))
-        dopamine_mask = nts == NT_DOPAMINE
+        dopamine_mask = modulator_roles[pres] != 0
 
         fast_count = int(np.count_nonzero(fast_mask))
         dopamine_count = int(np.count_nonzero(dopamine_mask))
@@ -232,10 +239,11 @@ def main() -> int:
         "source_edge_count": e,
         "definition": (
             "fast presynaptic edge whose postsynaptic neuron has at least one "
-            "released dopaminergic incoming edge under the current bootstrap model"
+            "released incoming edge from an annotation-supported dopaminergic modulator"
         ),
         "fast_transmitter_codes": sorted(FAST_CODES),
         "dopamine_transmitter_code": NT_DOPAMINE,
+        "modulator_role_source": manifest.get("modulator_role_definition", "legacy transmitter-code fallback"),
         "dopamine_capable_post_count": s_d,
         "plastic_edge_count": p,
         "fast_edge_count": fast_edges,

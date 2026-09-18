@@ -147,6 +147,22 @@ def build_neurotransmitters(path: Path, bodies: np.ndarray) -> np.ndarray:
     return np.fromiter((NT_CODES.get(value, 0) for value in labels), dtype=np.uint8, count=len(bodies))
 
 
+def build_modulator_roles(
+    neurons: pd.DataFrame, bodies: np.ndarray, transmitters: np.ndarray
+) -> np.ndarray:
+    """Mark annotation-supported dopaminergic neuromodulator neurons.
+
+    The released consensus transmitter prediction and the annotation-level DAN
+    identity answer different questions. A dopamine transmitter prediction alone
+    must not turn an unrelated CX/visual neuron into a global plasticity modulator.
+    """
+    aligned = neurons.drop_duplicates("bodyId").set_index("bodyId").reindex(bodies)
+    class_text = aligned["class"].fillna("").astype(str)
+    is_dan = class_text.eq("DAN").to_numpy(copy=True)
+    is_dopamine = transmitters == NT_CODES["dopamine"]
+    return (is_dan & is_dopamine).astype(np.uint8, copy=False)
+
+
 def build_connectivity(weights_path: Path, bodies: np.ndarray, min_synapses: int):
     if min_synapses < 1:
         raise ValueError("--min-synapses must be >= 1")
@@ -235,6 +251,7 @@ def main() -> int:
 
     bodies, neurons = select_annotated_neurons(paths["annotations"])
     transmitters = build_neurotransmitters(paths["neurotransmitters"], bodies)
+    modulator_roles = build_modulator_roles(neurons, bodies, transmitters)
     row_offsets, pre_indices, counts = build_connectivity(
         paths["weights"], bodies, args.min_synapses
     )
@@ -244,6 +261,7 @@ def main() -> int:
     np.asarray(pre_indices, dtype="<u4").tofile(args.output / "pre_indices.u32le")
     np.asarray(counts, dtype="<u4").tofile(args.output / "synapse_counts.u32le")
     np.asarray(transmitters, dtype=np.uint8).tofile(args.output / "neurotransmitters.u8")
+    np.asarray(modulator_roles, dtype=np.uint8).tofile(args.output / "modulator_roles.u8")
     write_metadata_subset(neurons, bodies, args.output)
 
     source_hashes = {key: sha256(path) for key, path in paths.items()}
@@ -258,6 +276,8 @@ def main() -> int:
         "pre_indices_file": "pre_indices.u32le",
         "synapse_counts_file": "synapse_counts.u32le",
         "neurotransmitters_file": "neurotransmitters.u8",
+        "modulator_roles_file": "modulator_roles.u8",
+        "modulator_role_definition": "consensus_nt=dopamine AND released annotation class=DAN",
         "annotations_file": "annotations.feather",
         "source_sha256": source_hashes,
         "source_base_url": BASE_URL,
@@ -273,6 +293,7 @@ def main() -> int:
     print(f"  neurons: {len(bodies):,}")
     print(f"  edges:   {len(pre_indices):,}")
     print(f"  synapse-count sum: {int(counts.astype(np.uint64).sum()):,}")
+    print(f"  dopamine modulators: {int(modulator_roles.sum()):,}")
     return 0
 
 

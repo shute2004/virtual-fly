@@ -15,6 +15,8 @@ pub struct SnapshotManifest {
     pub synapse_counts_file: String,
     pub neurotransmitters_file: String,
     #[serde(default)]
+    pub modulator_roles_file: Option<String>,
+    #[serde(default)]
     pub source_sha256: serde_json::Value,
 }
 
@@ -37,6 +39,9 @@ pub struct ConnectomeSnapshot {
     pub synapse_counts: Vec<u32>,
     /// Per-presynaptic-neuron consensus transmitter code.
     pub neurotransmitters: Vec<u8>,
+    /// Per-neuron neuromodulator role. 0 means no modeled neuromodulatory
+    /// release role; 1 means an annotation-supported dopaminergic neuron.
+    pub modulator_roles: Vec<u8>,
 }
 
 impl ConnectomeSnapshot {
@@ -61,6 +66,16 @@ impl ConnectomeSnapshot {
         let pre_indices = read_u32_le(path.join(&manifest.pre_indices_file))?;
         let synapse_counts = read_u32_le(path.join(&manifest.synapse_counts_file))?;
         let neurotransmitters = fs::read(path.join(&manifest.neurotransmitters_file))?;
+        let modulator_roles = if let Some(file) = &manifest.modulator_roles_file {
+            fs::read(path.join(file))?
+        } else {
+            // Backward compatibility for synthetic/legacy snapshots created before
+            // neuromodulator identity was separated from transmitter prediction.
+            neurotransmitters
+                .iter()
+                .map(|&value| u8::from(value == crate::model::nt::DOPAMINE))
+                .collect()
+        };
 
         if body_ids.len() != manifest.neuron_count {
             bail!("body_ids length does not match manifest");
@@ -70,6 +85,9 @@ impl ConnectomeSnapshot {
         }
         if neurotransmitters.len() != manifest.neuron_count {
             bail!("neurotransmitter length does not match manifest");
+        }
+        if modulator_roles.len() != manifest.neuron_count {
+            bail!("modulator role length does not match manifest");
         }
         if row_offsets.len() != manifest.neuron_count + 1 {
             bail!("row_offsets length does not match neuron count");
@@ -91,6 +109,7 @@ impl ConnectomeSnapshot {
             edge_posts,
             synapse_counts,
             neurotransmitters,
+            modulator_roles,
         })
     }
 
@@ -102,6 +121,10 @@ impl ConnectomeSnapshot {
         if neurotransmitters.len() != neuron_count {
             bail!("neurotransmitter vector must have one entry per neuron");
         }
+        let modulator_roles = neurotransmitters
+            .iter()
+            .map(|&value| u8::from(value == crate::model::nt::DOPAMINE))
+            .collect::<Vec<_>>();
         if neuron_count > u32::MAX as usize || edges.len() > u32::MAX as usize {
             bail!("bootstrap snapshot exceeds current u32 CSR limits");
         }
@@ -138,6 +161,7 @@ impl ConnectomeSnapshot {
                 pre_indices_file: String::new(),
                 synapse_counts_file: String::new(),
                 neurotransmitters_file: String::new(),
+                modulator_roles_file: None,
                 source_sha256: serde_json::Value::Null,
             },
             body_ids: (0..neuron_count as u64).collect(),
@@ -146,7 +170,24 @@ impl ConnectomeSnapshot {
             edge_posts,
             synapse_counts,
             neurotransmitters,
+            modulator_roles,
         })
+    }
+
+    #[inline]
+    pub fn is_dopamine_modulator(&self, neuron: usize) -> bool {
+        self.modulator_roles
+            .get(neuron)
+            .copied()
+            .unwrap_or_default()
+            == 1
+    }
+
+    #[inline]
+    pub fn packed_neuron_metadata(&self, neuron: usize) -> u32 {
+        let nt = self.neurotransmitters[neuron] as u32;
+        let modulator = u32::from(self.is_dopamine_modulator(neuron));
+        nt | (modulator << 8)
     }
 
     pub fn neuron_count(&self) -> usize {

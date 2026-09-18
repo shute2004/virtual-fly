@@ -181,7 +181,9 @@ impl GpuPopulationRuntime {
         topology.extend_from_slice(&snapshot.pre_indices);
         topology.extend_from_slice(&snapshot.edge_posts);
         topology.extend_from_slice(&snapshot.synapse_counts);
-        topology.extend(snapshot.neurotransmitters.iter().map(|&value| value as u32));
+        topology.extend(
+            (0..snapshot.neuron_count()).map(|neuron| snapshot.packed_neuron_metadata(neuron)),
+        );
 
         let global_weights = snapshot
             .synapse_counts

@@ -215,6 +215,8 @@ def _worker_main(
                     haltere = slot.haltere_sensor.encode(slot.body, dt_s=control_dt_s)
                     replies[slot_id] = {
                         "body_currents": (*retinal.body_currents, *haltere.body_currents),
+                        "retinal_body_currents": tuple(retinal.body_currents),
+                        "haltere_body_currents": tuple(haltere.body_currents),
                         "active_photoreceptors": int(retinal.active_photoreceptors),
                         "active_columns": int(retinal.active_columns),
                         "mean_current": float(retinal.mean_current),

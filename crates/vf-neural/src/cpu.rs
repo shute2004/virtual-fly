@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use crate::{
     model::{
         ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, NeuralParams, Stimulus, activity_sign_u8,
-        assumed_fast_sign, nt,
+        assumed_fast_sign,
     },
     snapshot::ConnectomeSnapshot,
     state::NeuralState,
@@ -145,7 +145,7 @@ impl CpuRuntime {
                     if event_sign == 0.0 {
                         continue;
                     }
-                    if snapshot.neurotransmitters[pre] == nt::DOPAMINE {
+                    if snapshot.is_dopamine_modulator(pre) {
                         // The present dopamine model represents released positive
                         // dopaminergic events only. A negative activity deviation
                         // means reduced release around an unmodelled baseline and

@@ -1,9 +1,6 @@
 use anyhow::{Context, Result};
 
-use crate::{
-    model::{assumed_fast_sign, nt},
-    snapshot::ConnectomeSnapshot,
-};
+use crate::{model::assumed_fast_sign, snapshot::ConnectomeSnapshot};
 
 /// Structurally mutable subset of the released connectome under the current
 /// bootstrap three-factor plasticity rule.
@@ -42,7 +39,7 @@ impl PlasticFastGraph {
             let end = snapshot.row_offsets[post + 1] as usize;
             for edge in start..end {
                 let pre = snapshot.pre_indices[edge] as usize;
-                if snapshot.neurotransmitters[pre] == nt::DOPAMINE {
+                if snapshot.is_dopamine_modulator(pre) {
                     dopamine_capable_post[post] = true;
                     dopamine_capable_posts.push(
                         u32::try_from(post)

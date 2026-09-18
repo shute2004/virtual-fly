@@ -79,7 +79,7 @@ fn nt_code(neuron: u32) -> u32 {
 }
 
 fn is_dopamine(neuron: u32) -> bool {
-    return nt_code(neuron) == NT_DOPAMINE;
+    return (topology[params.meta_start + neuron] & 0x100u) != 0u;
 }
 
 fn slot_is_active(slot: u32) -> bool {

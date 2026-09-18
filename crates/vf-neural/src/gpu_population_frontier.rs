@@ -247,7 +247,9 @@ impl GpuPopulationRuntime {
         topology.extend_from_slice(&snapshot.row_offsets);
         topology.extend_from_slice(&snapshot.pre_indices);
         topology.extend_from_slice(&snapshot.synapse_counts);
-        topology.extend(snapshot.neurotransmitters.iter().map(|&value| value as u32));
+        topology.extend(
+            (0..snapshot.neuron_count()).map(|neuron| snapshot.packed_neuron_metadata(neuron)),
+        );
         topology.extend_from_slice(&plastic.row_offsets);
         topology.extend_from_slice(&plastic.edge_indices);
         topology.extend_from_slice(&plastic.post_indices);

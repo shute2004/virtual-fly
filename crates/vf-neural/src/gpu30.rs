@@ -133,10 +133,8 @@ impl GpuRuntime {
         topology.extend_from_slice(&snapshot.edge_posts);
         topology.extend_from_slice(&snapshot.synapse_counts);
 
-        let meta_cpu = snapshot
-            .neurotransmitters
-            .iter()
-            .map(|&nt| nt as u32)
+        let meta_cpu = (0..snapshot.neuron_count())
+            .map(|neuron| snapshot.packed_neuron_metadata(neuron))
             .collect::<Vec<_>>();
         let neuron_state = vec![NeuronStateGpu::zeroed(); n];
         let synapse_state = snapshot
