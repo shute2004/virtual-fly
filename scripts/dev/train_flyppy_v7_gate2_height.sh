@@ -18,6 +18,7 @@ EXPERIMENT="${VF_FLYPPY_GATE2_EXPERIMENT:-artifacts/experiments/flyppy-v7-gate2-
 EPISODES="${VF_FLYPPY_GATE2_EPISODES:-240}"
 CHECKPOINT_EVERY="${VF_FLYPPY_GATE2_CHECKPOINT_EVERY:-24}"
 POPULATION="${VF_FLYPPY_GATE2_POPULATION:-4}"
+BATCH_SIZE="${VF_FLYPPY_GATE2_BATCH_SIZE:-24}"
 
 # Measured from the final v7 checkpoint on course seed 0.  The fixed spawn is a
 # normal late-boundary evaluation condition, not a near-gate focus reset.  At
@@ -42,8 +43,11 @@ printf 'gate2_height_training mode=%s source=%s experiment=%s episodes=%s\n' \
   "$MODE" "$SOURCE" "$EXPERIMENT" "$EPISODES"
 printf 'course_seed=%s spawn=(%s,%s) speed=%s gate2_start=%s target=%s step=%s\n' \
   "$COURSE_SEED" "$SPAWN_X" "$SPAWN_Z" "$SPAWN_SPEED" "$START_Z" "$TARGET_Z" "$STEP_Z"
-printf '%s
-' 'batch=24 current16 + review8; all episodes learn; advance when current>=80%; review remains ordinary learning but does not gate advancement'
+if [ "${VF_FLYPPY_GATE2_ACQUISITION_ONLY:-0}" = "1" ]; then
+  printf 'batch=%s acquisition-only: all episodes current; advance when current>=80%%\n' "$BATCH_SIZE"
+else
+  printf 'batch=%s standard current/review mix; all episodes learn; advance when current>=80%%\n' "$BATCH_SIZE"
+fi
 
 VF_EXPERIMENT_DIR="$EXPERIMENT" \
 VF_FLYPPY_ENVIRONMENT_VERSION=v7 \
@@ -53,7 +57,7 @@ VF_FLYPPY_POPULATION="$POPULATION" \
 VF_FLYPPY_CHECKPOINT_EVERY="$CHECKPOINT_EVERY" \
 VF_FLYPPY_FRESH=0 \
 VF_FLYPPY_CURRICULUM_MODE=gate2-height \
-VF_FLYPPY_BOUNDARY_BATCH_SIZE=24 \
+VF_FLYPPY_BOUNDARY_BATCH_SIZE="$BATCH_SIZE" \
 VF_FLYPPY_LAUNCH_MODE=async \
 VF_FLYPPY_VISION_MODE=direct-ray \
 VF_FLYPPY_OMMATIDIA_RAYS=13 \

@@ -249,6 +249,9 @@ fi
 if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
   TRAIN_ARGS+=(--telemetry)
 fi
+if [ "${VF_FLYPPY_GATE2_ACQUISITION_ONLY:-0}" = "1" ]; then
+  TRAIN_ARGS+=(--gate2-height-acquisition-only)
+fi
 TRAIN_ARGS+=("$@")
 "${TRAIN_ARGS[@]}"
 

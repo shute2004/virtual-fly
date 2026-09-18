@@ -206,6 +206,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gate2-height-step-mm", type=float, default=0.25)
     parser.add_argument("--gate2-height-current-success-rate", type=float, default=0.80)
     parser.add_argument("--gate2-height-retention-success-rate", type=float, default=0.80)
+    parser.add_argument(
+        "--gate2-height-acquisition-only",
+        action="store_true",
+        help="use every gate-height batch episode at the current frontier; intended for short capability acquisition before retention rehearsal",
+    )
 
     parser.add_argument("--curriculum-start-x-mm", type=float, default=8.91)
     parser.add_argument("--curriculum-target-x-mm", type=float, default=0.0)

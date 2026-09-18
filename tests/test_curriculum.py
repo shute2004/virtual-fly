@@ -506,6 +506,34 @@ class GateHeightCurriculumTests(unittest.TestCase):
             local = [roles[i] for i in range(group, 24, 4)]
             self.assertEqual(Counter(local), Counter({"current": 4, "review": 2}))
 
+    def test_acquisition_only_uses_all_current_attempts(self) -> None:
+        config = GateHeightCurriculumConfig(
+            gate_index=1,
+            start_center_z_mm=12.75,
+            target_center_z_mm=14.25,
+            step_mm=0.25,
+            batch_size=24,
+            current_success_rate=0.80,
+            retention_success_rate=0.80,
+            acquisition_only=True,
+            seed=0,
+        )
+        state: dict[str, object] = {}
+        roles = [
+            gate_height_condition_for_attempt(state, config, i, group_count=4)[1]
+            for i in range(24)
+        ]
+        self.assertEqual(Counter(roles), Counter({"current": 24}))
+        completed = None
+        for attempt, role in enumerate(roles):
+            completed = record_gate_height_result(
+                state, config, success=True, attempt_index=attempt, role=role
+            )
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed["role_success_rates"], {"current": 1.0, "review": 0.0})
+        self.assertEqual(completed["adjustment"], "advance")
+
     def test_all_success_advances_and_remembers_current_height(self) -> None:
         config = self._config()
         state: dict[str, object] = {}

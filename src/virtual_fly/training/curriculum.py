@@ -45,6 +45,7 @@ class GateHeightCurriculumConfig:
     batch_size: int = 24
     current_success_rate: float = 0.80
     retention_success_rate: float = 0.80
+    acquisition_only: bool = False
     seed: int = 0
 
 
@@ -657,7 +658,7 @@ def next_gate_height_attempt_for_group(
 
 
 def gate_height_role(
-    attempt_index: int, *, group_count: int, recovery_mode: bool = False
+    attempt_index: int, *, group_count: int, recovery_mode: bool = False, acquisition_only: bool = False
 ) -> str:
     """Return current or review; every episode is an ordinary learning episode.
 
@@ -671,6 +672,8 @@ def gate_height_role(
     groups = int(group_count)
     if attempt < 0 or groups < 1:
         raise ValueError("invalid gate-height role arguments")
+    if acquisition_only:
+        return "current"
     group = attempt % groups
     local_index = attempt // groups
     pattern = ("current", "review", "current", "current", "review", "current")
@@ -701,7 +704,9 @@ def gate_height_condition_for_attempt(
     attempt = int(attempt_index)
     if attempt < 0 or attempt >= config.batch_size:
         raise ValueError("gate-height attempt_index outside current batch")
-    role = gate_height_role(attempt, group_count=group_count)
+    role = gate_height_role(
+        attempt, group_count=group_count, acquisition_only=bool(config.acquisition_only)
+    )
     frontier = float(payload["frontier_center_z_mm"])
     if role == "current":
         center = frontier
@@ -751,7 +756,11 @@ def record_gate_height_result(
         return None
 
     rates = {
-        key: int(successes.get(key, 0)) / int(attempts.get(key, 0))
+        key: (
+            int(successes.get(key, 0)) / int(attempts.get(key, 0))
+            if int(attempts.get(key, 0)) > 0
+            else 0.0
+        )
         for key in roles
     }
     current_rate = rates["current"]

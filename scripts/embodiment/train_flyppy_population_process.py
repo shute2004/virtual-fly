@@ -324,6 +324,7 @@ def main() -> int:
             batch_size=int(args.boundary_batch_size),
             current_success_rate=float(args.gate2_height_current_success_rate),
             retention_success_rate=float(args.gate2_height_retention_success_rate),
+            acquisition_only=bool(args.gate2_height_acquisition_only),
             seed=int(args.seed),
         )
         ensure_gate_height_state(state, gate_height)
@@ -450,6 +451,12 @@ def main() -> int:
 
                     nonlocal launched
                     if launched >= args.episodes:
+                        return False
+                    if gate_height is not None and bool(
+                        dict(state.get("gate_height_curriculum", {})).get(
+                            "curriculum_complete", False
+                        )
+                    ):
                         return False
                     ease_level: float | None = None
                     attempt_index: int | None = None
@@ -593,7 +600,14 @@ def main() -> int:
                     curriculum=state,
                 )
 
-                while completed < args.episodes:
+                while completed < args.episodes and not (
+                    gate_height is not None
+                    and bool(
+                        dict(state.get("gate_height_curriculum", {})).get(
+                            "curriculum_complete", False
+                        )
+                    )
+                ):
                     active_slots = [slot for slot in slots if slot.active]
                     if not active_slots:
                         raise RuntimeError(
