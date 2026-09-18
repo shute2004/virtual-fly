@@ -58,14 +58,15 @@ from virtual_fly.training.curriculum import (
     record_boundary_result,
 )
 
-from live_telemetry import LiveTelemetryPublisher
-from virtual_fly.embodiment.body import BODY_ADAPTERS
+from virtual_fly.runtime.telemetry import LiveTelemetryPublisher
 from virtual_fly.embodiment.course import FlyppyCourse
+from virtual_fly.embodiment.config import FlyppyBodyConfig
+from virtual_fly.embodiment.factory import build_flyppy_stack, reset_flyppy_stack
 from virtual_fly.embodiment.haltere import HaltereCampaniformSensor
-from virtual_fly.embodiment.periphery import WholeBodyPeriphery
 from virtual_fly.embodiment.retina import MaleCNSRetina
 from virtual_fly.embodiment.world import FlyppyWorld
-from population_neural_bridge_client import PopulationNeuralBridgeClient
+from virtual_fly.embodiment.periphery import WholeBodyPeriphery
+from virtual_fly.runtime.neural_bridge import PopulationNeuralBridgeClient
 from virtual_fly.reproducibility import (
     HALTERE_FULL_KIND,
     HALTERE_TIMING_KIND,
@@ -145,66 +146,15 @@ class SlotRuntime:
 
 
 def make_slot(args: argparse.Namespace, slot_id: int) -> SlotRuntime:
-    fixed_course_seed = getattr(args, "fixed_course_seed", None)
-    course_seed = int(fixed_course_seed) if fixed_course_seed is not None else args.seed + slot_id
-    course = FlyppyCourse(
-        seed=course_seed,
-        gate_count=args.gate_count,
-        environment_version=args.environment_version,
-    )
-    world = FlyppyWorld(course)
-    geometry = FLYPPY_GEOMETRY_V4 if args.environment_version in {"v4", "v5", "v6", "v7"} else FLYPPY_GEOMETRY_V3
-    body_version = getattr(args, "flight_body_version", "v3")
-    body_cls = BODY_ADAPTERS[body_version]
-    body_kwargs = {
-        "tethered": False,
-        "world": world,
-        "spawn_position_mm": (
-            0.0,
-            0.0,
-            (geometry.corridor_low_z_mm + geometry.corridor_high_z_mm) / 2.0,
-        ),
-        "initial_linear_velocity_mm_s": (0.0, 0.0, 0.0),
-        "enable_vision": True,
-        "enable_observer_camera": False,
-    }
-    if body_version == "v5":
-        body_kwargs["vertical_steering_gain"] = float(
-            getattr(args, "vertical_steering_gain", 1.0)
-        )
-    if body_version in {"v6", "v8"}:
-        body_kwargs["measured_steering_gain"] = float(
-            getattr(args, "measured_steering_gain", 1.0)
-        )
-    if body_version in {"v7", "v8"}:
-        body_kwargs["neutral_trim_strength"] = float(
-            getattr(args, "neutral_trim_strength", 1.0)
-        )
-    body = body_cls(**body_kwargs)
+    stack = build_flyppy_stack(FlyppyBodyConfig.from_namespace(args), slot_id)
     return SlotRuntime(
         slot=slot_id,
-        course=course,
-        world=world,
-        body=body,
-        periphery=WholeBodyPeriphery(
-            args.wing_motor_map,
-            args.body_motor_map,
-            wing_steering_tau_s=float(getattr(args, "steering_tau_ms", 12.0)) / 1000.0,
-            wing_steering_spike_increment=float(
-                getattr(args, "steering_spike_increment", 0.85)
-            ),
-        ),
-        vision=MaleCNSRetina(
-            args.retinotopic_map,
-            current_gain=args.photoreceptor_current_gain,
-        ),
-        haltere_sensor=HaltereCampaniformSensor(
-            args.haltere_sensory_map,
-            current_gain=float(getattr(args, "haltere_current_gain", 0.0)),
-            transduction=str(getattr(args, "haltere_transduction", "angular-acceleration-v1")),
-            expected_kind=str(getattr(args, "haltere_sensory_kind", HALTERE_FULL_KIND)),
-            snapshot=args.snapshot,
-        ),
+        course=stack.course,
+        world=stack.world,
+        body=stack.body,
+        periphery=stack.periphery,
+        vision=stack.vision,
+        haltere_sensor=stack.haltere_sensor,
     )
 
 
@@ -255,18 +205,13 @@ def begin_episode(
     slot.last_peripheral = None
     slot.last_body_spikes = {}
 
-    if gate_center_overrides:
-        for gate_index, center_z_mm in sorted(gate_center_overrides.items()):
-            slot.world.set_gate_center_z_mm(slot.body.sim, int(gate_index), float(center_z_mm))
-    slot.course.reset(next_gate_index=slot.course_start_gate_index)
-    slot.body.reset()
-    slot.body.set_root_position_mm((slot.spawn_x_mm, 0.0, slot.spawn_z_mm))
-    slot.body.set_root_linear_velocity_mm_s((slot.initial_speed_mm_s, 0.0, slot.initial_vz_mm_s))
-    slot.periphery.reset()
-    slot.vision.reset_adaptation()
-    slot.haltere_sensor.reset(slot.body)
-    velocity = slot.body.root_linear_velocity_mm_s()
-    slot.final_velocity = tuple(float(value) for value in velocity)
+    slot.final_velocity = reset_flyppy_stack(
+        slot,
+        condition,
+        initial_vz_mm_s=slot.initial_vz_mm_s,
+        course_start_gate_index=slot.course_start_gate_index,
+        gate_center_overrides=gate_center_overrides,
+    )
 
 
 def result_for_slot(

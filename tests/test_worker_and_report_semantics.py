@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -8,13 +7,10 @@ import sys
 import tempfile
 import unittest
 
+from virtual_fly.embodiment.config import FlyppyBodyConfig
+
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKER_PATH = ROOT / "scripts/embodiment/flyppy_body_worker.py"
-SPEC = importlib.util.spec_from_file_location("flyppy_body_worker_for_test", WORKER_PATH)
-assert SPEC is not None and SPEC.loader is not None
-WORKER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(WORKER)
 
 
 class WorkerAndReportSemanticsTests(unittest.TestCase):
@@ -39,7 +35,7 @@ class WorkerAndReportSemanticsTests(unittest.TestCase):
             "haltere_current_gain": 0.05,
             "haltere_transduction": "interaction-load-v2",
         }
-        args = WORKER._worker_args(config)
+        args = FlyppyBodyConfig.from_mapping(config)
         self.assertEqual(args.neutral_trim_strength, 0.63)
         self.assertEqual(args.steering_tau_ms, 18.5)
         self.assertEqual(args.steering_spike_increment, 0.42)

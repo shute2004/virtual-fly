@@ -20,7 +20,7 @@ from pathlib import Path
 import sys
 
 import train_flyppy_population_process as trainer
-from flyppy_packed_slot_adapter import spawn_packed_slot_handles
+from virtual_fly.runtime.packed_slot import spawn_packed_slot_handles
 
 
 _RESOLVED_BODY_PROCESSES: int | None = None

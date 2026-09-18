@@ -23,10 +23,11 @@ import shutil
 import time
 from typing import Any
 
-from flyppy_body_worker import FlyppyBodyProcess, spawn_body_processes
+from virtual_fly.runtime.body_worker import FlyppyBodyProcess, spawn_body_processes
+from virtual_fly.embodiment.config import FlyppyBodyConfig
 from virtual_fly.embodiment.course import FlyppyCourse
-from live_telemetry import LiveTelemetryPublisher
-from population_neural_bridge_client import PopulationNeuralBridgeClient
+from virtual_fly.runtime.telemetry import LiveTelemetryPublisher
+from virtual_fly.runtime.neural_bridge import PopulationNeuralBridgeClient
 from virtual_fly.physics import FLYBODY_V3
 from virtual_fly.training.checkpointing import (
     persist_shared_checkpoint as persist_population_checkpoint,
@@ -108,29 +109,7 @@ class ProcessSlotState:
 
 
 def worker_config(args) -> dict[str, object]:
-    return {
-        "snapshot": str(args.snapshot),
-        "seed": int(args.seed),
-        "fixed_course_seed": (
-            None if getattr(args, "fixed_course_seed", None) is None else int(args.fixed_course_seed)
-        ),
-        "gate_count": int(args.gate_count),
-        "environment_version": str(args.environment_version),
-        "flight_body_version": str(getattr(args, "flight_body_version", "v3")),
-        "vertical_steering_gain": float(getattr(args, "vertical_steering_gain", 1.0)),
-        "measured_steering_gain": float(getattr(args, "measured_steering_gain", 1.0)),
-        "neutral_trim_strength": float(getattr(args, "neutral_trim_strength", 1.0)),
-        "steering_tau_ms": float(getattr(args, "steering_tau_ms", 12.0)),
-        "steering_spike_increment": float(getattr(args, "steering_spike_increment", 0.85)),
-        "wing_motor_map": str(args.wing_motor_map),
-        "body_motor_map": str(args.body_motor_map),
-        "retinotopic_map": str(args.retinotopic_map),
-        "haltere_sensory_map": str(args.haltere_sensory_map),
-        "haltere_sensory_kind": str(args.haltere_sensory_kind),
-        "photoreceptor_current_gain": float(args.photoreceptor_current_gain),
-        "haltere_current_gain": float(args.haltere_current_gain),
-        "haltere_transduction": str(getattr(args, "haltere_transduction", "angular-acceleration-v1")),
-    }
+    return FlyppyBodyConfig.from_namespace(args).to_worker_mapping()
 
 
 def reset_slot(
