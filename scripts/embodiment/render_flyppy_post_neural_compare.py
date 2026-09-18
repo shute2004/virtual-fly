@@ -99,12 +99,22 @@ def make_projection(graph: dict, width: int, height: int):
     xmax, ymax = points[:, 0].max(), points[:, 1].max()
     left, right = 85.0, width - 85.0
     top, bottom = 90.0, height - 55.0
+    x_span = max(1e-9, xmax - xmin)
+    y_span = max(1e-9, ymax - ymin)
+    available_w = right - left
+    available_h = bottom - top
+    # Preserve the MaleCNS viewer's anatomical aspect ratio.  Using separate
+    # x/y scales makes the CNS look artificially stretched to fill the panel.
+    scale = min(available_w / x_span, available_h / y_span)
+    draw_w = x_span * scale
+    draw_h = y_span * scale
+    origin_x = left + (available_w - draw_w) * 0.5
+    origin_y = top + (available_h - draw_h) * 0.5
 
     def project(position):
         x, y, _ = position
-        # This is a display projection, not a metric-preserving anatomical plot.
-        px = left + (x - xmin) / max(1e-9, xmax - xmin) * (right - left)
-        py = bottom - (y - ymin) / max(1e-9, ymax - ymin) * (bottom - top)
+        px = origin_x + (x - xmin) * scale
+        py = origin_y + draw_h - (y - ymin) * scale
         return int(round(px)), int(round(py))
 
     return positions, {body_id: project(position) for body_id, position in positions.items()}, project
