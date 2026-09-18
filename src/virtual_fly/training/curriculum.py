@@ -565,8 +565,11 @@ def _ease(
 def _validate_gate_height_config(config: GateHeightCurriculumConfig) -> None:
     if config.gate_index < 0:
         raise ValueError("gate-height gate_index must be >= 0")
-    if config.batch_size < 6:
-        raise ValueError("gate-height batch_size must be >= 6")
+    minimum_batch_size = 1 if config.acquisition_only else 6
+    if config.batch_size < minimum_batch_size:
+        raise ValueError(
+            f"gate-height batch_size must be >= {minimum_batch_size}"
+        )
     values = (config.start_center_z_mm, config.target_center_z_mm, config.step_mm)
     if not all(math.isfinite(float(value)) for value in values):
         raise ValueError("gate-height values must be finite")

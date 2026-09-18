@@ -534,6 +534,44 @@ class GateHeightCurriculumTests(unittest.TestCase):
         self.assertEqual(completed["role_success_rates"], {"current": 1.0, "review": 0.0})
         self.assertEqual(completed["adjustment"], "advance")
 
+    def test_acquisition_only_single_attempt_batch_advances_on_one_success(self) -> None:
+        config = GateHeightCurriculumConfig(
+            gate_index=1,
+            start_center_z_mm=13.6875,
+            target_center_z_mm=14.0,
+            step_mm=0.00390625,
+            batch_size=1,
+            current_success_rate=0.80,
+            retention_success_rate=0.80,
+            acquisition_only=True,
+            seed=0,
+        )
+        state: dict[str, object] = {}
+        center, role = gate_height_condition_for_attempt(
+            state, config, 0, group_count=4
+        )
+        self.assertAlmostEqual(center, 13.6875)
+        self.assertEqual(role, "current")
+        completed = record_gate_height_result(
+            state, config, success=True, attempt_index=0, role=role
+        )
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed["adjustment"], "advance")
+        self.assertAlmostEqual(completed["frontier_center_after_z_mm"], 13.69140625)
+
+    def test_standard_gate_height_rejects_single_attempt_batch(self) -> None:
+        config = GateHeightCurriculumConfig(
+            gate_index=1,
+            start_center_z_mm=13.6875,
+            target_center_z_mm=14.0,
+            step_mm=0.00390625,
+            batch_size=1,
+            acquisition_only=False,
+        )
+        with self.assertRaisesRegex(ValueError, "batch_size must be >= 6"):
+            gate_height_condition_for_attempt({}, config, 0, group_count=4)
+
     def test_all_success_advances_and_remembers_current_height(self) -> None:
         config = self._config()
         state: dict[str, object] = {}

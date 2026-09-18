@@ -298,8 +298,15 @@ def validate(args: argparse.Namespace, first_gate) -> None:
         raise SystemExit("trajectory/telemetry strides must be >= 1")
     if args.checkpoint_every < 1:
         raise SystemExit("checkpoint-every must be >= 1")
-    if args.boundary_batch_size < 5:
-        raise SystemExit("boundary-batch-size must be >= 5")
+    minimum_batch_size = (
+        1
+        if args.curriculum_mode == "gate2-height" and args.gate2_height_acquisition_only
+        else 5
+    )
+    if args.boundary_batch_size < minimum_batch_size:
+        raise SystemExit(
+            f"boundary-batch-size must be >= {minimum_batch_size} for this curriculum mode"
+        )
     if not (
         0.0
         <= args.boundary_ease_success_rate

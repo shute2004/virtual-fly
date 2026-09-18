@@ -58,12 +58,16 @@ case "$CURRICULUM_MODE" in
     exit 2
     ;;
 esac
+MIN_BOUNDARY_BATCH_SIZE=5
+if [ "$CURRICULUM_MODE" = "gate2-height" ] && [ "${VF_FLYPPY_GATE2_ACQUISITION_ONLY:-0}" = "1" ]; then
+  MIN_BOUNDARY_BATCH_SIZE=1
+fi
 [[ "$BOUNDARY_BATCH_SIZE" =~ ^[1-9][0-9]*$ ]] || {
-  echo "VF_FLYPPY_BOUNDARY_BATCH_SIZE must be an integer >= 5" >&2
+  echo "VF_FLYPPY_BOUNDARY_BATCH_SIZE must be a positive integer" >&2
   exit 2
 }
-if [ "$BOUNDARY_BATCH_SIZE" -lt 5 ]; then
-  echo "VF_FLYPPY_BOUNDARY_BATCH_SIZE must be >= 5" >&2
+if [ "$BOUNDARY_BATCH_SIZE" -lt "$MIN_BOUNDARY_BATCH_SIZE" ]; then
+  echo "VF_FLYPPY_BOUNDARY_BATCH_SIZE must be >= $MIN_BOUNDARY_BATCH_SIZE for this curriculum mode" >&2
   exit 2
 fi
 case "$LAUNCH_MODE" in
