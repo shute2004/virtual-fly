@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Evaluate Flyppy behavior with frozen plasticity and no reinforcement.
+"""Historical/diagnostic frozen Flyppy evaluator.
+
+Retained for comparison with earlier experiments. Current experiment-specific
+evaluation should state body/environment/sensory semantics explicitly.
 
 Evaluation deliberately uses the same current sensorimotor path as training:
 

@@ -40,7 +40,7 @@ bash scripts/dev/preflight_flyppy_v3.sh
 ### 学習
 
 ```bash
-bash scripts/dev/train_flyppy_v3_population.sh
+bash scripts/dev/train_flyppy_population.sh
 ```
 
 主な環境変数:

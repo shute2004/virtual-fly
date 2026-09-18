@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Asynchronous shared-weight Flyppy v3 population trainer.
+"""Reference in-process shared-weight Flyppy population trainer.
+
+This is retained for diagnostics and semantic comparison. Production uses
+``virtual_fly.training.population_packed`` via ``scripts/dev/train_flyppy_population.sh``.
 
 Each Fly slot owns its episode-local CNS/body/plasticity state. All slots feed
 one learned global weight history. At episode completion the slot's exact

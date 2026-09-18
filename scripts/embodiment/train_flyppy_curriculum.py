@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Persistent high-throughput Flyppy curriculum trainer.
+"""Historical serial Flyppy curriculum trainer.
+
+Retained for historical reproduction and diagnostics; it is not the current
+shared-weight population production path.
 
 One Python process, one MuJoCo simulation, and one MaleCNS runtime remain alive
 for the whole run. Curriculum changes only episode-reset initial conditions.

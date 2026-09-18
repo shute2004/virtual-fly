@@ -26,7 +26,7 @@ viewerの起動・終了は学習状態、物理状態、神経状態、可塑�
 
 ## 2. 学習runtime
 
-productionのpopulation学習は `scripts/dev/train_flyppy_v3_population.sh` から起動する。
+productionのpopulation学習は `scripts/dev/train_flyppy_population.sh` から起動する。
 
 shared MaleCNS runtimeと各slotのFlyBody/MuJoCo状態はviewerとは独立して動作する。viewerが起動していなくても学習は通常どおり進み、viewerを後から起動するために学習を再起動する必要はない。
 
@@ -93,7 +93,7 @@ body rendererが終了した場合、`scripts/dev/view_flyppy.sh` はHTTP server
 学習は通常どおり起動する。viewer用フラグは不要。
 
 ```bash
-bash scripts/dev/train_flyppy_v3_population.sh
+bash scripts/dev/train_flyppy_population.sh
 ```
 
 学習開始後、見たくなった時だけ別ターミナルでobserverを起動する。

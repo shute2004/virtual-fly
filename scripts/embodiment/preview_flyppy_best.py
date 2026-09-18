@@ -15,9 +15,9 @@ import os
 from pathlib import Path
 import time
 
-from flyppy_packed_body_worker import spawn_packed_body_processes
-from live_telemetry import LiveTelemetryPublisher
-from population_neural_bridge_client import PopulationNeuralBridgeClient
+from virtual_fly.runtime.packed_body_worker import spawn_packed_body_processes
+from virtual_fly.runtime.telemetry import LiveTelemetryPublisher
+from virtual_fly.runtime.neural_bridge import PopulationNeuralBridgeClient
 
 from virtual_fly.playback.config import (
     DEFAULT_CALIBRATION,

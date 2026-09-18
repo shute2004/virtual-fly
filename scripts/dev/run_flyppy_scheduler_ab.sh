@@ -62,7 +62,7 @@ run_training() {
   VF_FLYPPY_EPISODES="$EPISODES" \
   VF_FLYPPY_WRITE_LATEST_REPORTS=0 \
   VF_SKIP_V3_FLIGHT_PREFLIGHT=1 \
-    bash scripts/dev/train_flyppy_v3_population.sh
+    bash scripts/dev/train_flyppy_population.sh
 }
 
 run_fixed_eval() {

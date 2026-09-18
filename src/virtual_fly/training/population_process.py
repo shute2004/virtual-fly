@@ -74,15 +74,6 @@ from virtual_fly.training.curriculum import (
 )
 
 
-@dataclass
-
-
-
-
-
-
-
-
 def main(*, spawn_factory=spawn_body_processes) -> int:
     args = parse_args()
     probe_seed = int(args.fixed_course_seed) if args.fixed_course_seed is not None else int(args.seed)

@@ -41,4 +41,4 @@ VF_FLYPPY_LAUNCH_MODE=async \
 VF_FLYPPY_VISION_MODE=direct-ray \
 VF_FLYPPY_OMMATIDIA_RAYS=13 \
 VF_FLYPPY_WRITE_LATEST_REPORTS=1 \
-bash scripts/dev/train_flyppy_v3_population.sh
+bash scripts/dev/train_flyppy_population.sh
