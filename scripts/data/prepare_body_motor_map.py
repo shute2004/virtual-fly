@@ -24,6 +24,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from virtual_fly.reproducibility import git_provenance, sha256_file
+
 
 LEG_SUBCLASS_TO_POSITION = {
     "fl": "f",  # front / T1
@@ -246,6 +248,11 @@ def main() -> int:
     payload = {
         "schema_version": 1,
         "dataset": "male-cns:v1.0",
+        "artifact_provenance": {
+            "generator": "scripts/data/prepare_body_motor_map.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+            "snapshot_manifest_sha256": sha256_file(args.snapshot / "manifest.json"),
+        },
         "purpose": (
             "fail-closed inventory of non-wing MaleCNS motor neurons with a conservative "
             "subset mapped to FlyBody mechanics"

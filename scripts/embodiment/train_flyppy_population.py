@@ -10,9 +10,11 @@ weights are never averaged and a stale slot never overwrites the global state.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 from dataclasses import dataclass
 import json
 import math
+import os
 from pathlib import Path
 import shutil
 import time
@@ -56,6 +58,138 @@ from live_telemetry import LiveTelemetryPublisher
 from malecns_retina import MaleCNSRetina
 from population_neural_bridge_client import PopulationNeuralBridgeClient
 from whole_body_periphery import WholeBodyPeriphery
+from virtual_fly.reproducibility import (
+    HALTERE_FULL_KIND,
+    HALTERE_TIMING_KIND,
+    build_run_provenance,
+    compatibility_warnings,
+    validate_derived_artifact,
+    validate_haltere_map,
+    validate_production_snapshot,
+)
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def normalized_vision_config() -> tuple[str, int]:
+    raw_mode = str(os.environ.get("VF_FLYPPY_VISION_MODE", "raster")).strip().lower()
+    aliases = {
+        "raster": "raster",
+        "flygym": "raster",
+        "reference": "raster",
+        "direct": "direct-ray",
+        "ray": "direct-ray",
+        "direct-ray": "direct-ray",
+    }
+    mode = aliases.get(raw_mode, raw_mode)
+    rays = int(os.environ.get("VF_FLYPPY_OMMATIDIA_RAYS", "7"))
+    return mode, rays
+
+
+def run_reproducibility_metadata(
+    args: argparse.Namespace,
+    *,
+    body_runtime: str,
+    vision_mode_override: str | None = None,
+    vision_rays_override: int | None = None,
+) -> dict[str, object]:
+    vision_mode, vision_rays = normalized_vision_config()
+    if vision_mode_override is not None:
+        vision_mode = vision_mode_override
+    if vision_rays_override is not None:
+        vision_rays = vision_rays_override
+    body_version = str(getattr(args, "flight_body_version", "v3"))
+    artifacts: dict[str, Path] = {
+        "embodiment_groups": args.groups,
+        "retinotopic_map": args.retinotopic_map,
+        "wing_motor_map": args.wing_motor_map,
+        "body_motor_map": args.body_motor_map,
+        "haltere_sensory_map": args.haltere_sensory_map,
+        "viewer_graph": args.viewer_graph,
+        "measured_wingbeat": Path("artifacts/flybody-data/wing_pattern_fmech.npy"),
+    }
+    calibration = os.environ.get("VF_NEURAL_CALIBRATION_PATH", "").strip()
+    if calibration:
+        artifacts["neural_calibration"] = Path(calibration)
+    if body_version in {"v7", "v8"}:
+        artifacts["neutral_trim_pattern"] = Path("artifacts/embodiment/wing-pattern-neutral-trim-v1.npy")
+        artifacts["neutral_trim_metadata"] = Path("artifacts/embodiment/wing-pattern-neutral-trim-v1.json")
+    if body_version == "v5":
+        artifacts["measured_vertical_steering"] = Path("artifacts/embodiment/wing-steering-vertical-mode-v1.json")
+    if body_version in {"v6", "v8"}:
+        artifacts["measured_b2_hg3_steering"] = Path("artifacts/embodiment/wing-steering-b2-hg3-modes-v1.json")
+
+    conditions: dict[str, object] = {
+        "body": {
+            "version": body_version,
+            "vertical_steering_gain": float(args.vertical_steering_gain),
+            "measured_steering_gain": float(args.measured_steering_gain),
+            "neutral_trim_strength": float(args.neutral_trim_strength),
+            "steering_tau_ms": float(args.steering_tau_ms),
+            "steering_spike_increment": float(args.steering_spike_increment),
+            "runtime": body_runtime,
+        },
+        "environment": {
+            "version": str(args.environment_version),
+            "gate_count": int(args.gate_count),
+        },
+        "vision": {
+            "mode": vision_mode,
+            "rays_per_ommatidium": vision_rays,
+            "photoreceptor_current_gain": float(args.photoreceptor_current_gain),
+        },
+        "haltere": {
+            "enabled": float(args.haltere_current_gain) > 0.0,
+            "map_kind": str(args.haltere_sensory_kind),
+            "current_gain": float(args.haltere_current_gain),
+            "transduction": str(args.haltere_transduction),
+        },
+        "reinforcement": {
+            "reward_current": float(args.reward_current),
+            "aversive_current": float(args.aversive_current),
+            "reinforcement_steps": int(args.reinforcement_steps),
+            "gate_near_miss_aversive_floor_fraction": float(args.gate_near_miss_aversive_floor_fraction),
+            "gate_near_miss_distance_mm": float(args.gate_near_miss_distance_mm),
+            "path": "gate pass -> reward_dan current; collision -> aversive_dan current",
+        },
+        "rng": {
+            "seed": int(args.seed),
+            "fixed_course_seed": None if args.fixed_course_seed is None else int(args.fixed_course_seed),
+        },
+        "training": {
+            "population": int(args.population),
+            "launch_mode": str(args.launch_mode),
+            "curriculum_mode": str(args.curriculum_mode),
+            "shared_weight_commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
+            "neural_synapse_scale": os.environ.get("VF_NEURAL_SYNAPSE_SCALE"),
+        },
+    }
+    conditions["compatibility_warnings"] = compatibility_warnings(
+        body_version=body_version,
+        environment_version=str(args.environment_version),
+        vision_mode=vision_mode,
+        haltere_gain=float(args.haltere_current_gain),
+        haltere_kind=str(args.haltere_sensory_kind),
+    )
+    return build_run_provenance(
+        root=ROOT, snapshot=args.snapshot, artifacts=artifacts, conditions=conditions
+    )
+
+
+def write_run_provenance(
+    output: Path,
+    *,
+    start_episode: int,
+    initial_global_weight_version: int,
+    payload: dict[str, object],
+) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = output / "provenance" / (
+        f"run-{start_episode:06d}-gv{initial_global_weight_version:06d}-{stamp}.json"
+    )
+    save_json_atomic(path, payload)
+    return path
 
 
 @dataclass
@@ -106,6 +240,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--groups", type=Path, default=Path("artifacts/malecns-v1.0/embodiment-groups-v0.json"))
     parser.add_argument("--retinotopic-map", type=Path, default=Path("artifacts/malecns-v1.0/retinotopic-vision-v1.json"))
     parser.add_argument("--haltere-sensory-map", type=Path, default=Path("artifacts/malecns-v1.0/haltere-campaniform-sensory-v1.json"))
+    parser.add_argument(
+        "--haltere-sensory-kind",
+        choices=(HALTERE_FULL_KIND, HALTERE_TIMING_KIND),
+        default=HALTERE_FULL_KIND,
+        help="semantic kind required from --haltere-sensory-map; prevents full/timing map substitution",
+    )
     parser.add_argument("--wing-motor-map", type=Path, default=Path("artifacts/malecns-v1.0/wing-motor-neurons-v0.json"))
     parser.add_argument("--body-motor-map", type=Path, default=Path("artifacts/malecns-v1.0/body-motor-neurons-v0.json"))
     parser.add_argument("--viewer-graph", type=Path, default=Path("artifacts/embodiment/neural-viewer-graph-v1.json"))
@@ -361,6 +501,17 @@ def validate(args: argparse.Namespace, first_gate) -> None:
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise SystemExit("missing population training inputs:\n  " + "\n  ".join(missing))
+    try:
+        validate_production_snapshot(args.snapshot)
+        for derived in (args.groups, args.retinotopic_map, args.wing_motor_map, args.body_motor_map):
+            validate_derived_artifact(derived, args.snapshot)
+        validate_haltere_map(
+            args.haltere_sensory_map,
+            args.haltere_sensory_kind,
+            snapshot=args.snapshot,
+        )
+    except RuntimeError as error:
+        raise SystemExit(str(error)) from error
     positive = [
         args.photoreceptor_current_gain,
         args.reward_current,
@@ -518,6 +669,8 @@ def make_slot(args: argparse.Namespace, slot_id: int) -> SlotRuntime:
             args.haltere_sensory_map,
             current_gain=float(getattr(args, "haltere_current_gain", 0.0)),
             transduction=str(getattr(args, "haltere_transduction", "angular-acceleration-v1")),
+            expected_kind=str(getattr(args, "haltere_sensory_kind", HALTERE_FULL_KIND)),
+            snapshot=args.snapshot,
         ),
     )
 
@@ -695,6 +848,17 @@ def main() -> int:
         raise SystemExit(str(error)) from error
     initial_global_version = resume_plan.initial_global_weight_version
     start_episode = resume_plan.start_episode
+    reproducibility = run_reproducibility_metadata(
+        args, body_runtime="in-process", vision_mode_override="raster", vision_rays_override=0
+    )
+    provenance_path = write_run_provenance(
+        output,
+        start_episode=start_episode,
+        initial_global_weight_version=initial_global_version,
+        payload=reproducibility,
+    )
+    for warning in reproducibility["conditions"].get("compatibility_warnings", []):
+        print(f"compatibility_warning={warning}")
     reconciliation = resume_plan.reconciliation
     if reconciliation is not None and reconciliation.changed:
         print(
@@ -1212,7 +1376,8 @@ def main() -> int:
             "enabled": float(args.haltere_current_gain) > 0.0,
             "current_gain": float(args.haltere_current_gain),
             "map": str(args.haltere_sensory_map),
-            "transduction": "physical haltere angular-acceleration inertial-strain proxy",
+            "map_kind": str(args.haltere_sensory_kind),
+            "transduction": str(args.haltere_transduction),
         },
         "motor_boundary": "whole-body",
         "physical_spec": {
@@ -1244,8 +1409,13 @@ def main() -> int:
         "total_collisions_this_run": sum(bool(item["collision"]) for item in results),
         "curriculum": state,
         "episode_results": sorted(results, key=lambda item: int(item["episode"])),
-        "full_cns_checkpoint": str(checkpoint),
+        "population_weight_checkpoint": str(checkpoint),
+        "checkpoint_semantics": "global-weights-only-v1",
+        "checkpoint_resume_behavior": "population fast neural/plasticity state is reset; only global weights are restored",
         "checkpoint_neural_step": saved_state.get("step"),
+        "checkpoint_neural_step_semantics": "aggregate-slot-neural-step-count-v1",
+        "reproducibility": reproducibility,
+        "provenance_file": str(provenance_path),
         "global_weight_version_start": initial_global_version,
         "global_weight_version_end": final_global_version,
         "mean_version_staleness": (

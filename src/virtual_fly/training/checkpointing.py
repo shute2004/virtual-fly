@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,8 @@ from .resume import (
 COMMIT_SEMANTICS = (
     "episode-local additive+clamp transaction rebased onto latest global weight"
 )
+POPULATION_CHECKPOINT_SEMANTICS = "global-weights-only-v1"
+POPULATION_NEURAL_STEP_SEMANTICS = "aggregate-slot-neural-step-count-v1"
 
 
 @dataclass(frozen=True)
@@ -68,12 +71,29 @@ def prepare_population_resume(
     commit_log_path = output_dir / "commit-log.jsonl"
 
     population_state: dict[str, Any] = {}
+    allow_legacy = os.environ.get("VF_ALLOW_LEGACY_POPULATION_CHECKPOINT") == "1"
     if checkpoint_exists and population_state_path.exists():
         payload = json.loads(population_state_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             raise RuntimeError("population-state.json must contain a JSON object")
         population_state = payload
         validate_resume_launch_mode(population_state, requested_launch_mode)
+        if not allow_legacy:
+            if population_state.get("checkpoint_semantics") != POPULATION_CHECKPOINT_SEMANTICS:
+                raise RuntimeError(
+                    "population checkpoint predates explicit weights-only semantics; refuse silent resume. "
+                    "Use VF_ALLOW_LEGACY_POPULATION_CHECKPOINT=1 only for intentional historical continuation."
+                )
+            if population_state.get("neural_step_semantics") != POPULATION_NEURAL_STEP_SEMANTICS:
+                raise RuntimeError("population-state neural step semantics are missing or incompatible")
+            checkpoint_manifest_path = output_dir / "checkpoint" / "manifest.json"
+            if not checkpoint_manifest_path.exists():
+                raise RuntimeError("population checkpoint manifest is missing")
+            checkpoint_manifest = json.loads(checkpoint_manifest_path.read_text(encoding="utf-8"))
+            if checkpoint_manifest.get("checkpoint_semantics") != POPULATION_CHECKPOINT_SEMANTICS:
+                raise RuntimeError("checkpoint manifest is not an explicit population weights-only checkpoint")
+            if checkpoint_manifest.get("step_semantics") != POPULATION_NEURAL_STEP_SEMANTICS:
+                raise RuntimeError("checkpoint manifest neural step semantics are missing or incompatible")
     elif checkpoint_exists and commit_log_path.exists():
         raise RuntimeError(
             "population checkpoint has a commit log but no population-state.json; "
@@ -122,11 +142,13 @@ def population_state_snapshot(
     if global_weight_version < 0:
         raise ValueError("global_weight_version must be >= 0")
     payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "population": int(population),
         "global_weight_version": int(global_weight_version),
         "commit_semantics": COMMIT_SEMANTICS,
         "weight_averaging": False,
+        "checkpoint_semantics": POPULATION_CHECKPOINT_SEMANTICS,
+        "neural_step_semantics": POPULATION_NEURAL_STEP_SEMANTICS,
         "curriculum_mode": str(curriculum_mode),
         "launch_mode": str(launch_mode),
     }

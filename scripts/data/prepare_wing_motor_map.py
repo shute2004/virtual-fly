@@ -20,6 +20,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from virtual_fly.reproducibility import git_provenance, sha256_file
+
 
 # Muscle identities are taken from the MANC wing-MN identification literature.
 # These labels describe anatomical targets only; they do not define an action,
@@ -235,6 +237,11 @@ def main() -> int:
     payload = {
         "schema_version": 2,
         "dataset": "male-cns:v1.0",
+        "artifact_provenance": {
+            "generator": "scripts/data/prepare_wing_motor_map.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+            "snapshot_manifest_sha256": sha256_file(args.snapshot / "manifest.json"),
+        },
         "purpose": (
             "descriptive inventory of individual released wing-motor neurons and "
             "literature-supported peripheral muscle identities; not an action decoder"

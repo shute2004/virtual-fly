@@ -30,7 +30,15 @@ command -v uv >/dev/null 2>&1 || { echo 'uv is required' >&2; exit 127; }
 run "Python dependencies" uv sync
 
 if [ -f "$SNAPSHOT/manifest.json" ]; then
-  printf '\n== MaleCNS snapshot ==\nreusing existing %s\n' "$SNAPSHOT"
+  printf '\n== MaleCNS snapshot ==\nvalidating existing %s\n' "$SNAPSHOT"
+  run "MaleCNS production snapshot semantics" uv run python - "$SNAPSHOT" <<'PY'
+from pathlib import Path
+import sys
+from virtual_fly.reproducibility import validate_production_snapshot
+info = validate_production_snapshot(Path(sys.argv[1]))
+print(f"snapshot_semantics={info['runtime_semantics']}")
+print(f"snapshot_sha256={info['snapshot_sha256']}")
+PY
 else
   run "MaleCNS v1.0 download and preprocessing" uv run python scripts/data/prepare_malecns.py --download --output "$SNAPSHOT"
 fi

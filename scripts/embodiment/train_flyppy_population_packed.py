@@ -112,10 +112,35 @@ def _patch_runtime_metadata(output_dir: Path) -> None:
             continue
         payload = json.loads(path.read_text(encoding="utf-8"))
         payload.update(metadata)
+        reproducibility = payload.get("reproducibility")
+        if isinstance(reproducibility, dict):
+            conditions = reproducibility.get("conditions")
+            if isinstance(conditions, dict):
+                body = conditions.get("body")
+                if isinstance(body, dict):
+                    body["runtime"] = "packed-process"
+                vision = conditions.get("vision")
+                if isinstance(vision, dict):
+                    vision["mode"] = metadata["vision_runtime"]
+                    vision["rays_per_ommatidium"] = metadata["vision_rays_per_ommatidium"]
         temp = path.with_name(f".{path.name}.packed.tmp")
         temp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         temp.replace(path)
 
+
+    summary_path = output_dir / "summary.json"
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        provenance_path = summary.get("provenance_file")
+        reproducibility = summary.get("reproducibility")
+        if provenance_path and isinstance(reproducibility, dict):
+            p = Path(str(provenance_path))
+            if not p.is_absolute():
+                p = Path.cwd() / p
+            if p.exists():
+                temp = p.with_name(f".{p.name}.packed.tmp")
+                temp.write_text(json.dumps(reproducibility, indent=2) + "\n", encoding="utf-8")
+                temp.replace(p)
 
 def main() -> int:
     trainer.spawn_body_processes = _spawn_packed

@@ -18,6 +18,12 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/embodiment"))
 from flybody_measured_wingbeat import DEFAULT_PATTERN, MeasuredWingbeatCycle
+from virtual_fly.reproducibility import (
+    NEUTRAL_TRIM_KIND,
+    NEUTRAL_TRIM_SEMANTICS,
+    git_provenance,
+    sha256_file,
+)
 
 
 OUTPUT_PATTERN = ROOT / "artifacts/embodiment/wing-pattern-neutral-trim-v1.npy"
@@ -55,13 +61,20 @@ def main() -> int:
     np.save(OUTPUT_PATTERN, trimmed, allow_pickle=False)
     payload = {
         "schema_version": 1,
-        "kind": "flybody-task-independent-neutral-wing-trim",
+        "kind": NEUTRAL_TRIM_KIND,
+        "runtime_semantics": NEUTRAL_TRIM_SEMANTICS,
         "source_pattern": str(source.relative_to(ROOT)),
         "output_pattern": str(OUTPUT_PATTERN.relative_to(ROOT)),
+        "source_sha256": sha256_file(source),
+        "output_sha256": sha256_file(OUTPUT_PATTERN),
         "axes": ["yaw", "roll", "pitch"],
         "offsets_rad": OFFSETS_RAD.tolist(),
         "amplitude_scales": AMPLITUDE_SCALES.tolist(),
         "phase_shifts_rad": PHASE_SHIFTS_RAD.tolist(),
+        "provenance": {
+            "generator": "scripts/data/prepare_flybody_neutral_trim.py",
+            "generator_git": git_provenance(ROOT),
+        },
         "calibration": {
             "objective": "preserve mean source translational fluid wrench while minimizing mean root pitch fluid torque and kinematic departure",
             "root_pose": "FlyBody v3 source -47.5 degree flight pose",

@@ -26,6 +26,7 @@ FIELDS = [
     "run_key",
     "experiment",
     "environment_version",
+    "flight_body_version",
     "motor_boundary",
     "backend",
     "population",
@@ -34,6 +35,17 @@ FIELDS = [
     "vision_runtime",
     "vision_rays_per_ommatidium",
     "vision_framebuffer",
+    "haltere_enabled",
+    "haltere_sensory_kind",
+    "haltere_current_gain",
+    "haltere_transduction",
+    "snapshot_semantics",
+    "snapshot_sha256",
+    "neural_runtime_semantics",
+    "plasticity_semantics",
+    "git_sha",
+    "git_dirty",
+    "dependency_lock_sha256",
     "episode_start",
     "episode_end",
     "episode_count",
@@ -56,6 +68,8 @@ FIELDS = [
     "worst_altitude_loss_mm",
     "mean_max_altitude_gain_mm",
     "checkpoint_neural_step",
+    "checkpoint_semantics",
+    "checkpoint_neural_step_semantics",
     "curriculum_mode",
     "launch_mode",
     "curriculum_episodes_total",
@@ -124,16 +138,37 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
     vision_runtime = payload.get("vision_runtime", "")
     vision_rays = payload.get("vision_rays_per_ommatidium", "")
     vision_framebuffer = payload.get("vision_framebuffer", "")
+    reproducibility = payload.get("reproducibility")
+    reproducibility = reproducibility if isinstance(reproducibility, dict) else {}
+    conditions = reproducibility.get("conditions")
+    conditions = conditions if isinstance(conditions, dict) else {}
+    haltere = conditions.get("haltere")
+    haltere = haltere if isinstance(haltere, dict) else {}
+    snapshot = reproducibility.get("snapshot")
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    semantics = reproducibility.get("semantics")
+    semantics = semantics if isinstance(semantics, dict) else {}
+    code = reproducibility.get("code")
+    code = code if isinstance(code, dict) else {}
+    dependency_lock = reproducibility.get("dependency_lock")
+    dependency_lock = dependency_lock if isinstance(dependency_lock, dict) else {}
+    body_version = str(payload.get("flight_body_version", ""))
 
     run_key = "|".join(
         [
             experiment,
             environment_version,
+            body_version,
             motor_boundary,
             str(episode_start),
             str(episode_end),
             str(checkpoint_step),
             str(launch_mode),
+            str(vision_runtime),
+            str(haltere.get("map_kind", "")),
+            str(haltere.get("current_gain", "")),
+            str(semantics.get("neural_runtime", "")),
+            str(code.get("git_sha", "")),
         ]
     )
 
@@ -142,6 +177,7 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
         "run_key": run_key,
         "experiment": experiment,
         "environment_version": environment_version,
+        "flight_body_version": body_version,
         "motor_boundary": motor_boundary,
         "backend": payload.get("backend", "-"),
         "population": population,
@@ -154,6 +190,17 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
             if isinstance(vision_framebuffer, bool)
             else vision_framebuffer
         ),
+        "haltere_enabled": str(bool(haltere.get("enabled", False))).lower() if haltere else "",
+        "haltere_sensory_kind": haltere.get("map_kind", ""),
+        "haltere_current_gain": haltere.get("current_gain", ""),
+        "haltere_transduction": haltere.get("transduction", ""),
+        "snapshot_semantics": snapshot.get("runtime_semantics", ""),
+        "snapshot_sha256": snapshot.get("snapshot_sha256", ""),
+        "neural_runtime_semantics": semantics.get("neural_runtime", ""),
+        "plasticity_semantics": semantics.get("plasticity", ""),
+        "git_sha": code.get("git_sha", ""),
+        "git_dirty": str(bool(code.get("dirty"))).lower() if "dirty" in code else "",
+        "dependency_lock_sha256": dependency_lock.get("composite_sha256", ""),
         "episode_start": episode_start,
         "episode_end": episode_end,
         "episode_count": episode_count,
@@ -176,6 +223,8 @@ def build_row(payload: dict[str, Any]) -> dict[str, Any]:
         "worst_altitude_loss_mm": f"{worst_altitude_loss:.6f}",
         "mean_max_altitude_gain_mm": f"{mean_max_altitude_gain:.6f}",
         "checkpoint_neural_step": checkpoint_step,
+        "checkpoint_semantics": payload.get("checkpoint_semantics", ""),
+        "checkpoint_neural_step_semantics": payload.get("checkpoint_neural_step_semantics", ""),
         "curriculum_mode": payload.get("curriculum_mode", curriculum.get("curriculum_mode", "-")),
         "launch_mode": launch_mode,
         "curriculum_episodes_total": curriculum.get("curriculum_episodes", ""),

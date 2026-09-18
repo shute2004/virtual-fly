@@ -9,7 +9,10 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use vf_neural::{ConnectomeSnapshot, NeuralParams, Stimulus, gpu_population::GpuPopulationRuntime};
-use vf_runner::checkpoint::{load_checkpoint, save_checkpoint_with_global_weight_version};
+use vf_runner::checkpoint::{
+    load_checkpoint, save_checkpoint_with_global_weight_version,
+    validate_population_checkpoint_manifest,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -365,6 +368,7 @@ fn main() -> Result<()> {
                         snapshot.neuron_count(),
                         snapshot.edge_count(),
                     )?;
+                    validate_population_checkpoint_manifest(&manifest)?;
                     if let Some(checkpoint_version) = manifest.global_weight_version {
                         if checkpoint_version != requested_version {
                             bail!(

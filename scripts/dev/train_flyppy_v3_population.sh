@@ -8,6 +8,7 @@ SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
 HALTERE_SENSORY_MAP="${VF_HALTERE_SENSORY_MAP:-$SNAPSHOT/haltere-campaniform-sensory-v1.json}"
+HALTERE_SENSORY_KIND="${VF_HALTERE_SENSORY_KIND:-male-cns-haltere-campaniform-afferents}"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 BODY_MOTOR_MAP="$SNAPSHOT/body-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
@@ -168,8 +169,24 @@ fi
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
   --haltere-sensory-map "$HALTERE_SENSORY_MAP" \
+  --haltere-sensory-kind "$HALTERE_SENSORY_KIND" \
   --wing-motor-map "$WING_MOTOR_MAP" \
   --body-motor-map "$BODY_MOTOR_MAP"
+
+if [ "$FLIGHT_BODY_VERSION" = "v7" ] || [ "$FLIGHT_BODY_VERSION" = "v8" ]; then
+  NEUTRAL_PATTERN="$ROOT/artifacts/embodiment/wing-pattern-neutral-trim-v1.npy"
+  NEUTRAL_METADATA="$ROOT/artifacts/embodiment/wing-pattern-neutral-trim-v1.json"
+  if [ ! -e "$NEUTRAL_PATTERN" ] && [ ! -e "$NEUTRAL_METADATA" ]; then
+    "${PYTHON_RUNNER[@]}" scripts/data/prepare_flybody_neutral_trim.py
+  fi
+  "${PYTHON_RUNNER[@]}" - "$NEUTRAL_PATTERN" "$NEUTRAL_METADATA" <<'PY'
+from pathlib import Path
+import sys
+from virtual_fly.reproducibility import validate_neutral_trim
+validate_neutral_trim(Path(sys.argv[1]), Path(sys.argv[2]))
+print("neutral_trim_provenance=PASS")
+PY
+fi
 
 EXPECTED_VIEWER_GRAPH_SCHEMA=4
 VIEWER_SCHEMA=0
@@ -187,6 +204,13 @@ if [ "$VIEWER_SCHEMA" != "$EXPECTED_VIEWER_GRAPH_SCHEMA" ]; then
     --motor-map "$WING_MOTOR_MAP" \
     --output "$VIEWER_GRAPH"
 fi
+"${PYTHON_RUNNER[@]}" - "$VIEWER_GRAPH" "$SNAPSHOT" <<'PY'
+from pathlib import Path
+import sys
+from virtual_fly.reproducibility import validate_derived_artifact
+validate_derived_artifact(Path(sys.argv[1]), Path(sys.argv[2]))
+print("viewer_graph_provenance=PASS")
+PY
 
 EXPECTED_NEURAL_CALIBRATION_SCHEMA=2
 CALIBRATION_SCHEMA=0
@@ -204,9 +228,17 @@ if [ "$CALIBRATION_SCHEMA" != "$EXPECTED_NEURAL_CALIBRATION_SCHEMA" ]; then
     --mapping "$RETINOTOPIC_MAP" \
     --output "$NEURAL_CALIBRATION"
 fi
+"${PYTHON_RUNNER[@]}" - "$NEURAL_CALIBRATION" "$SNAPSHOT" <<'PY'
+from pathlib import Path
+import sys
+from virtual_fly.reproducibility import validate_derived_artifact
+validate_derived_artifact(Path(sys.argv[1]), Path(sys.argv[2]))
+print("neural_calibration_provenance=PASS")
+PY
 
 VF_NEURAL_SYNAPSE_SCALE="$("${PYTHON_RUNNER[@]}" -c 'import json,sys; print(json.load(open(sys.argv[1]))["synapse_scale"])' "$NEURAL_CALIBRATION")"
 export VF_NEURAL_SYNAPSE_SCALE
+export VF_NEURAL_CALIBRATION_PATH="$NEURAL_CALIBRATION"
 unset VF_COURSE_START_GATE || true
 
 "${CARGO_RUNNER[@]}" test -q -p vf-neural transaction::tests
@@ -240,6 +272,7 @@ TRAIN_ARGS=(
   --environment-version "$ENVIRONMENT_VERSION"
   --flight-body-version "$FLIGHT_BODY_VERSION"
   --haltere-sensory-map "$HALTERE_SENSORY_MAP"
+  --haltere-sensory-kind "$HALTERE_SENSORY_KIND"
   --haltere-current-gain "$HALTERE_CURRENT_GAIN"
   --haltere-transduction "$HALTERE_TRANSDUCTION"
   --checkpoint-every "$CHECKPOINT_EVERY"

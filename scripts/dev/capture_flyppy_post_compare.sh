@@ -21,6 +21,7 @@ capture_one() {
     --environment-version v7 \
     --flight-body-version v7 \
     --haltere-sensory-map "$HALTERE_MAP" \
+    --haltere-sensory-kind male-cns-haltere-timing-afferents-inferred-v1 \
     --haltere-current-gain "$HALTERE_GAIN" \
     --haltere-transduction interaction-load-v2 \
     --course-seed 0 \

@@ -32,6 +32,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from virtual_fly.reproducibility import git_provenance, sha256_file
+
 
 ANNOTATION_FILENAME = "body-annotations-male-cns-v1.0-minconf-0.5.feather"
 ANNOTATION_URL = (
@@ -312,6 +314,11 @@ def main() -> int:
     output = {
         "schema_version": 3,
         "dataset": "male-cns:v1.0",
+        "artifact_provenance": {
+            "generator": "scripts/data/prepare_retinotopic_vision.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+            "snapshot_manifest_sha256": sha256_file(args.snapshot / "manifest.json"),
+        },
         "sensory_boundary": "released R1-R6 photoreceptors",
         "column_coordinate_system": "MaleCNS assignedOlHex1/assignedOlHex2",
         "assignment_method": method,

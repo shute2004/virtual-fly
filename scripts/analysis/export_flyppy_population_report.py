@@ -54,18 +54,41 @@ def main() -> int:
     body_runtime = str(payload.get("body_runtime", "unknown"))
     body_processes = payload.get("body_processes")
     launch_mode = str(payload.get("launch_mode", "async"))
+    reproducibility = payload.get("reproducibility")
+    reproducibility = reproducibility if isinstance(reproducibility, dict) else {}
+    conditions = reproducibility.get("conditions")
+    conditions = conditions if isinstance(conditions, dict) else {}
+    haltere = conditions.get("haltere")
+    haltere = haltere if isinstance(haltere, dict) else {}
+    semantics = reproducibility.get("semantics")
+    semantics = semantics if isinstance(semantics, dict) else {}
+    snapshot = reproducibility.get("snapshot")
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    code = reproducibility.get("code")
+    code = code if isinstance(code, dict) else {}
 
     lines = [
         "# Flyppy shared-weight population latest run",
         "",
         f"- backend: `{payload.get('backend', '-')}`",
         f"- population: {payload.get('population', '-')}",
+        f"- body version: `{payload.get('flight_body_version', '-')}`",
+        f"- environment version: `{payload.get('environment_version', '-')}`",
         f"- body runtime: `{body_runtime}`",
         f"- body processes: {body_processes if body_processes is not None else '-'}",
         f"- launch mode: `{launch_mode}`",
         f"- vision runtime: `{vision_runtime}`",
         f"- rays/ommatidium: {vision_rays if vision_rays is not None else '-'}",
         f"- RGB framebuffer: {str(bool(vision_framebuffer)).lower() if vision_framebuffer is not None else '-'}",
+        f"- haltere enabled: {str(bool(haltere.get('enabled'))).lower() if haltere else '-'}",
+        f"- haltere map kind: `{haltere.get('map_kind', '-')}`",
+        f"- haltere current gain: {haltere.get('current_gain', '-')}",
+        f"- haltere transduction: `{haltere.get('transduction', '-')}`",
+        f"- snapshot semantics: `{snapshot.get('runtime_semantics', '-')}`",
+        f"- neural runtime semantics: `{semantics.get('neural_runtime', '-')}`",
+        f"- plasticity semantics: `{semantics.get('plasticity', '-')}`",
+        f"- Git SHA: `{code.get('git_sha', '-')}`",
+        f"- Git dirty: {str(bool(code.get('dirty'))).lower() if 'dirty' in code else '-'}",
         f"- shared weight: {str(bool(payload.get('shared_weight'))).lower()}",
         f"- weight averaging: {str(bool(payload.get('weight_averaging'))).lower()}",
         f"- episodes: {len(episodes)}",
@@ -78,6 +101,9 @@ def main() -> int:
         f"- global weight version: {payload.get('global_weight_version_start', '-')} -> {payload.get('global_weight_version_end', '-')}",
         f"- mean version staleness: {float(payload.get('mean_version_staleness', 0.0)):.3f}",
         f"- max version staleness: {int(payload.get('max_version_staleness', 0))}",
+        f"- checkpoint semantics: `{payload.get('checkpoint_semantics', 'legacy/unspecified')}`",
+        f"- checkpoint neural step: {payload.get('checkpoint_neural_step', '-')}",
+        f"- checkpoint neural step semantics: `{payload.get('checkpoint_neural_step_semantics', 'legacy/unspecified')}`",
         "- commit semantics: episode-local additive+clamp transaction rebased onto latest global weight",
         "",
         "| ep | slot | source v | commit from | commit v | stale | steps | passed | collision |",

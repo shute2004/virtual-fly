@@ -23,6 +23,8 @@ from pathlib import Path
 
 import mujoco
 
+from virtual_fly.reproducibility import HALTERE_FULL_KIND, validate_haltere_map
+
 
 DEFAULT_MAP = Path("artifacts/malecns-v1.0/haltere-campaniform-sensory-v1.json")
 NOMINAL_HALF_STROKE_RAD = math.radians(90.0)
@@ -57,10 +59,13 @@ class HaltereCampaniformSensor:
         *,
         current_gain: float = 0.0,
         transduction: str = "angular-acceleration-v1",
+        expected_kind: str = HALTERE_FULL_KIND,
+        snapshot: Path | None = None,
     ) -> None:
+        validation = validate_haltere_map(Path(sensory_map), expected_kind, snapshot=snapshot)
         payload = json.loads(Path(sensory_map).read_text(encoding="utf-8"))
-        if int(payload.get("schema_version", 0)) != 1:
-            raise ValueError("haltere sensory map schema 1 is required")
+        self.map_kind = str(validation["kind"])
+        self.map_sha256 = str(validation["sha256"])
         by_side = payload.get("body_ids_by_side") or {}
         self.body_ids_by_side = {
             "left": tuple(int(v) for v in by_side.get("left", ())),

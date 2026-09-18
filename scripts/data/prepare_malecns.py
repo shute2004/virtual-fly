@@ -20,6 +20,12 @@ import pandas as pd
 import pyarrow.compute as pc
 import pyarrow.feather as feather
 
+from virtual_fly.reproducibility import (
+    MALECNS_RUNTIME_SEMANTICS,
+    MODULATOR_ROLE_DEFINITION,
+    git_provenance,
+)
+
 BASE_URL = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome"
 FILES = {
     "annotations": "body-annotations-male-cns-v1.0-minconf-0.5.feather",
@@ -265,9 +271,24 @@ def main() -> int:
     write_metadata_subset(neurons, bodies, args.output)
 
     source_hashes = {key: sha256(path) for key, path in paths.items()}
+    generated_files = (
+        "body_ids.u64le",
+        "row_offsets.u32le",
+        "pre_indices.u32le",
+        "synapse_counts.u32le",
+        "neurotransmitters.u8",
+        "modulator_roles.u8",
+        "annotations.feather",
+    )
+    generated_hashes = {name: sha256(args.output / name) for name in generated_files}
     manifest = {
         "format_version": 1,
         "dataset": "male-cns:v1.0",
+        "runtime_semantics": MALECNS_RUNTIME_SEMANTICS,
+        "generator_provenance": {
+            "generator": "scripts/data/prepare_malecns.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+        },
         "neuron_count": int(len(bodies)),
         "edge_count": int(len(pre_indices)),
         "synapse_count_sum": int(counts.astype(np.uint64).sum()),
@@ -277,9 +298,10 @@ def main() -> int:
         "synapse_counts_file": "synapse_counts.u32le",
         "neurotransmitters_file": "neurotransmitters.u8",
         "modulator_roles_file": "modulator_roles.u8",
-        "modulator_role_definition": "consensus_nt=dopamine AND released annotation class=DAN",
+        "modulator_role_definition": MODULATOR_ROLE_DEFINITION,
         "annotations_file": "annotations.feather",
         "source_sha256": source_hashes,
+        "generated_sha256": generated_hashes,
         "source_base_url": BASE_URL,
         "source_license": "CC-BY",
         "source_edge_filter": {"min_released_synapse_count": args.min_synapses},

@@ -9,6 +9,7 @@ cd "$ROOT"
 MODE="${1:-start}"
 export VF_FLYBODY_VERSION=v7
 export VF_HALTERE_SENSORY_MAP="${VF_HALTERE_SENSORY_MAP:-$ROOT/artifacts/malecns-v1.0/haltere-timing-afferents-v1.json}"
+export VF_HALTERE_SENSORY_KIND="${VF_HALTERE_SENSORY_KIND:-male-cns-haltere-timing-afferents-inferred-v1}"
 export VF_HALTERE_CURRENT_GAIN="${VF_HALTERE_CURRENT_GAIN:-0.05}"
 export VF_HALTERE_TRANSDUCTION="${VF_HALTERE_TRANSDUCTION:-interaction-load-v2}"
 export VF_FLYPPY_GATE2_SOURCE="${VF_FLYPPY_GATE2_SOURCE:-artifacts/experiments/flyppy-v7-gate2-height-v2}"

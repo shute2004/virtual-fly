@@ -166,14 +166,20 @@ def main() -> int:
         f"- curriculum mode: `{curriculum_mode}`",
         f"- launch mode: `{payload.get('launch_mode', 'async')}`",
     ]
-    if training_gate_index is None:
-        lines.append("- adaptive training criterion: first gate pass (`passed_gates > 0`)")
-    else:
-        lines.append(f"- curriculum training gate: {training_gate_index + 1}")
+    if curriculum_mode == "adaptive":
+        if training_gate_index is None:
+            lines.append("- adaptive training criterion: first gate pass (`passed_gates > 0`)")
+        else:
+            lines.append(f"- adaptive curriculum training gate: {training_gate_index + 1}")
+    elif curriculum_mode == "boundary-band":
+        lines.append("- boundary-band criterion: batch-level success-rate update")
+    elif curriculum_mode == "gate2-height":
+        lines.append("- gate2-height criterion: current-frontier success with retention/review bookkeeping")
     lines.extend([
         f"- episode: {payload.get('episode_start', episodes[0].get('episode'))}〜{payload.get('episode_end', episodes[-1].get('episode'))}（{episode_count} episode）",
         f"- elapsed: {elapsed:.3f} s（平均 {elapsed / episode_count:.3f} s/episode）",
         f"- checkpoint neural step: {payload.get('checkpoint_neural_step', '-')}",
+        f"- checkpoint neural step semantics: `{payload.get('checkpoint_neural_step_semantics', 'legacy/unspecified')}`",
         f"- first gate通過episode: {len(first_gate_successes)}/{episode_count}（{100.0 * len(first_gate_successes) / episode_count:.1f}%）",
         f"- first gate後にさらに1 gate以上通過: {len(additional_gate_successes)} episode",
         f"- first gate通過後に衝突: {len(post_first_gate_collisions)} episode",
@@ -214,7 +220,7 @@ def main() -> int:
             lines.append(f"- {key}: {fmt(curriculum[key])}")
 
     boundary = curriculum.get("boundary_band")
-    if isinstance(boundary, dict):
+    if curriculum_mode == "boundary-band" and isinstance(boundary, dict):
         lines.extend([
             "",
             "## 境界帯カリキュラム",
@@ -249,6 +255,26 @@ def main() -> int:
                 lines.append(
                     f"| {level:.2f} | {len(rows)} | {level_successes} | {100.0 * level_successes / len(rows):.1f}% |"
                 )
+
+    gate_height = curriculum.get("gate_height_curriculum")
+    if curriculum_mode == "gate2-height" and isinstance(gate_height, dict):
+        lines.extend([
+            "",
+            "## Gate2-heightカリキュラム",
+            "",
+            f"- gate_index: {gate_height.get('gate_index', '-')}",
+            f"- frontier_center_z_mm: {fmt(gate_height.get('frontier_center_z_mm'))}",
+            f"- target_center_z_mm: {fmt(gate_height.get('target_center_z_mm'))}",
+            f"- step_mm: {fmt(gate_height.get('step_mm'))}",
+            f"- batch_number: {gate_height.get('batch_number', '-')}",
+            f"- role_attempts: {gate_height.get('role_attempts', {})}",
+            f"- role_successes: {gate_height.get('role_successes', {})}",
+            f"- last_role_success_rates: {gate_height.get('last_role_success_rates', {})}",
+            f"- mastered_centers_z_mm: {gate_height.get('mastered_centers_z_mm', [])}",
+            f"- last_adjustment: {gate_height.get('last_adjustment', '-')}",
+            f"- advances: {gate_height.get('advances', '-')}",
+            f"- curriculum_complete: {fmt(gate_height.get('curriculum_complete'))}",
+        ])
 
     lines.extend([
         "",
@@ -321,9 +347,9 @@ def main() -> int:
         "",
         "## 判定用メモ",
         "",
-        "- adaptive curriculumの現在の成功条件は `passed_gates > 0`、すなわちfirst gate通過です。episode全体の無衝突成功を意味しません。",
-        "- `training_gate_index` がstateに存在する場合のみ、その値を明示します。0始まりです。",
-        "- `boundary_ease_level` は0.00=難しい端、1.00=易しい端です。",
+        f"- curriculum modeは `{curriculum_mode}` です。別modeの判定規則をこのrunへ流用しません。",
+        "- `training_gate_index` はadaptive系stateに存在する場合のみ表示します。0始まりです。",
+        "- `boundary_ease_level` はboundary-band由来の履歴フィールドで、gate2-heightのcurrent/review判定には使用しません。",
         "- `latest.csv` がepisode単位の機械可読データです。",
         "- checkpoint、trajectory、live telemetryなどの巨大/高頻度データは `artifacts/` に残し、Gitへは含めません。",
         "- このレポートは最新runで上書きします。過去runはGit履歴から比較できます。",

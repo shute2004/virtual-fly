@@ -97,6 +97,7 @@ class ProcessSlotState:
 
 def worker_config(args) -> dict[str, object]:
     return {
+        "snapshot": str(args.snapshot),
         "seed": int(args.seed),
         "fixed_course_seed": (
             None if getattr(args, "fixed_course_seed", None) is None else int(args.fixed_course_seed)
@@ -113,6 +114,7 @@ def worker_config(args) -> dict[str, object]:
         "body_motor_map": str(args.body_motor_map),
         "retinotopic_map": str(args.retinotopic_map),
         "haltere_sensory_map": str(args.haltere_sensory_map),
+        "haltere_sensory_kind": str(args.haltere_sensory_kind),
         "photoreceptor_current_gain": float(args.photoreceptor_current_gain),
         "haltere_current_gain": float(args.haltere_current_gain),
         "haltere_transduction": str(getattr(args, "haltere_transduction", "angular-acceleration-v1")),
@@ -340,6 +342,20 @@ def main() -> int:
         raise SystemExit(str(error)) from error
     initial_global_version = resume_plan.initial_global_weight_version
     start_episode = resume_plan.start_episode
+    reproducibility = reference.run_reproducibility_metadata(
+        args,
+        body_runtime="process-isolated",
+        vision_mode_override="raster",
+        vision_rays_override=0,
+    )
+    provenance_path = reference.write_run_provenance(
+        output,
+        start_episode=start_episode,
+        initial_global_weight_version=initial_global_version,
+        payload=reproducibility,
+    )
+    for warning in reproducibility["conditions"].get("compatibility_warnings", []):
+        print(f"compatibility_warning={warning}")
     reconciliation = resume_plan.reconciliation
     if reconciliation is not None and reconciliation.changed:
         print(
@@ -1054,6 +1070,13 @@ def main() -> int:
         "launch_mode": args.launch_mode,
         "environment_version": args.environment_version,
         "flight_body_version": getattr(args, "flight_body_version", "v3"),
+        "haltere_sensory_feedback": {
+            "enabled": float(args.haltere_current_gain) > 0.0,
+            "current_gain": float(args.haltere_current_gain),
+            "map": str(args.haltere_sensory_map),
+            "map_kind": str(args.haltere_sensory_kind),
+            "transduction": str(args.haltere_transduction),
+        },
         "motor_boundary": "whole-body",
         "physical_spec": {
             "morphology": FLYBODY_V3.morphology,
@@ -1084,8 +1107,13 @@ def main() -> int:
         "total_collisions_this_run": sum(bool(item["collision"]) for item in results),
         "curriculum": state,
         "episode_results": sorted(results, key=lambda item: int(item["episode"])),
-        "full_cns_checkpoint": str(checkpoint),
+        "population_weight_checkpoint": str(checkpoint),
+        "checkpoint_semantics": "global-weights-only-v1",
+        "checkpoint_resume_behavior": "population fast neural/plasticity state is reset; only global weights are restored",
         "checkpoint_neural_step": saved_state.get("step"),
+        "checkpoint_neural_step_semantics": "aggregate-slot-neural-step-count-v1",
+        "reproducibility": reproducibility,
+        "provenance_file": str(provenance_path),
         "global_weight_version_start": initial_global_version,
         "global_weight_version_end": final_global_version,
         "mean_version_staleness": (

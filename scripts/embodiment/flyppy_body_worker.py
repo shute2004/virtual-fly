@@ -22,6 +22,7 @@ from typing import Any
 
 def _worker_args(config: dict[str, Any]) -> SimpleNamespace:
     return SimpleNamespace(
+        snapshot=Path(config["snapshot"]),
         seed=int(config["seed"]),
         fixed_course_seed=(
             None if config.get("fixed_course_seed") is None else int(config["fixed_course_seed"])
@@ -31,10 +32,14 @@ def _worker_args(config: dict[str, Any]) -> SimpleNamespace:
         flight_body_version=str(config.get("flight_body_version", "v3")),
         vertical_steering_gain=float(config.get("vertical_steering_gain", 1.0)),
         measured_steering_gain=float(config.get("measured_steering_gain", 1.0)),
+        neutral_trim_strength=float(config.get("neutral_trim_strength", 1.0)),
+        steering_tau_ms=float(config.get("steering_tau_ms", 12.0)),
+        steering_spike_increment=float(config.get("steering_spike_increment", 0.85)),
         wing_motor_map=Path(config["wing_motor_map"]),
         body_motor_map=Path(config["body_motor_map"]),
         retinotopic_map=Path(config["retinotopic_map"]),
         haltere_sensory_map=Path(config.get("haltere_sensory_map", "artifacts/malecns-v1.0/haltere-campaniform-sensory-v1.json")),
+        haltere_sensory_kind=str(config.get("haltere_sensory_kind", "male-cns-haltere-campaniform-afferents")),
         photoreceptor_current_gain=float(config["photoreceptor_current_gain"]),
         haltere_current_gain=float(config.get("haltere_current_gain", 0.0)),
         haltere_transduction=str(config.get("haltere_transduction", "angular-acceleration-v1")),

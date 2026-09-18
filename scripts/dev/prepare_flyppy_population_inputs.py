@@ -16,6 +16,14 @@ import subprocess
 import sys
 import traceback
 
+from virtual_fly.reproducibility import (
+    HALTERE_FULL_KIND,
+    HALTERE_TIMING_KIND,
+    validate_haltere_map,
+    validate_production_snapshot,
+    validate_derived_artifact,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REPORT = ROOT / "reports/flyppy/population_input_prepare.md"
 
@@ -26,6 +34,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--groups", type=Path)
     p.add_argument("--retinotopic-map", type=Path)
     p.add_argument("--haltere-sensory-map", type=Path)
+    p.add_argument(
+        "--haltere-sensory-kind",
+        choices=(HALTERE_FULL_KIND, HALTERE_TIMING_KIND),
+        default=HALTERE_FULL_KIND,
+    )
     p.add_argument("--wing-motor-map", type=Path)
     p.add_argument("--body-motor-map", type=Path)
     p.add_argument("--report", type=Path, default=DEFAULT_REPORT)
@@ -78,7 +91,15 @@ def main() -> int:
         missing_snapshot = [str(p) for p in required_snapshot if not p.exists()]
         if missing_snapshot:
             raise FileNotFoundError("missing snapshot files: " + ", ".join(missing_snapshot))
-        stages.append({"stage": "snapshot", "ok": True, "detail": "required snapshot files present"})
+        snapshot_semantics = validate_production_snapshot(snapshot)
+        stages.append({
+            "stage": "snapshot",
+            "ok": True,
+            "detail": (
+                f"production semantics={snapshot_semantics['runtime_semantics']} "
+                f"snapshot_sha256={snapshot_semantics['snapshot_sha256']}"
+            ),
+        })
 
         if not groups.exists():
             run_stage(
@@ -117,28 +138,72 @@ def main() -> int:
             stages.append({"stage": "generate_retinotopic_map", "ok": True, "detail": "already present"})
 
         if not haltere.exists():
-            run_stage(
-                "generate_haltere_sensory_map",
-                [
-                    python,
-                    "scripts/data/prepare_haltere_sensory_map.py",
-                    "--annotations",
-                    str(snapshot / "annotations.feather"),
-                    "--output",
-                    str(haltere),
-                ],
-                stages,
-            )
-        else:
-            stages.append({
-                "stage": "generate_haltere_sensory_map",
-                "ok": True,
-                "detail": "already present",
-            })
+            if args.haltere_sensory_kind == HALTERE_TIMING_KIND:
+                base = snapshot / "haltere-campaniform-sensory-v1.json"
+                if not base.exists():
+                    run_stage(
+                        "generate_haltere_full_map",
+                        [
+                            python,
+                            "scripts/data/prepare_haltere_sensory_map.py",
+                            "--annotations",
+                            str(snapshot / "annotations.feather"),
+                            "--output",
+                            str(base),
+                        ],
+                        stages,
+                    )
+                validate_haltere_map(base, HALTERE_FULL_KIND, snapshot=snapshot)
+                run_stage(
+                    "generate_haltere_timing_map",
+                    [
+                        python,
+                        "scripts/data/prepare_haltere_timing_sensory_map.py",
+                        "--snapshot",
+                        str(snapshot),
+                        "--base-map",
+                        str(base),
+                        "--output",
+                        str(haltere),
+                    ],
+                    stages,
+                )
+            else:
+                run_stage(
+                    "generate_haltere_full_map",
+                    [
+                        python,
+                        "scripts/data/prepare_haltere_sensory_map.py",
+                        "--annotations",
+                        str(snapshot / "annotations.feather"),
+                        "--output",
+                        str(haltere),
+                    ],
+                    stages,
+                )
+        validation = validate_haltere_map(haltere, args.haltere_sensory_kind, snapshot=snapshot)
+        stages.append({
+            "stage": "validate_haltere_sensory_map",
+            "ok": True,
+            "detail": f"kind={validation['kind']} count={validation['count']} sha256={validation['sha256']}",
+        })
 
         for path in (groups, wing, body, retina, haltere):
             if not path.exists() or path.stat().st_size == 0:
                 raise RuntimeError(f"generated input missing or empty: {path}")
+
+        for label, path in (
+            ("embodiment_groups", groups),
+            ("wing_motor_map", wing),
+            ("body_motor_map", body),
+            ("retinotopic_map", retina),
+        ):
+            info = validate_derived_artifact(path, snapshot)
+            stages.append({
+                "stage": f"validate_{label}",
+                "ok": True,
+                "detail": f"sha256={info['sha256']} generator={info['generator']}",
+            })
 
         group_payload = json.loads(groups.read_text(encoding="utf-8"))
         group_names = set(group_payload.get("groups", {}))
@@ -170,6 +235,7 @@ def main() -> int:
         f"- body motor map: `{body}`",
         f"- retinotopic map: `{retina}`",
         f"- haltere sensory map: `{haltere}`",
+        f"- haltere sensory kind: `{args.haltere_sensory_kind}`",
         "",
         "## Stages",
         "",

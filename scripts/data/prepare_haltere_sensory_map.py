@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from virtual_fly.reproducibility import HALTERE_FULL_KIND, git_provenance, sha256_file
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
@@ -74,7 +76,8 @@ def main() -> int:
     }
     payload = {
         "schema_version": 1,
-        "kind": "male-cns-haltere-campaniform-afferents",
+        "kind": HALTERE_FULL_KIND,
+        "dataset": "male-cns:v1.0",
         "selection": {
             "entryNerve": "DMetaN",
             "class": "mechanosensory_proprioceptive",
@@ -85,6 +88,11 @@ def main() -> int:
         "counts_by_side": {k: len(v) for k, v in by_side.items()},
         "body_ids_by_side": by_side,
         "neurons": neurons,
+        "provenance": {
+            "generator": "scripts/data/prepare_haltere_sensory_map.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+            "annotations_sha256": sha256_file(args.annotations),
+        },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

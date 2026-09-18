@@ -20,6 +20,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from virtual_fly.reproducibility import git_provenance, sha256_file
+
 DOPAMINE_CODE = 4
 VERTICAL_MOTION_TYPES = ("T4c", "T4d", "T5c", "T5d")
 
@@ -169,6 +171,11 @@ def main() -> int:
     bridge = {
         "schema_version": 2,
         "groups": groups,
+        "artifact_provenance": {
+            "generator": "scripts/data/make_embodiment_groups.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+            "snapshot_manifest_sha256": sha256_file(args.snapshot / "manifest.json"),
+        },
         "provenance": {
             "flight_thrust": (
                 "DNg02 population; legacy diagnostic only. Target motor output reads "

@@ -17,6 +17,7 @@ def summary(launch_mode: str) -> dict[str, object]:
     return {
         "experiment": "flyppy_v3_shared_weight_population",
         "environment_version": "v3",
+        "flight_body_version": "v3",
         "motor_boundary": "whole-body",
         "backend": "gpu-population:test",
         "population": 4,
@@ -32,6 +33,17 @@ def summary(launch_mode: str) -> dict[str, object]:
         "checkpoint_neural_step": 17000,
         "curriculum_mode": "boundary-band",
         "launch_mode": launch_mode,
+        "checkpoint_semantics": "global-weights-only-v1",
+        "checkpoint_neural_step_semantics": "aggregate-slot-neural-step-count-v1",
+        "reproducibility": {
+            "code": {"git_sha": "abc123", "dirty": False},
+            "dependency_lock": {"composite_sha256": "lock123"},
+            "snapshot": {"runtime_semantics": "male-cns-v1-class-dan-v1", "snapshot_sha256": "snap123"},
+            "semantics": {"neural_runtime": "signed-activity-local-dynamics-v1", "plasticity": "local-three-factor-dopamine-eligibility-v1"},
+            "conditions": {
+                "haltere": {"enabled": True, "map_kind": "male-cns-haltere-timing-afferents-inferred-v1", "current_gain": 0.05, "transduction": "interaction-load-v2"}
+            },
+        },
         "curriculum": {"curriculum_episodes": 280},
         "episode_results": [
             {
@@ -56,6 +68,15 @@ class RunHistoryTests(unittest.TestCase):
         self.assertEqual(async_row["launch_mode"], "async")
         self.assertEqual(wave_row["launch_mode"], "wave")
         self.assertNotEqual(async_row["run_key"], wave_row["run_key"])
+
+    def test_reproducibility_fields_are_preserved(self) -> None:
+        row = build_row(summary("async"))
+        self.assertEqual(row["flight_body_version"], "v3")
+        self.assertEqual(row["haltere_sensory_kind"], "male-cns-haltere-timing-afferents-inferred-v1")
+        self.assertEqual(row["snapshot_semantics"], "male-cns-v1-class-dan-v1")
+        self.assertEqual(row["neural_runtime_semantics"], "signed-activity-local-dynamics-v1")
+        self.assertEqual(row["git_sha"], "abc123")
+        self.assertEqual(row["checkpoint_neural_step_semantics"], "aggregate-slot-neural-step-count-v1")
 
     def test_legacy_summary_leaves_launch_mode_blank(self) -> None:
         payload = summary("async")

@@ -17,6 +17,10 @@ pub struct CheckpointManifest {
     pub step: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub global_weight_version: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint_semantics: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_semantics: Option<String>,
     pub membrane_file: String,
     pub spikes_file: String,
     pub refractory_file: String,
@@ -32,6 +36,28 @@ pub struct CheckpointManifest {
 // graded inhibitory circuits such as R1-R6 -> lamina and therefore old dynamic
 // state must not be resumed under the new runtime semantics.
 const SCHEMA_VERSION: u32 = 3;
+pub const POPULATION_CHECKPOINT_SEMANTICS: &str = "global-weights-only-v1";
+pub const POPULATION_STEP_SEMANTICS: &str = "aggregate-slot-neural-step-count-v1";
+
+pub fn validate_population_checkpoint_manifest(manifest: &CheckpointManifest) -> Result<()> {
+    let allow_legacy = std::env::var("VF_ALLOW_LEGACY_POPULATION_CHECKPOINT")
+        .map(|value| value == "1")
+        .unwrap_or(false);
+    if allow_legacy {
+        return Ok(());
+    }
+    if manifest.checkpoint_semantics.as_deref() != Some(POPULATION_CHECKPOINT_SEMANTICS) {
+        bail!(
+            "population checkpoint lacks explicit {POPULATION_CHECKPOINT_SEMANTICS} semantics; set VF_ALLOW_LEGACY_POPULATION_CHECKPOINT=1 only for intentional historical replay"
+        );
+    }
+    if manifest.step_semantics.as_deref() != Some(POPULATION_STEP_SEMANTICS) {
+        bail!(
+            "population checkpoint neural step semantics are missing or incompatible; expected {POPULATION_STEP_SEMANTICS}"
+        );
+    }
+    Ok(())
+}
 
 pub fn save_checkpoint(
     directory: impl AsRef<Path>,
@@ -75,6 +101,22 @@ fn save_checkpoint_impl(
         edge_count: state.weights.len(),
         step,
         global_weight_version,
+        checkpoint_semantics: Some(
+            if global_weight_version.is_some() {
+                POPULATION_CHECKPOINT_SEMANTICS
+            } else {
+                "full-neural-state-v1"
+            }
+            .to_owned(),
+        ),
+        step_semantics: Some(
+            if global_weight_version.is_some() {
+                POPULATION_STEP_SEMANTICS
+            } else {
+                "serial-runtime-neural-step-count-v1"
+            }
+            .to_owned(),
+        ),
         membrane_file: "membrane.f32le".to_owned(),
         spikes_file: "spikes.u32le".to_owned(),
         refractory_file: "refractory.u32le".to_owned(),
@@ -299,5 +341,36 @@ mod tests {
         assert_eq!(loaded_manifest.global_weight_version, Some(184));
         assert_eq!(loaded.weights, state.weights);
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn population_checkpoint_declares_weights_only_and_aggregate_step_semantics() {
+        let root = std::env::temp_dir().join(format!(
+            "virtual-fly-population-semantics-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let state = NeuralState {
+            membrane: vec![0.0],
+            spikes: vec![0],
+            refractory: vec![0],
+            activity_trace: vec![0.0],
+            modulation: vec![0.0],
+            weights: vec![0.25],
+            eligibility: vec![0.0],
+        };
+        let saved =
+            save_checkpoint_with_global_weight_version(&root, "synthetic:test", 11, &state, 9)
+                .unwrap();
+        assert_eq!(
+            saved.checkpoint_semantics.as_deref(),
+            Some(POPULATION_CHECKPOINT_SEMANTICS)
+        );
+        assert_eq!(
+            saved.step_semantics.as_deref(),
+            Some(POPULATION_STEP_SEMANTICS)
+        );
+        validate_population_checkpoint_manifest(&saved).unwrap();
+        let _ = fs::remove_dir_all(root);
     }
 }

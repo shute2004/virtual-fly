@@ -25,6 +25,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from virtual_fly.reproducibility import HALTERE_TIMING_KIND, git_provenance, sha256_file
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SNAPSHOT = ROOT / "artifacts/malecns-v1.0"
@@ -106,7 +108,8 @@ def main() -> int:
 
     payload = {
         "schema_version": 1,
-        "kind": "male-cns-haltere-timing-afferents-inferred-v1",
+        "kind": HALTERE_TIMING_KIND,
+        "dataset": "male-cns:v1.0",
         "evidence_status": "inferred_from_released_connectivity",
         "base_boundary": str(args.base_map),
         "selection": {
@@ -121,6 +124,12 @@ def main() -> int:
         "counts_by_side": {side: len(v) for side, v in selected_by_side.items()},
         "body_ids_by_side": selected_by_side,
         "neurons": sorted(neurons, key=lambda row: (str(row["side"]), int(row["body_id"]))),
+        "provenance": {
+            "generator": "scripts/data/prepare_haltere_timing_sensory_map.py",
+            "generator_git": git_provenance(ROOT),
+            "snapshot_manifest_sha256": sha256_file(snapshot / "manifest.json"),
+            "base_map_sha256": sha256_file(args.base_map.resolve()),
+        },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

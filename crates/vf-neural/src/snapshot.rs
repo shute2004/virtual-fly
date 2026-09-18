@@ -17,6 +17,10 @@ pub struct SnapshotManifest {
     #[serde(default)]
     pub modulator_roles_file: Option<String>,
     #[serde(default)]
+    pub modulator_role_definition: Option<String>,
+    #[serde(default)]
+    pub runtime_semantics: Option<String>,
+    #[serde(default)]
     pub source_sha256: serde_json::Value,
 }
 
@@ -59,6 +63,26 @@ impl ConnectomeSnapshot {
                 "unsupported snapshot format {}; expected 1",
                 manifest.format_version
             );
+        }
+
+        let is_malecns = manifest.dataset.starts_with("male-cns:");
+        let allow_legacy_malecns = std::env::var("VF_ALLOW_LEGACY_MALECNS_SNAPSHOT")
+            .map(|value| value == "1")
+            .unwrap_or(false);
+        if is_malecns && !allow_legacy_malecns {
+            const EXPECTED_SEMANTICS: &str = "male-cns-v1-class-dan-v1";
+            const EXPECTED_ROLE: &str = "consensus_nt=dopamine AND released annotation class=DAN";
+            if manifest.runtime_semantics.as_deref() != Some(EXPECTED_SEMANTICS) {
+                bail!(
+                    "MaleCNS snapshot runtime semantics are missing or incompatible; expected {EXPECTED_SEMANTICS}. Rebuild the snapshot with current prepare_malecns.py. Set VF_ALLOW_LEGACY_MALECNS_SNAPSHOT=1 only for explicit historical replay."
+                );
+            }
+            if manifest.modulator_roles_file.is_none() {
+                bail!("MaleCNS production snapshot is missing modulator_roles_file");
+            }
+            if manifest.modulator_role_definition.as_deref() != Some(EXPECTED_ROLE) {
+                bail!("MaleCNS production snapshot has incompatible modulator role definition");
+            }
         }
 
         let body_ids = read_u64_le(path.join(&manifest.body_ids_file))?;
@@ -162,6 +186,8 @@ impl ConnectomeSnapshot {
                 synapse_counts_file: String::new(),
                 neurotransmitters_file: String::new(),
                 modulator_roles_file: None,
+                modulator_role_definition: None,
+                runtime_semantics: None,
                 source_sha256: serde_json::Value::Null,
             },
             body_ids: (0..neuron_count as u64).collect(),

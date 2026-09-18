@@ -18,6 +18,7 @@ from types import MethodType
 
 from flybody_measured_wingbeat import DEFAULT_PATTERN, MeasuredWingbeatCycle
 from flybody_v4_adapter import FlyBodyV4MuscleAdapter, FlyBodyV4NeuromuscularAdapter
+from virtual_fly.reproducibility import validate_neutral_trim
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,8 +40,10 @@ class _NeutralTrimMixin:
         # Build v4 on the untouched published pattern first.  The neutral trim is
         # then blended at the body seam, so strength=0 is exactly the v4 baseline.
         super().__init__(*args, measured_wing_pattern=DEFAULT_PATTERN, **kwargs)
+        pattern_path = Path(measured_wing_pattern)
+        validate_neutral_trim(pattern_path)
         raw = MeasuredWingbeatCycle(DEFAULT_PATTERN)
-        trimmed = MeasuredWingbeatCycle(Path(measured_wing_pattern))
+        trimmed = MeasuredWingbeatCycle(pattern_path)
         if raw.pattern.shape != trimmed.pattern.shape:
             raise ValueError("neutral trim must have the same shape as the source pattern")
 

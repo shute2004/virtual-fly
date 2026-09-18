@@ -27,6 +27,8 @@ from typing import Any
 
 import numpy as np
 
+from virtual_fly.reproducibility import validate_production_snapshot
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SNAPSHOT = Path("artifacts/malecns-v1.0")
@@ -87,6 +89,8 @@ def main() -> int:
     graph_path = absolute(args.graph)
     report_path = absolute(args.report)
     manifest = load_manifest(snapshot)
+    if str(manifest.get("dataset", "")).startswith("male-cns:"):
+        validate_production_snapshot(snapshot)
 
     n = int(manifest["neuron_count"])
     e = int(manifest["edge_count"])
@@ -106,6 +110,8 @@ def main() -> int:
     if role_file:
         modulator_roles = np.fromfile(snapshot / str(role_file), dtype=np.uint8)
     else:
+        # Non-MaleCNS synthetic/legacy analysis only. Production MaleCNS was
+        # rejected above rather than silently restoring transmitter==DAN semantics.
         modulator_roles = (neurotransmitters == NT_DOPAMINE).astype(np.uint8)
 
     if row_offsets.size != n + 1:

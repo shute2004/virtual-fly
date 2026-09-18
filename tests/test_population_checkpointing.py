@@ -7,6 +7,8 @@ import unittest
 
 from virtual_fly.training.checkpointing import (
     COMMIT_SEMANTICS,
+    POPULATION_CHECKPOINT_SEMANTICS,
+    POPULATION_NEURAL_STEP_SEMANTICS,
     persist_shared_checkpoint,
     population_state_snapshot,
     prepare_population_resume,
@@ -25,7 +27,7 @@ class PopulationCheckpointingTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "population-state.json").write_text(
-                json.dumps({"global_weight_version": 0, "launch_mode": "async"}) + "\n",
+                json.dumps({"schema_version": 2, "global_weight_version": 0, "launch_mode": "async", "checkpoint_semantics": POPULATION_CHECKPOINT_SEMANTICS, "neural_step_semantics": POPULATION_NEURAL_STEP_SEMANTICS}) + "\n",
                 encoding="utf-8",
             )
             recovery = recover_population_storage(root)
@@ -37,7 +39,7 @@ class PopulationCheckpointingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "population-state.json").write_text(
-                json.dumps({"global_weight_version": 1, "launch_mode": "async"}) + "\n",
+                json.dumps({"schema_version": 2, "global_weight_version": 1, "launch_mode": "async", "checkpoint_semantics": POPULATION_CHECKPOINT_SEMANTICS, "neural_step_semantics": POPULATION_NEURAL_STEP_SEMANTICS}) + "\n",
                 encoding="utf-8",
             )
             (root / "commit-log.jsonl").write_text(
@@ -46,6 +48,12 @@ class PopulationCheckpointingTests(unittest.TestCase):
             )
             (root / "trajectory.jsonl").write_text(
                 json.dumps({"episode": 10, "control_step": 0}) + "\n",
+                encoding="utf-8",
+            )
+            checkpoint = root / "checkpoint"
+            checkpoint.mkdir()
+            (checkpoint / "manifest.json").write_text(
+                json.dumps({"checkpoint_semantics": POPULATION_CHECKPOINT_SEMANTICS, "step_semantics": POPULATION_NEURAL_STEP_SEMANTICS}) + "\n",
                 encoding="utf-8",
             )
             plan = prepare_population_resume(
@@ -58,6 +66,23 @@ class PopulationCheckpointingTests(unittest.TestCase):
             self.assertEqual(plan.trajectory_mode, "a")
             self.assertEqual(plan.commit_mode, "a")
             self.assertIsNotNone(plan.reconciliation)
+
+    def test_prepare_population_resume_rejects_legacy_checkpoint_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checkpoint = root / "checkpoint"
+            checkpoint.mkdir()
+            (checkpoint / "manifest.json").write_text(
+                json.dumps({"global_weight_version": 0}) + "\n", encoding="utf-8"
+            )
+            (root / "population-state.json").write_text(
+                json.dumps({"global_weight_version": 0, "launch_mode": "async"}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "weights-only semantics"):
+                prepare_population_resume(
+                    root, requested_launch_mode="async", checkpoint_exists=True
+                )
 
     def test_prepare_population_resume_rejects_mode_change(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -87,6 +112,8 @@ class PopulationCheckpointingTests(unittest.TestCase):
         self.assertFalse(payload["weight_averaging"])
         self.assertEqual(payload["launch_mode"], "wave")
         self.assertEqual(payload["body_runtime"], "process-isolated")
+        self.assertEqual(payload["checkpoint_semantics"], POPULATION_CHECKPOINT_SEMANTICS)
+        self.assertEqual(payload["neural_step_semantics"], POPULATION_NEURAL_STEP_SEMANTICS)
 
     def test_persist_shared_checkpoint_commits_matching_small_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

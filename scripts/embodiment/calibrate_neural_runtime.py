@@ -26,6 +26,7 @@ from flybody_runtime import FlyBodyRuntime
 from flyppy_course import FlyppyCourse
 from flyppy_world import FlyppyWorld
 from malecns_retina import MaleCNSRetina
+from virtual_fly.reproducibility import git_provenance, sha256_file, validate_production_snapshot
 
 
 def parse_args() -> argparse.Namespace:
@@ -71,6 +72,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    validate_production_snapshot(args.snapshot)
     if args.zero_input_steps < 6:
         raise SystemExit("zero-input-steps must be >= 6")
     if not args.scales or any(
@@ -181,6 +183,12 @@ def main() -> int:
 
     result = {
         "schema_version": 2,
+        "artifact_provenance": {
+            "generator": "scripts/embodiment/calibrate_neural_runtime.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+            "snapshot_manifest_sha256": sha256_file(args.snapshot / "manifest.json"),
+            "retinotopic_map_sha256": sha256_file(args.mapping),
+        },
         "selection_basis": (
             "one physical R1-R6 light-on pulse followed by zero external input; "
             "requires activity in non-stimulated neurons and four final silent "

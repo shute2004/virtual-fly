@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from virtual_fly.reproducibility import git_provenance, sha256_file, validate_production_snapshot
+
 
 VIEWER_REQUIRED_GROUPS = ("reward_dan", "aversive_dan")
 
@@ -132,6 +134,7 @@ def anatomical_transform(
 
 def main() -> int:
     args = parse_args()
+    validate_production_snapshot(args.snapshot)
     if args.max_nodes < 256 or args.max_edges < 256:
         raise SystemExit("viewer graph budgets are too small")
     if args.max_anatomy_points < 1000:
@@ -278,6 +281,13 @@ def main() -> int:
         "schema_version": 4,
         "layout": "male-cns-v1.0-released-soma-coordinates",
         "source_dataset": manifest.get("dataset"),
+        "artifact_provenance": {
+            "generator": "scripts/data/prepare_neural_viewer_graph.py",
+            "generator_git": git_provenance(Path(__file__).resolve().parents[2]),
+            "snapshot_manifest_sha256": sha256_file(args.snapshot / "manifest.json"),
+            "groups_sha256": sha256_file(args.groups),
+            "motor_map_sha256": sha256_file(args.motor_map),
+        },
         "coordinate_source": "official somaLocation/tosomaLocation; MaleCNS EM 8 nm voxel space",
         "viewer_axes": "x=-source_x, y=-source_z, z=source_y; one isotropic display scale",
         "viewer_only": True,
