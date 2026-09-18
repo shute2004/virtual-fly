@@ -216,9 +216,21 @@ mod tests {
         let snapshot = ConnectomeSnapshot::from_edges(
             3,
             &[
-                EdgeInput { pre: 0, post: 2, synapse_count: 2 },
-                EdgeInput { pre: 1, post: 2, synapse_count: 3 },
-                EdgeInput { pre: 0, post: 1, synapse_count: 1 },
+                EdgeInput {
+                    pre: 0,
+                    post: 2,
+                    synapse_count: 2,
+                },
+                EdgeInput {
+                    pre: 1,
+                    post: 2,
+                    synapse_count: 3,
+                },
+                EdgeInput {
+                    pre: 0,
+                    post: 1,
+                    synapse_count: 1,
+                },
             ],
             vec![1, 1, 1],
         )

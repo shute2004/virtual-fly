@@ -52,11 +52,17 @@ enum BackendArg {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::KernelSmoke { backend, cycles, flies } => kernel_smoke(backend, cycles, flies),
+        Command::KernelSmoke {
+            backend,
+            cycles,
+            flies,
+        } => kernel_smoke(backend, cycles, flies),
         Command::SnapshotInfo { snapshot } => snapshot_info(snapshot),
-        Command::SnapshotBenchmark { snapshot, backend, steps } => {
-            snapshot_benchmark(snapshot, backend, steps)
-        }
+        Command::SnapshotBenchmark {
+            snapshot,
+            backend,
+            steps,
+        } => snapshot_benchmark(snapshot, backend, steps),
     }
 }
 
@@ -85,12 +91,36 @@ fn smoke_snapshot() -> Result<ConnectomeSnapshot> {
     ConnectomeSnapshot::from_edges(
         8,
         &[
-            EdgeInput { pre: 0, post: 2, synapse_count: 60 },
-            EdgeInput { pre: 1, post: 3, synapse_count: 60 },
-            EdgeInput { pre: 2, post: 4, synapse_count: 60 },
-            EdgeInput { pre: 3, post: 5, synapse_count: 60 },
-            EdgeInput { pre: 6, post: 2, synapse_count: 60 },
-            EdgeInput { pre: 7, post: 3, synapse_count: 60 },
+            EdgeInput {
+                pre: 0,
+                post: 2,
+                synapse_count: 60,
+            },
+            EdgeInput {
+                pre: 1,
+                post: 3,
+                synapse_count: 60,
+            },
+            EdgeInput {
+                pre: 2,
+                post: 4,
+                synapse_count: 60,
+            },
+            EdgeInput {
+                pre: 3,
+                post: 5,
+                synapse_count: 60,
+            },
+            EdgeInput {
+                pre: 6,
+                post: 2,
+                synapse_count: 60,
+            },
+            EdgeInput {
+                pre: 7,
+                post: 3,
+                synapse_count: 60,
+            },
         ],
         vec![
             nt::ACETYLCHOLINE,
@@ -119,7 +149,9 @@ fn pathway_edge(snapshot: &ConnectomeSnapshot, pre: u32, post: u32) -> Result<us
         .pre_indices
         .iter()
         .zip(snapshot.edge_posts.iter())
-        .position(|(&candidate_pre, &candidate_post)| candidate_pre == pre && candidate_post == post)
+        .position(|(&candidate_pre, &candidate_post)| {
+            candidate_pre == pre && candidate_post == post
+        })
         .with_context(|| format!("missing smoke edge {pre}->{post}"))
 }
 
@@ -134,16 +166,28 @@ fn run_cpu_individual(cycles: usize) -> Result<(f32, f32, f32, f32)> {
     for _ in 0..cycles {
         runtime.step(
             &[
-                Stimulus { neuron: 0, current: 2.0 },
-                Stimulus { neuron: 6, current: 2.0 },
+                Stimulus {
+                    neuron: 0,
+                    current: 2.0,
+                },
+                Stimulus {
+                    neuron: 6,
+                    current: 2.0,
+                },
             ],
             true,
         )?;
         runtime.step(&[], true)?;
         runtime.step(
             &[
-                Stimulus { neuron: 1, current: 2.0 },
-                Stimulus { neuron: 7, current: 2.0 },
+                Stimulus {
+                    neuron: 1,
+                    current: 2.0,
+                },
+                Stimulus {
+                    neuron: 7,
+                    current: 2.0,
+                },
             ],
             true,
         )?;
@@ -198,16 +242,28 @@ fn gpu_kernel_smoke(cycles: usize) -> Result<()> {
     for _ in 0..cycles {
         runtime.step(
             &[
-                Stimulus { neuron: 0, current: 2.0 },
-                Stimulus { neuron: 6, current: 2.0 },
+                Stimulus {
+                    neuron: 0,
+                    current: 2.0,
+                },
+                Stimulus {
+                    neuron: 6,
+                    current: 2.0,
+                },
             ],
             true,
         )?;
         runtime.step(&[], true)?;
         runtime.step(
             &[
-                Stimulus { neuron: 1, current: 2.0 },
-                Stimulus { neuron: 7, current: 2.0 },
+                Stimulus {
+                    neuron: 1,
+                    current: 2.0,
+                },
+                Stimulus {
+                    neuron: 7,
+                    current: 2.0,
+                },
             ],
             true,
         )?;
@@ -217,7 +273,10 @@ fn gpu_kernel_smoke(cycles: usize) -> Result<()> {
     let pathway_a_delta = after.weights[pathway_a_edge] - before.weights[pathway_a_edge];
     let pathway_b_delta = after.weights[pathway_b_edge] - before.weights[pathway_b_edge];
 
-    println!("backend=gpu adapter={} cycles={cycles}", runtime.adapter_name());
+    println!(
+        "backend=gpu adapter={} cycles={cycles}",
+        runtime.adapter_name()
+    );
     println!(
         "pathway_a: {:.6} -> {:.6} (delta {pathway_a_delta:+.6})",
         before.weights[pathway_a_edge], after.weights[pathway_a_edge]

@@ -131,6 +131,7 @@ class ViewerTelemetryLease:
 def make_handler(
     root: Path,
     camera_path: Path,
+    brain_camera_path: Path,
     live_url_prefix: str,
     lease: ViewerTelemetryLease,
 ):
@@ -144,7 +145,9 @@ def make_handler(
             super().__init__(*args, directory=str(root), **kwargs)
 
         def end_headers(self) -> None:
-            if self.path.startswith("/artifacts/experiments/") or self.path.startswith("/api/"):
+            # Live telemetry must never be cached, but pre-rendered playback
+            # frames are immutable and should use the browser cache.
+            if self.path.startswith(live_url_prefix) or self.path.startswith("/api/"):
                 self.send_header("Cache-Control", "no-store, max-age=0")
             super().end_headers()
 
@@ -169,7 +172,7 @@ def make_handler(
 
             if request_path == "/api/viewer-health":
                 artifacts = {}
-                for name in ("status.json", "body.json", "neural.json", "fly.png", "camera.json"):
+                for name in ("status.json", "body.json", "neural.json", "fly.png", "camera.json", "brain-camera.json"):
                     path = live_root / name
                     try:
                         stat = path.stat()
@@ -234,6 +237,17 @@ def make_handler(
                     )
                     return
 
+            if request_path == "/api/brain-camera":
+                payload = self._read_json(brain_camera_path)
+                if payload is None:
+                    payload = {
+                        "schema_version": 1,
+                        "position": None,
+                        "target": None,
+                    }
+                self._send_json(payload)
+                return
+
             if request_path == body_url and not (live_root / "body.json").exists():
                 self._send_json(
                     {
@@ -273,7 +287,7 @@ def make_handler(
             super().do_GET()
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib hook name
-            if self.path != "/api/camera":
+            if self.path not in {"/api/camera", "/api/brain-camera"}:
                 self.send_error(404)
                 return
             try:
@@ -281,18 +295,38 @@ def make_handler(
                 if length < 2 or length > 4096:
                     raise ValueError("invalid camera payload length")
                 payload = json.loads(self.rfile.read(length))
-                azimuth = finite_number(payload, "azimuth") % 360.0
-                elevation = max(-89.0, min(89.0, finite_number(payload, "elevation")))
-                distance = max(2.0, min(80.0, finite_number(payload, "distance")))
-                write_json_atomic(
-                    camera_path,
-                    {
-                        "schema_version": 1,
-                        "azimuth": azimuth,
-                        "elevation": elevation,
-                        "distance": distance,
-                    },
-                )
+                if self.path == "/api/camera":
+                    azimuth = finite_number(payload, "azimuth") % 360.0
+                    elevation = max(-89.0, min(89.0, finite_number(payload, "elevation")))
+                    distance = max(2.0, min(80.0, finite_number(payload, "distance")))
+                    write_json_atomic(
+                        camera_path,
+                        {
+                            "schema_version": 1,
+                            "azimuth": azimuth,
+                            "elevation": elevation,
+                            "distance": distance,
+                        },
+                    )
+                else:
+                    position = payload.get("position")
+                    target = payload.get("target")
+                    if not isinstance(position, list) or not isinstance(target, list):
+                        raise ValueError("brain camera position/target must be arrays")
+                    if len(position) != 3 or len(target) != 3:
+                        raise ValueError("brain camera position/target must have 3 values")
+                    position_values = [float(value) for value in position]
+                    target_values = [float(value) for value in target]
+                    if not all(math.isfinite(value) for value in position_values + target_values):
+                        raise ValueError("brain camera values must be finite")
+                    write_json_atomic(
+                        brain_camera_path,
+                        {
+                            "schema_version": 1,
+                            "position": position_values,
+                            "target": target_values,
+                        },
+                    )
                 self._send_json({"ok": True})
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
@@ -312,6 +346,7 @@ def main() -> int:
     root = args.root.resolve()
     experiment = (root / args.experiment).resolve()
     camera_path = experiment / "live" / "camera.json"
+    brain_camera_path = root / "artifacts" / "embodiment" / "brain-camera.json"
     try:
         experiment_relative = experiment.relative_to(root)
     except ValueError as exc:
@@ -320,10 +355,11 @@ def main() -> int:
 
     lease = ViewerTelemetryLease(experiment)
     lease.start()
-    handler = make_handler(root, camera_path, live_url_prefix, lease)
+    handler = make_handler(root, camera_path, brain_camera_path, live_url_prefix, lease)
     server = ThreadingHTTPServer((args.bind, args.port), handler)
     print(f"viewer_server=http://{args.bind}:{args.port}")
     print(f"observer_camera={camera_path}")
+    print(f"observer_brain_camera={brain_camera_path}")
     print(f"telemetry_request={lease.target}")
     print("telemetry_transport=unix-stream")
     print("viewer_health=/api/viewer-health")

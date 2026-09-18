@@ -25,11 +25,12 @@ VERTICAL_MOTION_TYPES = ("T4c", "T4d", "T5c", "T5d")
 
 # Reinforcement stimulation is targeted at named MB-compartment DAN types rather
 # than at an abstract signed reward variable. PAM01 corresponds to PAM-gamma5,
-# a reward-associated compartment; PPL101 corresponds to PPL1-gamma1pedc, a
-# well-established aversive reinforcement neuron type. The runtime receives only
-# injected current at these released body IDs and derives dopamine from anatomy.
+# a reward-associated compartment. Aversive reinforcement uses the released
+# PPL1 punishment ensemble spanning gamma1pedc, gamma2alpha'1, and the additional
+# released PPL106 pair. The runtime receives only injected current at these
+# released body IDs and derives dopamine from anatomy.
 REWARD_DAN_TYPE = "PAM01"
-AVERSIVE_DAN_TYPE = "PPL101"
+AVERSIVE_DAN_TYPES = ("PPL101", "PPL103", "PPL106")
 
 
 def parse_args() -> argparse.Namespace:
@@ -135,7 +136,9 @@ def main() -> int:
     )
 
     reward_mask = exact_dopamine_type_mask(annotations, nt, REWARD_DAN_TYPE)
-    aversive_mask = exact_dopamine_type_mask(annotations, nt, AVERSIVE_DAN_TYPE)
+    aversive_mask = np.zeros(len(annotations), dtype=bool)
+    for type_name in AVERSIVE_DAN_TYPES:
+        aversive_mask |= exact_dopamine_type_mask(annotations, nt, type_name)
     add_group(
         groups,
         resolved,
@@ -178,9 +181,9 @@ def main() -> int:
                 "no +1 reward or signed valence enters the neural runtime."
             ),
             "aversive_dan": (
-                f"{AVERSIVE_DAN_TYPE} dopaminergic type (PPL1-gamma1pedc aversive "
-                "reinforcement). The group identifies neurons to receive experimental current; "
-                "no -1 punishment or signed valence enters the neural runtime."
+                "PPL1 punishment DAN ensemble (PPL101/PPL103/PPL106). The group identifies "
+                "released neurons to receive experimental current; no -1 punishment or signed "
+                "valence enters the neural runtime."
             ),
             "reinforcement_references": [
                 "https://pmc.ncbi.nlm.nih.gov/articles/PMC10945696/",
@@ -200,7 +203,7 @@ def main() -> int:
     for name in sorted(groups):
         print(f"{name}={len(resolved[name])}")
     print(f"reward_dan_type={REWARD_DAN_TYPE}")
-    print(f"aversive_dan_type={AVERSIVE_DAN_TYPE}")
+    print(f"aversive_dan_types={','.join(AVERSIVE_DAN_TYPES)}")
     print(f"wrote {args.output}")
     return 0
 

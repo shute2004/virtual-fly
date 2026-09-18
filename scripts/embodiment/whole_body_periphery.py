@@ -69,13 +69,19 @@ class WholeBodyPeriphery:
         wing_motor_map: Path,
         body_motor_map: Path,
         *,
+        wing_steering_tau_s: float = 0.012,
+        wing_steering_spike_increment: float = 0.85,
         leg_tau_s: float = 0.025,
         leg_spike_increment: float = 0.80,
         haltere_power_tau_s: float = 0.25,
         haltere_power_spike_increment: float = 0.12,
         initial_haltere_power_activation: float = 0.35,
     ) -> None:
-        self.wing = WingMusclePeriphery(wing_motor_map)
+        self.wing = WingMusclePeriphery(
+            wing_motor_map,
+            steering_tau_s=float(wing_steering_tau_s),
+            steering_spike_increment=float(wing_steering_spike_increment),
+        )
         payload = json.loads(Path(body_motor_map).read_text(encoding="utf-8"))
         if int(payload.get("schema_version", 0)) != 1:
             raise ValueError("body motor map schema 1 is required")

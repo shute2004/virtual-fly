@@ -142,8 +142,13 @@ episode reset
 
 ```text
 gate pass -> PAM08候補群を刺激
-collision -> PPL1候補群を刺激
+gate collision -> 穴からの垂直距離に応じてPPL1候補群への刺激強度を連続変化
+floor / ceiling / side collision -> PPL1候補群へ最大刺激
 ```
+
+現行のpopulation学習では、ゲート衝突時のPPL刺激は穴の縁までの垂直距離0 mmで最大値の25%、2 mm以上で最大値へ線形増加する。これは実験者が与える結果刺激の強度だけを変え、CNSのaction selectionやmotor commandを外部から指定しない。
+
+boundary-band curriculumは特定の「第2ゲート」等をハードコードせず、各batchで「少なくともk枚通過した率」を全kについて集計する。安定閾値を満たす最大kをfrontierとして保持し、次の学習対象を自動的にk+1枚へ進めるため、任意のgate countに同じロジックを適用できる。
 
 外部optimizer、backpropagation、Q-learning、policy gradient、scalar rewardによるweight直接更新は使わない。
 
@@ -196,6 +201,27 @@ bash scripts/dev/train_flyppy.sh \
 ```
 
 感覚境界の設計を変更したcheckpointを混在させないこと。旧T4/T5外部encoderで生成したcheckpointは、retinotopic R1-R6版の学習継続用として扱わない。
+
+### 6.1 Flyppy v4 course
+
+Flyppy v3は比較再現用として変更せず保持する。v4は表示・試行時の読みやすさを改善するための別environment versionで、MaleCNS、FlyBody物理スケール、感覚変換、CNS→運動ニューロン→筋境界、可塑性則、reinforcement DANを変更しない。
+
+v4の変更はtask geometryだけである。
+
+- corridor高: 6.0 body lengths → 8.5 body lengths。
+- floorはz=0のまま、ceilingだけを25.245 mmまで上げる。
+- gate gap: 2.5 body lengthsのまま。
+- gate centerのz分布はv3と同一に保つ。既存の上下方向の学習条件を変えない。
+- first gate: 4.0 body lengths → 5.5 body lengths。spawnから最初の障害物までの飛行区間を長くする。
+- gate spacing、gate thickness、lateral widthはv3のまま。
+
+FlyBody v3 scaleでは、corridorは0〜25.245 mm、first gateは16.335 mm、gapは7.425 mmである。
+
+### 6.2 Flyppy v7 course
+
+v7はv6のx-zゲート配置、隣接ゲート到達可能性制約、frontier curriculumをそのまま保持し、3D物理空間のy方向だけを修正する。v6までは`lateral_half_width_mm=8.91`をゲート・天井の有限な奥行きとして使っていた一方、側面境界が存在しなかったため、FlyBodyが`|y| > 8.91 mm`へ移動するとゲートの端を回り込めた。
+
+v7では内面を`y=±8.91 mm`とする物理側壁を追加する。これにより課題は引き続きx-z平面上のゲート通過であり、y方向への移動で壁そのものを迂回する経路は成立しない。旧v6は過去実験再現用として開いたy境界のまま保持する。
 
 ## 7. 可視化
 

@@ -5,11 +5,21 @@ import unittest
 
 from virtual_fly.training.curriculum import (
     BoundaryBandConfig,
+    GateHeightCurriculumConfig,
     SpawnCondition,
     boundary_condition_for_attempt,
+    boundary_frontier_role,
+    boundary_target_gates,
+    frontier_focus_condition,
+    frontier_focus_level,
+    gate_height_condition_for_attempt,
+    gate_height_role,
+    ensure_gate_height_state,
     current_boundary_condition,
     next_boundary_attempt_for_group,
+    next_gate_height_attempt_for_group,
     record_boundary_result,
+    record_gate_height_result,
 )
 
 
@@ -291,6 +301,171 @@ class BoundaryBandCurriculumTests(unittest.TestCase):
         self.assertAlmostEqual(completed["hard"]["speed_mm_s"], 343.75)
         self.assertAlmostEqual(completed["easy"]["speed_mm_s"], 350.0)
 
+    def test_gate_frontier_advances_for_arbitrary_gate_counts(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        cfg = config()
+        self.assertEqual(boundary_target_gates(state, cfg, gate_count=6), 1)
+
+        completed = None
+        for attempt in range(24):
+            completed = record_boundary_result(
+                state,
+                cfg,
+                passed_gates=1,
+                gate_count=6,
+                attempt_index=attempt,
+                group=attempt % 4,
+            )
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["evaluated_target_gates"], 1)
+        self.assertEqual(completed["frontier_mastered_gates"], 1)
+        self.assertEqual(completed["frontier_target_gates"], 2)
+        self.assertEqual(completed["adjustment"], "frontier_advanced")
+        self.assertAlmostEqual(completed["gate_pass_rates"]["1"], 1.0)
+        self.assertAlmostEqual(completed["gate_pass_rates"]["2"], 0.0)
+
+        completed = None
+        for attempt in range(24):
+            passed = 2 if attempt < 20 else 1
+            completed = record_boundary_result(
+                state,
+                cfg,
+                passed_gates=passed,
+                gate_count=6,
+                attempt_index=attempt,
+                group=attempt % 4,
+            )
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["evaluated_target_gates"], 2)
+        self.assertEqual(completed["frontier_mastered_gates"], 2)
+        self.assertEqual(completed["frontier_target_gates"], 3)
+        self.assertEqual(completed["adjustment"], "frontier_advanced")
+
+        completed = None
+        for attempt in range(24):
+            passed = 3 if attempt < 8 else 2
+            completed = record_boundary_result(
+                state,
+                cfg,
+                passed_gates=passed,
+                gate_count=6,
+                attempt_index=attempt,
+                group=attempt % 4,
+            )
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["evaluated_target_gates"], 3)
+        self.assertEqual(completed["frontier_mastered_gates"], 2)
+        self.assertEqual(completed["frontier_target_gates"], 3)
+        self.assertEqual(completed["adjustment"], "easier")
+
+    def test_focus_successes_do_not_advance_frontier_without_evaluation_success(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        cfg = config()
+        completed = None
+        for attempt in range(24):
+            role = boundary_frontier_role(attempt, group_count=4)
+            completed = record_boundary_result(
+                state,
+                cfg,
+                passed_gates=1 if role == "focus" else 0,
+                gate_count=6,
+                attempt_index=attempt,
+                group=attempt % 4,
+                frontier_role=role,
+            )
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["focus_attempts"], 12)
+        self.assertEqual(completed["focus_successes"], 12)
+        self.assertEqual(completed["attempts"], 12)
+        self.assertEqual(completed["successes"], 0)
+        self.assertEqual(completed["frontier_mastered_gates"], 0)
+        self.assertEqual(completed["frontier_target_gates"], 1)
+        self.assertEqual(completed["focus_level_after"], 0.25)
+        self.assertEqual(state["successful_first_gates"], 0)
+
+    def test_evaluation_success_advances_frontier_and_resets_focus_level(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        cfg = config()
+        state["boundary_band"] = None
+        self.assertEqual(frontier_focus_level(state, cfg, gate_count=6), 0.0)
+        completed = None
+        for attempt in range(24):
+            role = boundary_frontier_role(attempt, group_count=4)
+            completed = record_boundary_result(
+                state,
+                cfg,
+                passed_gates=1,
+                gate_count=6,
+                attempt_index=attempt,
+                group=attempt % 4,
+                frontier_role=role,
+            )
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["frontier_mastered_gates"], 1)
+        self.assertEqual(completed["frontier_target_gates"], 2)
+        self.assertEqual(completed["focus_level_after"], 0.0)
+
+    def test_frontier_focus_condition_expands_from_target_to_previous_gate(self) -> None:
+        base = SpawnCondition(9.0, 8.0, 350.0)
+        easy = frontier_focus_condition(
+            base,
+            target_gate_x_mm=28.0,
+            target_gate_z_mm=15.0,
+            previous_gate_x_mm=16.0,
+            previous_gate_z_mm=10.0,
+            previous_gate_half_gap_mm=3.7125,
+            focus_level=0.0,
+        )
+        hard = frontier_focus_condition(
+            base,
+            target_gate_x_mm=28.0,
+            target_gate_z_mm=15.0,
+            previous_gate_x_mm=16.0,
+            previous_gate_z_mm=10.0,
+            previous_gate_half_gap_mm=3.7125,
+            focus_level=1.0,
+        )
+        self.assertAlmostEqual(easy.x_mm, 25.5)
+        self.assertAlmostEqual(easy.z_mm, 15.0)
+        self.assertAlmostEqual(easy.speed_mm_s, 450.0)
+        self.assertAlmostEqual(hard.x_mm, 18.5)
+        self.assertAlmostEqual(hard.z_mm, 12.7125)
+        self.assertAlmostEqual(hard.speed_mm_s, 350.0)
+
+    def test_gate_frontier_reaches_full_course_without_special_case(self) -> None:
+        state: dict[str, object] = {
+            "successful_first_gates": 0,
+            "consecutive_failures": 0,
+        }
+        cfg = config()
+        for target in range(1, 7):
+            completed = None
+            for attempt in range(24):
+                completed = record_boundary_result(
+                    state,
+                    cfg,
+                    passed_gates=target,
+                    gate_count=6,
+                    attempt_index=attempt,
+                    group=attempt % 4,
+                )
+            self.assertIsNotNone(completed)
+            self.assertEqual(completed["frontier_mastered_gates"], target)
+            self.assertEqual(
+                completed["frontier_target_gates"],
+                6 if target == 6 else target + 1,
+            )
+        self.assertEqual(boundary_target_gates(state, cfg, gate_count=6), 6)
+
     def test_low_success_can_recover_beyond_initial_easy_endpoint(self) -> None:
         state: dict[str, object] = {
             "successful_first_gates": 0,
@@ -309,6 +484,116 @@ class BoundaryBandCurriculumTests(unittest.TestCase):
         self.assertAlmostEqual(completed["easy"]["z_mm"], 5.38375)
         self.assertAlmostEqual(completed["hard"]["speed_mm_s"], 353.125)
         self.assertAlmostEqual(completed["easy"]["speed_mm_s"], 359.375)
+
+
+class GateHeightCurriculumTests(unittest.TestCase):
+    def _config(self) -> GateHeightCurriculumConfig:
+        return GateHeightCurriculumConfig(
+            gate_index=1,
+            start_center_z_mm=12.75,
+            target_center_z_mm=14.25,
+            step_mm=0.25,
+            batch_size=24,
+            current_success_rate=0.80,
+            retention_success_rate=0.80,
+            seed=0,
+        )
+
+    def test_role_mix_is_16_current_8_review(self) -> None:
+        roles = [gate_height_role(i, group_count=4) for i in range(24)]
+        self.assertEqual(Counter(roles), Counter({"current": 16, "review": 8}))
+        for group in range(4):
+            local = [roles[i] for i in range(group, 24, 4)]
+            self.assertEqual(Counter(local), Counter({"current": 4, "review": 2}))
+
+    def test_all_success_advances_and_remembers_current_height(self) -> None:
+        config = self._config()
+        state: dict[str, object] = {}
+        completed = None
+        for attempt in range(24):
+            center, role = gate_height_condition_for_attempt(
+                state, config, attempt, group_count=4
+            )
+            self.assertIn(role, {"current", "review"})
+            self.assertAlmostEqual(center, 12.75)
+            completed = record_gate_height_result(
+                state, config, success=True, attempt_index=attempt, role=role
+            )
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed["adjustment"], "advance")
+        self.assertAlmostEqual(completed["frontier_center_after_z_mm"], 13.0)
+        self.assertEqual(completed["mastered_centers_z_mm"], [12.75])
+
+    def test_review_failure_does_not_block_current_advance(self) -> None:
+        config = self._config()
+        state: dict[str, object] = {}
+        completed = None
+        for attempt in range(24):
+            _, role = gate_height_condition_for_attempt(
+                state, config, attempt, group_count=4
+            )
+            completed = record_gate_height_result(
+                state,
+                config,
+                success=(role == "current"),
+                attempt_index=attempt,
+                role=role,
+            )
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed["adjustment"], "advance")
+        self.assertAlmostEqual(completed["frontier_center_after_z_mm"], 13.0)
+
+    def test_current_failure_blocks_advance(self) -> None:
+        config = self._config()
+        state: dict[str, object] = {}
+        completed = None
+        for attempt in range(24):
+            _, role = gate_height_condition_for_attempt(
+                state, config, attempt, group_count=4
+            )
+            completed = record_gate_height_result(
+                state,
+                config,
+                success=(role == "review"),
+                attempt_index=attempt,
+                role=role,
+            )
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed["adjustment"], "hold")
+
+    def test_review_samples_all_mastered_heights(self) -> None:
+        config = self._config()
+        state: dict[str, object] = {}
+        payload = ensure_gate_height_state(state, config)
+        mastered = [12.75 + 0.25 * i for i in range(8)]
+        payload["mastered_centers_z_mm"] = mastered
+        payload["frontier_center_z_mm"] = 14.25
+        review_centers = []
+        for attempt in range(24):
+            center, role = gate_height_condition_for_attempt(
+                state, config, attempt, group_count=4
+            )
+            if role == "review":
+                review_centers.append(center)
+        self.assertEqual(len(review_centers), 8)
+        self.assertEqual(set(review_centers), set(mastered))
+
+    def test_async_group_attempt_assignment_is_completion_order_independent(self) -> None:
+        config = self._config()
+        state: dict[str, object] = {}
+        issued: set[int] = set()
+        selected = []
+        for group in (3, 0, 2, 1):
+            attempt = next_gate_height_attempt_for_group(
+                state, config, group_index=group, group_count=4, issued_attempts=issued
+            )
+            self.assertIsNotNone(attempt)
+            issued.add(int(attempt))
+            selected.append(int(attempt))
+        self.assertEqual(sorted(selected), [0, 1, 2, 3])
 
 
 if __name__ == "__main__":

@@ -63,14 +63,15 @@ class FlyppyGeometrySpec:
     lateral_half_width_body_lengths: float
     gate_half_thickness_body_lengths: float
     center_margin_body_lengths: float
+    corridor_low_body_lengths: float = 0.0
 
     @property
     def corridor_low_z_mm(self) -> float:
-        return 0.0
+        return self.body_length_mm * self.corridor_low_body_lengths
 
     @property
     def corridor_high_z_mm(self) -> float:
-        return self.body_length_mm * self.corridor_height_body_lengths
+        return self.corridor_low_z_mm + self.body_length_mm * self.corridor_height_body_lengths
 
     @property
     def gate_gap_height_mm(self) -> float:
@@ -175,4 +176,21 @@ FLYPPY_GEOMETRY_V3 = FlyppyGeometrySpec(
     lateral_half_width_body_lengths=3.0,    # 8.91 mm each side
     gate_half_thickness_body_lengths=0.10,  # 0.297 mm; full 0.594 mm
     center_margin_body_lengths=0.50,        # 1.485 mm
+)
+
+
+# Version-4 presentation/training course keeps the v3 gate aperture, vertical
+# gate-center band and gate-to-gate spacing, but gives the fly a taller
+# Flappy-Bird-like corridor and a longer approach to gate 1. The physical ground
+# remains z=0 and only the ceiling is raised; FlyppyCourse intentionally reuses
+# v3's gate-center range for v4 so learned vertical conditions remain comparable.
+FLYPPY_GEOMETRY_V4 = FlyppyGeometrySpec(
+    body_length_mm=FLYBODY_V3.body_length_mm,
+    corridor_height_body_lengths=8.5,       # 25.245 mm
+    gate_gap_body_lengths=2.5,              # unchanged: 7.425 mm
+    first_gate_body_lengths=5.5,            # 16.335 mm
+    gate_spacing_body_lengths=4.0,          # unchanged: 11.88 mm
+    lateral_half_width_body_lengths=3.0,
+    gate_half_thickness_body_lengths=0.10,
+    center_margin_body_lengths=0.50,
 )

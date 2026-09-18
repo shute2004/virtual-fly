@@ -91,13 +91,13 @@ impl GpuRuntime {
     }
 
     async fn new_async(snapshot: &ConnectomeSnapshot, params: NeuralParams) -> Result<Self> {
-        if snapshot.neuron_count() > u32::MAX as usize || snapshot.edge_count() > u32::MAX as usize {
+        if snapshot.neuron_count() > u32::MAX as usize || snapshot.edge_count() > u32::MAX as usize
+        {
             bail!("GPU bootstrap backend currently requires u32-sized neuron/edge indices");
         }
 
-        let instance = wgpu::Instance::new(
-            wgpu::InstanceDescriptor::new_without_display_handle_from_env(),
-        );
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -267,14 +267,15 @@ impl GpuRuntime {
         let trace_pipeline = create_pipeline("trace_step");
         let reset_eligibility_pipeline = create_pipeline("reset_eligibility");
 
-        let spike_gather_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("vf spike gather layout"),
-            entries: &[
-                storage_layout(0, true),
-                storage_layout(1, true),
-                storage_layout(2, false),
-            ],
-        });
+        let spike_gather_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("vf spike gather layout"),
+                entries: &[
+                    storage_layout(0, true),
+                    storage_layout(1, true),
+                    storage_layout(2, false),
+                ],
+            });
         let spike_gather_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("vf spike gather pipeline layout"),
@@ -285,14 +286,15 @@ impl GpuRuntime {
             label: Some("vf spike gather shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("spike_gather.wgsl"))),
         });
-        let spike_gather_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("gather_spikes"),
-            layout: Some(&spike_gather_pipeline_layout),
-            module: &spike_gather_shader,
-            entry_point: Some("gather_spikes"),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None,
-        });
+        let spike_gather_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("gather_spikes"),
+                layout: Some(&spike_gather_pipeline_layout),
+                module: &spike_gather_shader,
+                entry_point: Some("gather_spikes"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            });
 
         let bind_group_ab = create_bind_group(
             &device,
@@ -413,8 +415,10 @@ impl GpuRuntime {
             0,
             bytemuck::cast_slice(&zero_neurons),
         );
-        self.queue.write_buffer(&self.spikes_a, 0, bytemuck::cast_slice(&zero_spikes));
-        self.queue.write_buffer(&self.spikes_b, 0, bytemuck::cast_slice(&zero_spikes));
+        self.queue
+            .write_buffer(&self.spikes_a, 0, bytemuck::cast_slice(&zero_spikes));
+        self.queue
+            .write_buffer(&self.spikes_b, 0, bytemuck::cast_slice(&zero_spikes));
         self.queue.write_buffer(
             &self.external_buffer,
             0,
@@ -446,8 +450,10 @@ impl GpuRuntime {
 
     pub fn state(&self) -> Result<NeuralState> {
         let spikes = self.read_buffer::<u32>(self.current_spike_buffer(), self.neuron_count)?;
-        let neurons = self.read_buffer::<NeuronStateGpu>(&self.neuron_state_buffer, self.neuron_count)?;
-        let synapses = self.read_buffer::<SynapseStateGpu>(&self.synapse_state_buffer, self.edge_count)?;
+        let neurons =
+            self.read_buffer::<NeuronStateGpu>(&self.neuron_state_buffer, self.neuron_count)?;
+        let synapses =
+            self.read_buffer::<SynapseStateGpu>(&self.synapse_state_buffer, self.edge_count)?;
         Ok(NeuralState {
             membrane: neurons.iter().map(|state| state.membrane).collect(),
             spikes,
@@ -476,18 +482,17 @@ impl GpuRuntime {
             })
             .collect::<Vec<_>>();
 
-        self.queue.write_buffer(
-            &self.neuron_state_buffer,
-            0,
-            bytemuck::cast_slice(&neurons),
-        );
+        self.queue
+            .write_buffer(&self.neuron_state_buffer, 0, bytemuck::cast_slice(&neurons));
         self.queue.write_buffer(
             &self.synapse_state_buffer,
             0,
             bytemuck::cast_slice(&synapses),
         );
-        self.queue.write_buffer(&self.spikes_a, 0, bytemuck::cast_slice(&state.spikes));
-        self.queue.write_buffer(&self.spikes_b, 0, bytemuck::cast_slice(&state.spikes));
+        self.queue
+            .write_buffer(&self.spikes_a, 0, bytemuck::cast_slice(&state.spikes));
+        self.queue
+            .write_buffer(&self.spikes_b, 0, bytemuck::cast_slice(&state.spikes));
         self.external_cpu.fill(0.0);
         self.queue.write_buffer(
             &self.external_buffer,

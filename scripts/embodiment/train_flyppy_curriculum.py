@@ -471,7 +471,15 @@ def main() -> int:
                         plasticity=True,
                     )
                     peripheral = periphery.step(body_spikes, dt_s=control_dt_s)
-                    body.step_muscles(peripheral, physics_steps=args.physics_steps)
+                    if args.environment_version in {"v2", "v3", "v4"}:
+                        physical_collision, _ = world.step_muscles_until_boundary_contact(
+                            body,
+                            peripheral,
+                            physics_steps=args.physics_steps,
+                        )
+                    else:
+                        body.step_muscles(peripheral, physics_steps=args.physics_steps)
+                        physical_collision = None
 
                     position = body.thorax_position_mm()
                     final_velocity = body.root_linear_velocity_mm_s()
@@ -482,16 +490,18 @@ def main() -> int:
                     max_z = max(max_z, z_mm)
                     step_count = control_step + 1
 
-                    physical_collision = (
-                        world.physical_collision_reason(body.sim)
-                        if args.environment_version in {"v2", "v3"}
+                    physical_mode = args.environment_version in {"v2", "v3", "v4"}
+                    body_min_x_mm = (
+                        world.full_body_x_bounds_mm(body.sim) [0]
+                        if physical_mode
                         else None
                     )
                     event = course.update(
                         x_mm,
                         z_mm,
                         physical_collision_reason=physical_collision,
-                        analytic_body_collision=args.environment_version == "v1",
+                        analytic_body_collision=not physical_mode,
+                        body_min_x_mm=body_min_x_mm,
                     )
                     reward = False
                     aversive = False

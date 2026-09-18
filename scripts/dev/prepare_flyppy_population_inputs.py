@@ -25,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--snapshot", type=Path, default=ROOT / "artifacts/malecns-v1.0")
     p.add_argument("--groups", type=Path)
     p.add_argument("--retinotopic-map", type=Path)
+    p.add_argument("--haltere-sensory-map", type=Path)
     p.add_argument("--wing-motor-map", type=Path)
     p.add_argument("--body-motor-map", type=Path)
     p.add_argument("--report", type=Path, default=DEFAULT_REPORT)
@@ -54,6 +55,9 @@ def main() -> int:
     snapshot = abspath(args.snapshot)
     groups = abspath(args.groups or snapshot / "embodiment-groups-v0.json")
     retina = abspath(args.retinotopic_map or snapshot / "retinotopic-vision-v1.json")
+    haltere = abspath(
+        args.haltere_sensory_map or snapshot / "haltere-campaniform-sensory-v1.json"
+    )
     wing = abspath(args.wing_motor_map or snapshot / "wing-motor-neurons-v0.json")
     body = abspath(args.body_motor_map or snapshot / "body-motor-neurons-v0.json")
     report = abspath(args.report)
@@ -112,7 +116,27 @@ def main() -> int:
         else:
             stages.append({"stage": "generate_retinotopic_map", "ok": True, "detail": "already present"})
 
-        for path in (groups, wing, body, retina):
+        if not haltere.exists():
+            run_stage(
+                "generate_haltere_sensory_map",
+                [
+                    python,
+                    "scripts/data/prepare_haltere_sensory_map.py",
+                    "--annotations",
+                    str(snapshot / "annotations.feather"),
+                    "--output",
+                    str(haltere),
+                ],
+                stages,
+            )
+        else:
+            stages.append({
+                "stage": "generate_haltere_sensory_map",
+                "ok": True,
+                "detail": "already present",
+            })
+
+        for path in (groups, wing, body, retina, haltere):
             if not path.exists() or path.stat().st_size == 0:
                 raise RuntimeError(f"generated input missing or empty: {path}")
 
@@ -145,6 +169,7 @@ def main() -> int:
         f"- wing motor map: `{wing}`",
         f"- body motor map: `{body}`",
         f"- retinotopic map: `{retina}`",
+        f"- haltere sensory map: `{haltere}`",
         "",
         "## Stages",
         "",

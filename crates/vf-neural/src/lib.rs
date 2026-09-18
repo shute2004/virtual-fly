@@ -38,8 +38,8 @@ mod frontier_parity;
 
 pub use cpu::{CpuRuntime, StepSummary};
 pub use model::{
-    ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, ACTIVITY_SILENT, BackendKind,
-    NeuralParams, Stimulus, nt,
+    ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, ACTIVITY_SILENT, BackendKind, NeuralParams,
+    Stimulus, nt,
 };
 pub use plastic_graph::PlasticFastGraph;
 pub use propagation_graph::OutgoingPropagationGraph;

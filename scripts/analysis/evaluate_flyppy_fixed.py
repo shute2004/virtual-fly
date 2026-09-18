@@ -41,7 +41,7 @@ from virtual_fly.training.fixed_evaluation import (  # noqa: E402
     FIXED_EVAL_SUITE_V1,
     SUITE_VERSION,
     render_markdown,
-    summarize_suite,
+    summarize_condition,
 )
 
 
@@ -68,6 +68,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--seed-start", type=int, default=0)
     p.add_argument("--body-processes", type=int, default=0, help="0 = measured default min(population, 4)")
     p.add_argument("--gate-count", type=int, default=6)
+    p.add_argument("--environment-version", choices=("v3", "v4", "v5", "v6", "v7"), default="v3")
     p.add_argument("--max-control-steps", type=int, default=1800)
     p.add_argument("--physics-steps", type=int, default=10)
     p.add_argument("--timeout-s", type=float, default=120.0)
@@ -91,6 +92,13 @@ def save_json(path: Path, payload: dict[str, object]) -> None:
     temp = path.with_name(f".{path.name}.tmp")
     temp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     temp.replace(path)
+
+
+def evaluation_conditions(environment_version: str):
+    # v4 deliberately preserves v3's gate-center band, so fixed-suite vertical
+    # spawn coordinates stay identical across the two environments.
+    _ = environment_version
+    return FIXED_EVAL_SUITE_V1
 
 
 def portable_path(path: Path) -> str:
@@ -401,6 +409,7 @@ def main() -> int:
     config = {
         "seed": int(args.seed_start),
         "gate_count": int(args.gate_count),
+        "environment_version": str(args.environment_version),
         "wing_motor_map": str(snapshot / "wing-motor-neurons-v0.json"),
         "body_motor_map": str(snapshot / "body-motor-neurons-v0.json"),
         "retinotopic_map": str(snapshot / "retinotopic-vision-v1.json"),
@@ -416,6 +425,8 @@ def main() -> int:
     vision_runtime = "unknown"
     vision_rays = -1
     final_global_version = initial_global_version
+
+    conditions = evaluation_conditions(args.environment_version)
 
     try:
         workers, slot_to_worker = spawn_packed_body_processes(
@@ -450,7 +461,7 @@ def main() -> int:
                 )
                 loaded_step = int(loaded.get("step", -1))
 
-            for condition in FIXED_EVAL_SUITE_V1:
+            for condition in conditions:
                 episode_results.extend(
                     run_condition(
                         condition=condition,
@@ -509,14 +520,21 @@ def main() -> int:
         "seed_start": args.seed_start,
         "seed_end": args.seed_start + args.population - 1,
         "body_processes": len(workers),
+        "environment_version": args.environment_version,
         "vision_runtime": vision_runtime,
         "vision_rays_per_ommatidium": vision_rays,
         "plasticity": False,
         "reinforcement_event_stimulation": True,
         "transaction_dirty_edges_after": dirty_after,
         "elapsed_seconds": elapsed,
-        "conditions": [asdict(condition) for condition in FIXED_EVAL_SUITE_V1],
-        "condition_summaries": summarize_suite(episode_results),
+        "conditions": [asdict(condition) for condition in conditions],
+        "condition_summaries": [
+            summarize_condition(
+                condition,
+                [row for row in episode_results if row["condition"] == condition.name],
+            )
+            for condition in conditions
+        ],
         "episode_results": episode_results,
     }
     save_json(output_json, payload)

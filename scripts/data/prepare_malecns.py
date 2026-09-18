@@ -207,6 +207,8 @@ def write_metadata_subset(neurons: pd.DataFrame, bodies: np.ndarray, output: Pat
             "superclass",
             "side",
             "somaSide",
+            "somaLocation",
+            "tosomaLocation",
             "rootSide",
             "nerve",
             "entryNerve",

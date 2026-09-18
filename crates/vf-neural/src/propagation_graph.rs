@@ -91,10 +91,26 @@ mod tests {
         let snapshot = ConnectomeSnapshot::from_edges(
             4,
             &[
-                EdgeInput { pre: 0, post: 2, synapse_count: 1 },
-                EdgeInput { pre: 0, post: 1, synapse_count: 1 },
-                EdgeInput { pre: 2, post: 3, synapse_count: 1 },
-                EdgeInput { pre: 1, post: 3, synapse_count: 1 },
+                EdgeInput {
+                    pre: 0,
+                    post: 2,
+                    synapse_count: 1,
+                },
+                EdgeInput {
+                    pre: 0,
+                    post: 1,
+                    synapse_count: 1,
+                },
+                EdgeInput {
+                    pre: 2,
+                    post: 3,
+                    synapse_count: 1,
+                },
+                EdgeInput {
+                    pre: 1,
+                    post: 3,
+                    synapse_count: 1,
+                },
             ],
             vec![nt::ACETYLCHOLINE; 4],
         )
@@ -112,9 +128,21 @@ mod tests {
         let snapshot = ConnectomeSnapshot::from_edges(
             4,
             &[
-                EdgeInput { pre: 0, post: 3, synapse_count: 1 },
-                EdgeInput { pre: 1, post: 3, synapse_count: 1 },
-                EdgeInput { pre: 2, post: 3, synapse_count: 1 },
+                EdgeInput {
+                    pre: 0,
+                    post: 3,
+                    synapse_count: 1,
+                },
+                EdgeInput {
+                    pre: 1,
+                    post: 3,
+                    synapse_count: 1,
+                },
+                EdgeInput {
+                    pre: 2,
+                    post: 3,
+                    synapse_count: 1,
+                },
             ],
             vec![nt::ACETYLCHOLINE, nt::DOPAMINE, 5, nt::ACETYLCHOLINE],
         )

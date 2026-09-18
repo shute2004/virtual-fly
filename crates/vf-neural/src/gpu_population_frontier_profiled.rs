@@ -38,10 +38,7 @@ impl GpuPopulationRuntime {
         } else {
             &self.spikes_a
         };
-        let all = self.read_buffer::<u32>(
-            current_spikes,
-            self.neuron_count * self.slot_count,
-        )?;
+        let all = self.read_buffer::<u32>(current_spikes, self.neuron_count * self.slot_count)?;
         let start = slot * self.neuron_count;
         let end = start + self.neuron_count;
         Ok(all[start..end]

@@ -7,19 +7,19 @@
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
     html, body { margin: 0; width: 100%; height: 100%; background: #080b10; color: #e8edf4; overflow: hidden; }
-    #root { width: 100%; height: 100%; display: grid; grid-template-columns: minmax(0,1fr) 340px; }
-    #stage { min-width: 0; position: relative; overflow: hidden; background: #05070a; cursor: grab; touch-action: none; }
+    #root { width: 100%; height: 100%; display: grid; grid-template-columns: minmax(0,1.6fr) minmax(360px,.9fr); grid-template-rows: minmax(0,1.15fr) minmax(260px,.85fr); gap: 1px; background: #252c36; }
+    #stage { min-width: 0; min-height: 0; grid-column: 1; grid-row: 1 / span 2; display: grid; grid-template-rows: 40px minmax(0,1fr) 34px; overflow: hidden; background: #05070a; cursor: grab; touch-action: none; }
     #stage.dragging { cursor: grabbing; }
-    #flyFrame { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; pointer-events: none; }
-    #flyMissing { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; color: #79889a; text-align: center; font-size: 13px; pointer-events: none; }
-    #flyBadge { position: absolute; left: 12px; top: 12px; z-index: 5; background: rgba(7,9,12,.80); border: 1px solid #27303b; border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none; }
-    #flyHint { position: absolute; left: 12px; bottom: 12px; z-index: 5; background: rgba(7,9,12,.76); border: 1px solid #27303b; border-radius: 8px; padding: 7px 9px; font-size: 11px; color: #b9c5d3; pointer-events: none; }
-    #brainCard { position: absolute; right: 14px; bottom: 14px; z-index: 6; width: min(42vw, 560px); min-width: 320px; height: min(50vh, 460px); min-height: 280px; border: 1px solid #384353; border-radius: 10px; overflow: hidden; background: rgba(8,11,16,.96); box-shadow: 0 10px 35px rgba(0,0,0,.40); cursor: default; touch-action: auto; }
-    #brainTitle { height: 31px; box-sizing: border-box; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 6px 9px; font-size: 11px; color: #b9c5d3; border-bottom: 1px solid #252c36; }
-    #brainScene { position: absolute; inset: 31px 0 0 0; }
+    #flyFrame { grid-column: 1; grid-row: 2; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+    #flyMissing { grid-column: 1; grid-row: 2; display: grid; place-items: center; padding: 24px; color: #79889a; text-align: center; font-size: 13px; pointer-events: none; }
+    #flyBadge { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; background: #0c1118; border-bottom: 1px solid #252c36; font-size: 12px; pointer-events: none; }
+    #flyHint { grid-column: 1; grid-row: 3; display: flex; align-items: center; padding: 0 14px; background: #0c1118; border-top: 1px solid #252c36; font-size: 11px; color: #9aa7b6; pointer-events: none; }
+    #brainCard { min-width: 0; min-height: 0; grid-column: 2; grid-row: 1; position: relative; overflow: hidden; background: #080b10; cursor: default; touch-action: auto; }
+    #brainTitle { height: 40px; box-sizing: border-box; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 0 14px; font-size: 12px; color: #d6dee8; background: #0c1118; border-bottom: 1px solid #252c36; }
+    #brainScene { position: absolute; inset: 40px 0 0 0; }
     #brainScene canvas { display: block; }
-    #brainBadge { position: absolute; left: 8px; top: 39px; z-index: 2; font-size: 10px; color: #9aa7b6; pointer-events: none; text-shadow: 0 1px 2px #000; }
-    #panel { border-left: 1px solid #252c36; background: #11161d; padding: 16px; overflow: auto; }
+    #brainBadge { position: absolute; left: 12px; top: 50px; z-index: 2; font-size: 10px; color: #9aa7b6; pointer-events: none; text-shadow: 0 1px 2px #000; }
+    #panel { min-width: 0; min-height: 0; grid-column: 2; grid-row: 2; background: #11161d; padding: 14px 16px 18px; overflow: auto; }
     h1 { margin: 0 0 6px; font-size: 17px; }
     h2 { margin: 18px 0 8px; font-size: 13px; color: #b9c5d3; }
     p, label, button, input { font-size: 12px; line-height: 1.45; }
@@ -32,10 +32,12 @@
     #legend { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; }
     .dot { width: 10px; height: 10px; border-radius: 50%; }
     #status { min-height: 18px; color: #8fc9ff; }
-    @media (max-width: 900px) {
-      #root { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) 280px; }
-      #panel { border-left: 0; border-top: 1px solid #252c36; }
-      #brainCard { width: min(62vw, 470px); min-width: 260px; height: min(44vh, 360px); }
+    @media (max-width: 1000px) {
+      html, body { overflow: auto; }
+      #root { height: auto; min-height: 100%; grid-template-columns: 1fr; grid-template-rows: minmax(520px,62vh) 380px minmax(320px,auto); }
+      #stage { grid-column: 1; grid-row: 1; }
+      #brainCard { grid-column: 1; grid-row: 2; }
+      #panel { grid-column: 1; grid-row: 3; overflow: visible; }
     }
   </style>
   <script type="importmap">
@@ -53,26 +55,20 @@
     <img id="flyFrame" alt="live FlyBody" />
     <div id="flyMissing">FlyBody observer の映像を待っています</div>
     <div id="flyBadge">FlyBody live / 実MuJoCoモデル <span id="flyCoords">x=- / z=-</span></div>
-    <div id="flyHint">ドラッグ: 周囲を回転　ホイール: ズーム　B: MaleCNS小窓の表示切替</div>
-
-    <section id="brainCard">
-      <div id="brainTitle"><span>MaleCNS live activity</span><span>発火残光 + synapse propagation</span></div>
-      <div id="brainScene"></div>
-      <div id="brainBadge">body ID / released connection / 発火はMaleCNS由来・座標は模式配置</div>
-    </section>
+    <div id="flyHint">ドラッグ: 周囲を回転　ホイール: ズーム</div>
   </main>
 
-  <aside id="panel">
-    <h1>virtual-fly live learning viewer</h1>
-    <p class="warn">メイン画面は実FlyBodyを別MuJoCo observerで再現しています。CNSは実connectomeのbody ID・released connection・発火を使いますが、ニューロン座標は模式配置です。</p>
+  <section id="brainCard" aria-label="MaleCNS live activity">
+    <div id="brainTitle"><span>MaleCNS live activity</span><span>発火残光 + synapse propagation</span></div>
+    <div id="brainScene"></div>
+    <div id="brainBadge">MaleCNS v1.0 / released soma 3D座標 + released connection</div>
+  </section>
 
-    <h2>接続</h2>
-    <label>実験ディレクトリ</label>
-    <input id="experiment" type="text" value="artifacts/experiments/flyppy-v2" />
-    <div class="row"><button id="reconnect">再接続</button><label><input id="follow" type="checkbox" checked /> 自動追従</label></div>
+  <aside id="panel">
+    <h1>virtual-fly live</h1>
     <div id="status">読み込み中...</div>
 
-    <h2>現在</h2>
+    <h2>学習状態</h2>
     <div class="metric"><span>backend</span><span id="backend">-</span></div>
     <div class="metric"><span>episode</span><span id="episode">-</span></div>
     <div class="metric"><span>control step</span><span id="step">-</span></div>
@@ -82,18 +78,23 @@
     <div class="metric"><span>gate</span><span id="gate">-</span></div>
     <div class="metric"><span>event</span><span id="event">-</span></div>
 
+    <h2>接続</h2>
+    <label>実験ディレクトリ</label>
+    <input id="experiment" type="text" value="artifacts/experiments/flyppy-v3" />
+    <div class="row"><button id="reconnect">再接続</button><label><input id="follow" type="checkbox" checked /> 自動追従</label></div>
+
     <h2>FlyBody カメラ</h2>
     <div class="metric"><span>方位</span><span id="flyAzimuth">90°</span></div>
-    <div class="metric"><span>仰角</span><span id="flyElevation">-18°</span></div>
-    <div class="metric"><span>距離</span><span id="flyDistance">14.0</span></div>
+    <div class="metric"><span>仰角</span><span id="flyElevation">0°</span></div>
+    <div class="metric"><span>距離</span><span id="flyDistance">39.8</span></div>
     <div class="row"><button id="resetFlyCamera">FlyBody視点を戻す</button></div>
 
     <h2>CNS表示</h2>
     <div class="row">
-      <label><input id="showBrainCard" type="checkbox" checked /> MaleCNS小窓</label>
+      <label><input id="showBrainCard" type="checkbox" checked /> MaleCNS表示</label>
       <label><input id="showEdges" type="checkbox" checked /> シナプス</label>
       <label><input id="pulseEdges" type="checkbox" checked /> 伝播パルス</label>
-      <label><input id="showShell" type="checkbox" checked /> CNS輪郭</label>
+      <label><input id="showShell" type="checkbox" checked /> CNS実座標背景</label>
     </div>
     <div class="row"><button id="resetBrainCamera">CNS視点を戻す</button></div>
 
@@ -106,7 +107,7 @@
       <span class="dot" style="background:#ff6f7d"></span><span>PPL aversive event</span>
     </div>
 
-    <p class="note">シナプスの基礎明度はviewer graphに含まれるreleased synapse countを対数正規化しています。流れる点はpresynaptic neuronの発火から描いたviewer上の伝播表現で、個々のsynaptic currentを直接計測したものではありません。viewer操作・描画は学習へ返りません。</p>
+    <p class="note">FlyBodyは別MuJoCo observerによる実モデル表示です。MaleCNS表示は公式v1.0のsoma/tosoma 3D座標を同一スケールで配置し、その上にreleased connectionと発火を重ねています。viewer操作・描画は学習へ返りません。</p>
   </aside>
 </div>
 
@@ -149,7 +150,7 @@ let pointCloud = null;
 let glowCloud = null;
 let edgeLines = null;
 let pulseCloud = null;
-let shellRoot = null;
+let anatomyCloud = null;
 let nodeIndex = new Map();
 let nodePositions = null;
 let nodeEnergy = new Float32Array(0);
@@ -162,41 +163,120 @@ let lastNeuralKey = '';
 let lastAnimationTime = performance.now();
 let eventTint = REWARD_COLOR.clone();
 let poll = null;
+let framePoll = null;
+let frameRequestInFlight = false;
 let frameCounter = 0;
+let playbackState = null;
+let playbackAnimation = null;
+let playbackStart = 0;
+let playbackLastIndex = -1;
+let playbackPreload = [];
 
-const flyCamera = { azimuth: 90.0, elevation: -18.0, distance: 14.0 };
+const flyCamera = { azimuth: 90.0, elevation: 0.0, distance: 39.82183821893437 };
 let flyPointer = null;
 let cameraSendTimer = null;
 let lastCameraSend = 0;
 
-function resetBrainCamera() {
-  brainCamera.position.set(0, 1.5, 27);
-  brainControls.target.set(0, -1.5, 0);
+const DEFAULT_BRAIN_CAMERA = {
+  position: [0.0, 1.5, 27.0],
+  target: [0.0, -1.5, 0.0],
+};
+let brainCameraSendTimer = null;
+let brainCameraReady = false;
+let brainCameraApplying = false;
+let brainCameraHasSavedState = false;
+
+function applyBrainCamera(state) {
+  const position = state?.position;
+  const target = state?.target;
+  if (!Array.isArray(position) || !Array.isArray(target) || position.length !== 3 || target.length !== 3) return false;
+  const values = [...position, ...target].map(Number);
+  if (!values.every(Number.isFinite)) return false;
+  brainCameraApplying = true;
+  brainCamera.position.set(values[0], values[1], values[2]);
+  brainControls.target.set(values[3], values[4], values[5]);
   brainControls.update();
-}
-resetBrainCamera();
-
-function addShell(center, scale, opacity = 0.08) {
-  const material = new THREE.MeshBasicMaterial({ color: 0x89a7c4, wireframe: true, transparent: true, opacity, depthWrite: false });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), material);
-  mesh.position.set(...center);
-  mesh.scale.set(...scale);
-  shellRoot.add(mesh);
+  brainCameraApplying = false;
+  return true;
 }
 
-function buildShell() {
-  if (shellRoot) brainScene.remove(shellRoot);
-  shellRoot = new THREE.Group();
-  addShell([-1.55, 1.35, 0], [2.7, 3.0, 2.55], .08);
-  addShell([ 1.55, 1.35, 0], [2.7, 3.0, 2.55], .08);
-  addShell([-4.5, 1.2, 0], [1.65, 2.45, 2.05], .07);
-  addShell([ 4.5, 1.2, 0], [1.65, 2.45, 2.05], .07);
-  addShell([-0.75, -5.2, 0], [1.15, 4.2, 1.35], .06);
-  addShell([ 0.75, -5.2, 0], [1.15, 4.2, 1.35], .06);
-  brainScene.add(shellRoot);
-  shellRoot.visible = document.getElementById('showShell').checked;
+async function restoreBrainCamera() {
+  if (brainCameraReady) return;
+  brainCameraHasSavedState = false;
+  try {
+    const response = await fetch('/api/brain-camera', { cache: 'no-store' });
+    if (response.ok) {
+      const state = await response.json();
+      brainCameraHasSavedState = applyBrainCamera(state);
+    }
+  } catch (_) {
+  }
+  brainCameraReady = true;
 }
-buildShell();
+
+function fitBrainCameraToGraph(payload = graph) {
+  const anatomy = payload?.anatomy_points || [];
+  const points = anatomy.length ? anatomy : (payload?.nodes || []).map(node => node.position).filter(Boolean);
+  if (!points.length) {
+    applyBrainCamera(DEFAULT_BRAIN_CAMERA);
+    return;
+  }
+  const mins = [Infinity, Infinity, Infinity];
+  const maxs = [-Infinity, -Infinity, -Infinity];
+  for (const point of points) {
+    if (!Array.isArray(point) || point.length !== 3) continue;
+    for (let axis = 0; axis < 3; axis += 1) {
+      const value = Number(point[axis]);
+      if (!Number.isFinite(value)) continue;
+      mins[axis] = Math.min(mins[axis], value);
+      maxs[axis] = Math.max(maxs[axis], value);
+    }
+  }
+  if (![...mins, ...maxs].every(Number.isFinite)) {
+    applyBrainCamera(DEFAULT_BRAIN_CAMERA);
+    return;
+  }
+  const center = mins.map((value, axis) => (value + maxs[axis]) * 0.5);
+  const span = Math.max(...mins.map((value, axis) => maxs[axis] - value));
+  const distance = Math.max(18.0, span / (2.0 * Math.tan(THREE.MathUtils.degToRad(brainCamera.fov * 0.5))) * 1.18);
+  applyBrainCamera({
+    position: [center[0], center[1] + span * 0.10, center[2] + distance],
+    target: center,
+  });
+}
+
+async function postBrainCamera() {
+  if (!brainCameraReady || brainCameraApplying) return;
+  try {
+    await fetch('/api/brain-camera', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        position: [brainCamera.position.x, brainCamera.position.y, brainCamera.position.z],
+        target: [brainControls.target.x, brainControls.target.y, brainControls.target.z],
+      }),
+      cache: 'no-store',
+    });
+  } catch (_) {
+  }
+}
+
+function scheduleBrainCamera() {
+  if (!brainCameraReady || brainCameraApplying) return;
+  if (brainCameraSendTimer !== null) clearTimeout(brainCameraSendTimer);
+  brainCameraSendTimer = setTimeout(() => {
+    brainCameraSendTimer = null;
+    postBrainCamera();
+  }, 120);
+}
+
+function resetBrainCamera() {
+  fitBrainCameraToGraph();
+  brainCameraReady = true;
+  brainCameraHasSavedState = true;
+  postBrainCamera();
+}
+applyBrainCamera(DEFAULT_BRAIN_CAMERA);
 
 function experimentPath() {
   return experimentInput.value.trim().replace(/^\/+|\/+$/g, '');
@@ -239,8 +319,8 @@ function scheduleFlyCamera() {
 
 function resetFlyCamera() {
   flyCamera.azimuth = 90.0;
-  flyCamera.elevation = -18.0;
-  flyCamera.distance = 14.0;
+  flyCamera.elevation = 0.0;
+  flyCamera.distance = 39.82183821893437;
   postFlyCamera();
 }
 
@@ -289,9 +369,10 @@ window.addEventListener('keydown', event => {
 
 document.getElementById('resetFlyCamera').addEventListener('click', resetFlyCamera);
 document.getElementById('resetBrainCamera').addEventListener('click', resetBrainCamera);
+brainControls.addEventListener('change', scheduleBrainCamera);
 document.getElementById('showBrainCard').addEventListener('change', e => setBrainVisible(e.target.checked));
 document.getElementById('showEdges').addEventListener('change', e => { if (edgeLines) edgeLines.visible = e.target.checked; });
-document.getElementById('showShell').addEventListener('change', e => { if (shellRoot) shellRoot.visible = e.target.checked; });
+document.getElementById('showShell').addEventListener('change', e => { if (anatomyCloud) anatomyCloud.visible = e.target.checked; });
 document.getElementById('pulseEdges').addEventListener('change', e => { if (pulseCloud) pulseCloud.visible = e.target.checked; });
 document.getElementById('reconnect').addEventListener('click', () => connect(true));
 document.getElementById('follow').addEventListener('change', configurePolling);
@@ -318,6 +399,7 @@ function buildGraph(payload) {
   disposeObject(glowCloud);
   disposeObject(edgeLines);
   disposeObject(pulseCloud);
+  disposeObject(anatomyCloud);
 
   graph = payload;
   nodeIndex = new Map();
@@ -328,6 +410,20 @@ function buildGraph(payload) {
   baseNodeColors = new Array(nodes.length);
   nodeEnergy = new Float32Array(nodes.length);
   nodeEventEnergy = new Float32Array(nodes.length);
+
+  const anatomy = payload.anatomy_points || [];
+  if (anatomy.length) {
+    const anatomyPositions = new Float32Array(anatomy.length * 3);
+    anatomy.forEach((p, i) => anatomyPositions.set([Number(p[0]), Number(p[1]), Number(p[2])], i * 3));
+    const anatomyGeometry = new THREE.BufferGeometry();
+    anatomyGeometry.setAttribute('position', new THREE.BufferAttribute(anatomyPositions, 3));
+    anatomyCloud = new THREE.Points(
+      anatomyGeometry,
+      new THREE.PointsMaterial({ size: 0.055, color: 0x647789, transparent: true, opacity: 0.28, depthWrite: false, sizeAttenuation: true })
+    );
+    anatomyCloud.visible = document.getElementById('showShell').checked;
+    brainScene.add(anatomyCloud);
+  }
 
   nodes.forEach((node, i) => {
     nodeIndex.set(Number(node.body_id), i);
@@ -560,12 +656,111 @@ function updateBody(body) {
   document.getElementById('flyCoords').textContent = Number.isFinite(x) && Number.isFinite(z) ? `x=${x.toFixed(2)} / z=${z.toFixed(2)} mm` : 'x=- / z=-';
 }
 
+function playbackFrameUrl(exp, payload, index) {
+  const pattern = payload.render?.frame_pattern || 'frames/frame-%05d.jpg';
+  return `/${exp}/${pattern.replace('%05d', String(index).padStart(5, '0'))}`;
+}
+
+function preloadPlaybackWindow(exp, payload, index) {
+  playbackPreload = [];
+  const count = Number(payload.frame_count || payload.frames?.length || 0);
+  if (!count) return;
+  for (let offset = -3; offset <= 30; offset++) {
+    const candidate = (index + offset + count) % count;
+    const image = new Image();
+    image.src = playbackFrameUrl(exp, payload, candidate);
+    playbackPreload.push(image);
+  }
+}
+
+function stopOfflinePlayback() {
+  if (playbackAnimation !== null) cancelAnimationFrame(playbackAnimation);
+  playbackAnimation = null;
+  playbackState = null;
+  playbackLastIndex = -1;
+  playbackPreload = [];
+}
+
+function startOfflinePlayback(exp, payload) {
+  stopOfflinePlayback();
+  playbackState = payload;
+  playbackStart = performance.now();
+  playbackLastIndex = -1;
+  const frames = payload.frames || [];
+  const fps = Number(payload.playback_fps || 30);
+  const playMs = Math.max(1, frames.length) * 1000 / Math.max(1, fps);
+  const startHoldMs = 600;
+  const endHoldMs = 1000;
+  const cycleMs = startHoldMs + playMs + endHoldMs;
+  const flyFrame = document.getElementById('flyFrame');
+  flyFrame.onload = () => { document.getElementById('flyMissing').style.display = 'none'; };
+  flyFrame.onerror = () => { document.getElementById('flyMissing').style.display = 'grid'; };
+  document.getElementById('backend').textContent = 'offline-physics-playback';
+
+  const step = now => {
+    if (playbackState !== payload) return;
+    let index = playbackLastIndex < 0 ? 0 : playbackLastIndex;
+    if (document.getElementById('follow').checked) {
+      const elapsed = Math.max(0, now - playbackStart);
+      const phase = elapsed % cycleMs;
+      if (phase < startHoldMs) {
+        index = 0;
+      } else if (phase >= startHoldMs + playMs) {
+        index = frames.length - 1;
+      } else {
+        index = Math.min(frames.length - 1, Math.floor((phase - startHoldMs) * fps / 1000));
+      }
+    }
+    if (index !== playbackLastIndex && frames[index]) {
+      playbackLastIndex = index;
+      const frame = frames[index];
+      flyFrame.src = playbackFrameUrl(exp, payload, index);
+      if (index % 10 === 0 || playbackPreload.length === 0) preloadPlaybackWindow(exp, payload, index);
+      updateBody(frame);
+      const loopEpisode = Math.floor(Math.max(0, now - playbackStart) / cycleMs);
+      const neural = {
+        episode: loopEpisode,
+        control_step: frame.control_step,
+        neural_step: frame.neural_step,
+        depolarizing_body_ids: frame.active_neural_body_ids || [],
+        hyperpolarizing_body_ids: [],
+        reward: !!frame.reward,
+        aversive: !!frame.aversive,
+      };
+      const key = `${neural.episode}:${neural.control_step}:${neural.neural_step}:${index}`;
+      if (key !== lastNeuralKey) {
+        lastNeuralKey = key;
+        updateActivity(neural);
+      }
+      document.getElementById('status').textContent = `PLAYBACK / ${exp} / frame ${index + 1}/${frames.length}`;
+    }
+    playbackAnimation = requestAnimationFrame(step);
+  };
+  preloadPlaybackWindow(exp, payload, 0);
+  playbackAnimation = requestAnimationFrame(step);
+}
+
 function updateFlyFrame(exp) {
+  if (frameRequestInFlight) return;
   const img = document.getElementById('flyFrame');
-  img.onload = () => { document.getElementById('flyMissing').style.display = 'none'; };
-  img.onerror = () => { document.getElementById('flyMissing').style.display = 'grid'; };
+  frameRequestInFlight = true;
   frameCounter += 1;
-  img.src = `/${exp}/live/fly.png?v=${Date.now()}-${frameCounter}`;
+  const cacheKey = `${Date.now()}-${frameCounter}`;
+  let triedPng = false;
+  img.onload = () => {
+    frameRequestInFlight = false;
+    document.getElementById('flyMissing').style.display = 'none';
+  };
+  img.onerror = () => {
+    if (!triedPng) {
+      triedPng = true;
+      img.src = `/${exp}/live/fly.png?v=${cacheKey}`;
+      return;
+    }
+    frameRequestInFlight = false;
+    document.getElementById('flyMissing').style.display = 'grid';
+  };
+  img.src = `/${exp}/live/fly.jpg?v=${cacheKey}`;
 }
 
 async function tick() {
@@ -583,7 +778,6 @@ async function tick() {
       updateActivity(neural);
     }
     updateBody(body);
-    updateFlyFrame(exp);
     document.getElementById('status').textContent = status.running ? `LIVE / ${exp}` : `学習停止中 / 最終フレーム / ${exp}`;
   } catch (error) {
     document.getElementById('status').textContent = `telemetry待機中 (${exp}): ${error}`;
@@ -592,15 +786,34 @@ async function tick() {
 
 function configurePolling() {
   if (poll) clearInterval(poll);
+  if (framePoll) clearInterval(framePoll);
   poll = null;
-  if (document.getElementById('follow').checked) poll = setInterval(tick, 34);
+  framePoll = null;
+  if (playbackState) return;
+  if (document.getElementById('follow').checked) {
+    poll = setInterval(tick, 34);
+    framePoll = setInterval(() => updateFlyFrame(experimentPath()), 33);
+  }
 }
 
 async function connect(force = false) {
   try {
+    stopOfflinePlayback();
+    await restoreBrainCamera();
     if (!graph || force) {
       const payload = await fetchJson('artifacts/embodiment/neural-viewer-graph-v1.json');
       buildGraph(payload);
+      if (!brainCameraHasSavedState) fitBrainCameraToGraph(payload);
+    }
+    const exp = experimentPath();
+    try {
+      const playback = await fetchJson(`${exp}/playback.json`);
+      if (playback?.kind === 'flyppy-offline-preview-playback' && playback?.render?.frame_count > 0) {
+        configurePolling();
+        startOfflinePlayback(exp, playback);
+        return;
+      }
+    } catch (_) {
     }
     await postFlyCamera();
     await tick();

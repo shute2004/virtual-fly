@@ -23,11 +23,21 @@ from typing import Any
 def _worker_args(config: dict[str, Any]) -> SimpleNamespace:
     return SimpleNamespace(
         seed=int(config["seed"]),
+        fixed_course_seed=(
+            None if config.get("fixed_course_seed") is None else int(config["fixed_course_seed"])
+        ),
         gate_count=int(config["gate_count"]),
+        environment_version=str(config.get("environment_version", "v3")),
+        flight_body_version=str(config.get("flight_body_version", "v3")),
+        vertical_steering_gain=float(config.get("vertical_steering_gain", 1.0)),
+        measured_steering_gain=float(config.get("measured_steering_gain", 1.0)),
         wing_motor_map=Path(config["wing_motor_map"]),
         body_motor_map=Path(config["body_motor_map"]),
         retinotopic_map=Path(config["retinotopic_map"]),
+        haltere_sensory_map=Path(config.get("haltere_sensory_map", "artifacts/malecns-v1.0/haltere-campaniform-sensory-v1.json")),
         photoreceptor_current_gain=float(config["photoreceptor_current_gain"]),
+        haltere_current_gain=float(config.get("haltere_current_gain", 0.0)),
+        haltere_transduction=str(config.get("haltere_transduction", "angular-acceleration-v1")),
     )
 
 
@@ -53,12 +63,23 @@ def _worker_main(connection, slot_index: int, physics_steps: int, config: dict[s
                 episode=int(payload["episode"]),
                 source_weight_version=int(payload["source_weight_version"]),
                 condition=condition,
+                initial_vz_mm_s=float(payload.get("initial_vz_mm_s", 0.0)),
+                course_start_gate_index=(
+                    None
+                    if payload.get("course_start_gate_index") is None
+                    else int(payload["course_start_gate_index"])
+                ),
+                gate_center_overrides={
+                    int(key): float(value)
+                    for key, value in dict(payload.get("gate_center_overrides") or {}).items()
+                },
             )
             return {
                 "body_ids": body_ids,
                 "control_dt_s": control_dt_s,
                 "position": tuple(float(value) for value in slot.body.thorax_position_mm()),
                 "velocity": tuple(float(value) for value in slot.body.root_linear_velocity_mm_s()),
+                "next_gate": int(slot.course.absolute_next_gate_index),
             }
 
         connection.send(("ready", {"body_ids": body_ids, "control_dt_s": control_dt_s}))
@@ -72,15 +93,21 @@ def _worker_main(connection, slot_index: int, physics_steps: int, config: dict[s
 
             if command == "observe":
                 retinal = slot.vision.encode(slot.body.sim, slot.body.fly)
+                haltere = slot.haltere_sensor.encode(slot.body, dt_s=control_dt_s)
                 connection.send(
                     (
                         "ok",
                         {
-                            "body_currents": retinal.body_currents,
+                            "body_currents": (*retinal.body_currents, *haltere.body_currents),
                             "active_photoreceptors": int(retinal.active_photoreceptors),
                             "active_columns": int(retinal.active_columns),
                             "mean_current": float(retinal.mean_current),
                             "max_current": float(retinal.max_current),
+                            "haltere_active_sensilla": int(haltere.active_sensilla),
+                            "haltere_mean_current": float(haltere.mean_current),
+                            "haltere_max_current": float(haltere.max_current),
+                            "haltere_strain_by_side": dict(haltere.strain_by_side),
+                            "haltere_angular_acceleration_by_side": dict(haltere.angular_acceleration_by_side),
                         },
                     )
                 )
@@ -90,16 +117,31 @@ def _worker_main(connection, slot_index: int, physics_steps: int, config: dict[s
                 active_ids = frozenset(int(value) for value in request[1])
                 spikes = {body_id: body_id in active_ids for body_id in body_ids}
                 peripheral = slot.periphery.step(spikes, dt_s=control_dt_s)
-                slot.body.step_muscles(peripheral, physics_steps=physics_steps)
+                physical_collision, physics_steps_completed = slot.world.step_muscles_until_boundary_contact(
+                    slot.body,
+                    peripheral,
+                    physics_steps=physics_steps,
+                )
 
                 position = slot.body.thorax_position_mm()
                 velocity = slot.body.root_linear_velocity_mm_s()
-                physical_collision = slot.world.physical_collision_reason(slot.body.sim)
+                gate_observation = slot.course.observe(float(position[0]), float(position[2]))
+                gate_miss_distance_mm = max(
+                    float(gate_observation.gap_low_dz_mm),
+                    -float(gate_observation.gap_high_dz_mm),
+                    0.0,
+                )
+                _, collision_geom = slot.world.physical_collision_detail(slot.body.sim)
+                body_min_x_mm = None
+                body_max_x_mm = None
+                if slot.course.needs_full_body_x_sample(float(position[0])):
+                    body_min_x_mm, body_max_x_mm = slot.world.full_body_x_bounds_mm(slot.body.sim)
                 event = slot.course.update(
                     float(position[0]),
                     float(position[2]),
                     physical_collision_reason=physical_collision,
                     analytic_body_collision=False,
+                    body_min_x_mm=body_min_x_mm,
                 )
                 connection.send(
                     (
@@ -110,6 +152,7 @@ def _worker_main(connection, slot_index: int, physics_steps: int, config: dict[s
                             "passed_gate": bool(event.passed_gate),
                             "collision": bool(event.collision),
                             "collision_reason": event.collision_reason,
+                            "gate_miss_distance_mm": float(gate_miss_distance_mm),
                             "finished": bool(event.finished),
                             "next_gate": int(
                                 getattr(
@@ -119,6 +162,10 @@ def _worker_main(connection, slot_index: int, physics_steps: int, config: dict[s
                                 )
                             ),
                             "motor": peripheral.compact_diagnostics(),
+                            "physics_steps_completed": int(physics_steps_completed),
+                            "body_min_x_mm": None if body_min_x_mm is None else float(body_min_x_mm),
+                            "body_max_x_mm": None if body_max_x_mm is None else float(body_max_x_mm),
+                            "collision_geom": collision_geom,
                         },
                     )
                 )
@@ -243,6 +290,9 @@ class FlyppyBodyProcess:
         spawn_x_mm: float,
         spawn_z_mm: float,
         initial_speed_mm_s: float,
+        initial_vz_mm_s: float = 0.0,
+        course_start_gate_index: int | None = None,
+        gate_center_overrides: dict[int, float] | None = None,
     ):
         return self.call(
             "reset",
@@ -252,6 +302,16 @@ class FlyppyBodyProcess:
                 "spawn_x_mm": float(spawn_x_mm),
                 "spawn_z_mm": float(spawn_z_mm),
                 "initial_speed_mm_s": float(initial_speed_mm_s),
+                "initial_vz_mm_s": float(initial_vz_mm_s),
+                "course_start_gate_index": (
+                    None
+                    if course_start_gate_index is None
+                    else int(course_start_gate_index)
+                ),
+                "gate_center_overrides": {
+                    int(key): float(value)
+                    for key, value in (gate_center_overrides or {}).items()
+                },
             },
         )
 

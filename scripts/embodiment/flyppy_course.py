@@ -4,7 +4,14 @@
 Version 1 preserves the historical 10 mm corridor / 4 mm gate experiment.
 Version 2 preserves the provisional 2.75 mm / 1.09 mg physical-scale experiment.
 Version 3 uses the published FlyBody physical scale while keeping v2's explicit
-full-body MuJoCo collision semantics.
+full-body MuJoCo collision semantics. Version 4 preserves the historical tall
+corridor with the older narrow gate-centre range. Version 5 keeps v4 physical
+geometry but samples gate openings across the full corridor with course-level
+vertical diversity so a single constant altitude cannot clear the whole course.
+Version 6 preserves v5's diversity while constraining every adjacent transition
+to the measured vertical authority of the v7 body at Flyppy flight speeds.
+Version 7 preserves v6's x-z course exactly and closes the finite y corridor with
+physical side boundaries so the 3-D body cannot bypass gates by leaving the task plane.
 """
 
 from __future__ import annotations
@@ -14,7 +21,7 @@ import math
 import os
 import random
 
-from virtual_fly.physics import FLYPPY_GEOMETRY, FLYPPY_GEOMETRY_V3
+from virtual_fly.physics import FLYPPY_GEOMETRY, FLYPPY_GEOMETRY_V3, FLYPPY_GEOMETRY_V4
 
 
 @dataclass(frozen=True)
@@ -70,13 +77,20 @@ class FlyppyCourse:
         gate_half_thickness_mm: float | None = None,
         lateral_half_width_mm: float | None = None,
     ) -> None:
-        if environment_version not in {"v1", "v2", "v3"}:
-            raise ValueError("environment_version must be v1, v2, or v3")
+        if environment_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7"}:
+            raise ValueError("environment_version must be v1, v2, v3, v4, v5, v6, or v7")
         if gate_count < 1:
             raise ValueError("gate_count must be >= 1")
 
-        if environment_version in {"v2", "v3"}:
-            geometry = FLYPPY_GEOMETRY if environment_version == "v2" else FLYPPY_GEOMETRY_V3
+        if environment_version in {"v2", "v3", "v4", "v5", "v6", "v7"}:
+            geometry = {
+                "v2": FLYPPY_GEOMETRY,
+                "v3": FLYPPY_GEOMETRY_V3,
+                "v4": FLYPPY_GEOMETRY_V4,
+                "v5": FLYPPY_GEOMETRY_V4,
+                "v6": FLYPPY_GEOMETRY_V4,
+                "v7": FLYPPY_GEOMETRY_V4,
+            }[environment_version]
             first_gate_x_mm = (
                 geometry.first_gate_x_mm
                 if first_gate_x_mm is None
@@ -159,17 +173,73 @@ class FlyppyCourse:
         self.gate_half_thickness_mm = float(gate_half_thickness_mm)
         self._next_gate = 0
         self._last_x_mm = -math.inf
+        self._pending_physical_gate_clear = False
 
-        low_center = self.floor_z_mm + float(gap_half_height_mm) + float(center_margin_mm)
-        high_center = self.ceiling_z_mm - float(gap_half_height_mm) - float(center_margin_mm)
+        if environment_version == "v4":
+            # Preserve the historical v4 layout exactly for checkpoint/playback
+            # reproducibility.  Its gate centres intentionally used the older
+            # v3 vertical range even though the corridor itself was taller.
+            low_center = (
+                FLYPPY_GEOMETRY_V3.corridor_low_z_mm
+                + FLYPPY_GEOMETRY_V3.gate_gap_half_height_mm
+                + FLYPPY_GEOMETRY_V3.center_margin_mm
+            )
+            high_center = (
+                FLYPPY_GEOMETRY_V3.corridor_high_z_mm
+                - FLYPPY_GEOMETRY_V3.gate_gap_half_height_mm
+                - FLYPPY_GEOMETRY_V3.center_margin_mm
+            )
+        else:
+            low_center = self.floor_z_mm + float(gap_half_height_mm) + float(center_margin_mm)
+            high_center = self.ceiling_z_mm - float(gap_half_height_mm) - float(center_margin_mm)
         if high_center <= low_center:
             raise ValueError("corridor is too small for requested gate gap")
 
         rng = random.Random(seed)
+        if environment_version in {"v5", "v6", "v7"} and gate_count > 1:
+            # v5 keeps v4 physical dimensions but fixes its vertically narrow
+            # course generator. v6/v7 preserve that diversity and additionally
+            # reject adjacent openings whose safe vertical intervals require a
+            # displacement beyond the measured v7 body authority.
+            gap_height_mm = 2.0 * float(gap_half_height_mm)
+            min_adjacent_delta_mm = 0.25 * gap_height_mm
+            clearance_margin_mm = 1.0
+            safe_half_gap_mm = float(gap_half_height_mm) - clearance_margin_mm
+            # At the hardest focused reset, the fly has roughly 9.38 mm of
+            # forward travel before the next wall. Direct v7 muscle-envelope
+            # measurement at 450 mm/s produced ~2.10 mm maximum climb over that
+            # distance. Keep ~0.6 mm authority margin rather than generating
+            # transitions at the measured limit.
+            max_required_shift_mm = 1.5
+            if environment_version in {"v6", "v7"} and safe_half_gap_mm <= 0.0:
+                raise ValueError(f"{environment_version} clearance margin leaves no safe gate aperture")
+            for _ in range(4096):
+                centers = [rng.uniform(low_center, high_center) for _ in range(gate_count)]
+                adjacent_varied = all(
+                    abs(b - a) >= min_adjacent_delta_mm
+                    for a, b in zip(centers, centers[1:])
+                )
+                no_horizontal_all_clear = max(centers) - min(centers) > gap_height_mm
+                reachable = True
+                if environment_version in {"v6", "v7"}:
+                    reachable = all(
+                        max(0.0, abs(b - a) - 2.0 * safe_half_gap_mm)
+                        <= max_required_shift_mm
+                        for a, b in zip(centers, centers[1:])
+                    )
+                if adjacent_varied and no_horizontal_all_clear and reachable:
+                    break
+            else:
+                raise RuntimeError(
+                    f"failed to generate a diverse {environment_version} Flyppy gate layout"
+                )
+        else:
+            centers = [rng.uniform(low_center, high_center) for _ in range(gate_count)]
+
         all_gates = tuple(
             Gate(
                 x_mm=float(first_gate_x_mm) + i * float(gate_spacing_mm),
-                center_z_mm=rng.uniform(low_center, high_center),
+                center_z_mm=float(centers[i]),
                 half_gap_mm=float(gap_half_height_mm),
                 half_thickness_mm=self.gate_half_thickness_mm,
             )
@@ -200,9 +270,61 @@ class FlyppyCourse:
     def finished(self) -> bool:
         return self._next_gate >= len(self.gates)
 
-    def reset(self) -> None:
-        self._next_gate = 0
+    def set_gate_center_z_mm(self, gate_index: int, center_z_mm: float) -> Gate:
+        """Move one gate opening vertically while preserving its x/gap/thickness.
+
+        This mutates only the task geometry for a new episode. The MuJoCo wall
+        geometry must be updated by ``FlyppyWorld.set_gate_center_z_mm`` at the
+        same time so vision, contact, and course semantics stay identical.
+        """
+
+        index = int(gate_index)
+        if index < 0 or index >= len(self.gates):
+            raise IndexError(f"gate_index out of range: {index}")
+        center = float(center_z_mm)
+        if not math.isfinite(center):
+            raise ValueError("gate center must be finite")
+        old = self.gates[index]
+        updated = Gate(
+            x_mm=old.x_mm,
+            center_z_mm=center,
+            half_gap_mm=old.half_gap_mm,
+            half_thickness_mm=old.half_thickness_mm,
+        )
+        if updated.low_z_mm <= self.floor_z_mm or updated.high_z_mm >= self.ceiling_z_mm:
+            raise ValueError(
+                "gate opening must remain strictly inside the corridor: "
+                f"index={index} low={updated.low_z_mm:.6f} high={updated.high_z_mm:.6f} "
+                f"corridor=({self.floor_z_mm:.6f},{self.ceiling_z_mm:.6f})"
+            )
+        gates = list(self.gates)
+        gates[index] = updated
+        self.gates = tuple(gates)
+        return updated
+
+    def reset(self, *, next_gate_index: int | None = None) -> None:
+        """Reset progress, optionally starting from one absolute gate index.
+
+        Focused curriculum episodes may begin physically after earlier gates. In
+        that case the course state must start at the same absolute gate instead
+        of falsely waiting for gate 1. Normal evaluation leaves this argument
+        unset and always restarts from the course's configured first gate.
+        """
+
+        if next_gate_index is None:
+            internal_index = 0
+        else:
+            absolute_index = int(next_gate_index)
+            internal_index = absolute_index - self.source_gate_offset
+            if internal_index < 0 or internal_index >= len(self.gates):
+                raise ValueError(
+                    "next_gate_index must identify a gate in this course: "
+                    f"absolute={absolute_index} source_offset={self.source_gate_offset} "
+                    f"gate_count={len(self.gates)}"
+                )
+        self._next_gate = internal_index
         self._last_x_mm = -math.inf
+        self._pending_physical_gate_clear = False
 
     def observe(self, x_mm: float, z_mm: float) -> CourseObservation:
         gate = self.gates[-1] if self.finished else self.gates[self._next_gate]
@@ -215,6 +337,18 @@ class FlyppyCourse:
             ceiling_dz_mm=self.ceiling_z_mm - z_mm,
         )
 
+    def needs_full_body_x_sample(self, x_mm: float, *, lookahead_mm: float = 3.0) -> bool:
+        """Return whether precise whole-body x bounds can affect gate clearance now."""
+
+        if self.finished:
+            return False
+        if self._pending_physical_gate_clear:
+            return True
+        if lookahead_mm < 0.0:
+            raise ValueError("lookahead_mm must be >= 0")
+        gate = self.gates[self._next_gate]
+        return float(x_mm) >= gate.x_mm - float(lookahead_mm)
+
     def update(
         self,
         x_mm: float,
@@ -223,6 +357,7 @@ class FlyppyCourse:
         body_radius_mm: float = 0.65,
         physical_collision_reason: str | None = None,
         analytic_body_collision: bool = True,
+        body_min_x_mm: float | None = None,
     ) -> CourseEvent:
         """Advance gate state after one physics/control step.
 
@@ -232,7 +367,7 @@ class FlyppyCourse:
         including wings and halteres, decides collisions.
         """
 
-        if physical_collision_reason not in {None, "floor", "ceiling", "gate"}:
+        if physical_collision_reason not in {None, "floor", "ceiling", "side", "gate"}:
             raise ValueError(f"unknown physical collision reason: {physical_collision_reason}")
         if physical_collision_reason is not None:
             self._last_x_mm = x_mm
@@ -281,27 +416,56 @@ class FlyppyCourse:
                     collision_reason="gate",
                 )
         else:
-            # Full-body MuJoCo contact already established clearance; only the
-            # thorax plane crossing is needed to count a pass.
+            # Physical mode is two-stage: the thorax must first cross the gate
+            # plane through the vertical aperture, then the complete articulated
+            # FlyBody must clear the rear face of the wall without any MuJoCo
+            # contact before reward is emitted.
             vertical_clear = gate.low_z_mm < z_mm < gate.high_z_mm
 
         crossed_plane = self._last_x_mm < gate.x_mm <= x_mm
-        if crossed_plane:
-            if not vertical_clear:
+        if analytic_body_collision:
+            if crossed_plane:
+                if not vertical_clear:
+                    self._last_x_mm = x_mm
+                    return CourseEvent(
+                        collision=True,
+                        gate_index=self.absolute_next_gate_index,
+                        collision_reason="gate",
+                    )
+                passed = self.absolute_next_gate_index
+                self._next_gate += 1
                 self._last_x_mm = x_mm
                 return CourseEvent(
-                    collision=True,
-                    gate_index=self.absolute_next_gate_index,
-                    collision_reason="gate",
+                    passed_gate=True,
+                    finished=self.finished,
+                    gate_index=passed,
                 )
-            passed = self.absolute_next_gate_index
-            self._next_gate += 1
-            self._last_x_mm = x_mm
-            return CourseEvent(
-                passed_gate=True,
-                finished=self.finished,
-                gate_index=passed,
-            )
+        else:
+            if crossed_plane and not self._pending_physical_gate_clear:
+                if not vertical_clear:
+                    self._last_x_mm = x_mm
+                    return CourseEvent(
+                        collision=True,
+                        gate_index=self.absolute_next_gate_index,
+                        collision_reason="gate",
+                    )
+                self._pending_physical_gate_clear = True
+
+            rear_face_x_mm = gate.x_mm + gate.half_thickness_mm
+            if (
+                self._pending_physical_gate_clear
+                and body_min_x_mm is not None
+                and float(body_min_x_mm) > rear_face_x_mm
+            ):
+                passed = self.absolute_next_gate_index
+                self._next_gate += 1
+                self._pending_physical_gate_clear = False
+                self._last_x_mm = x_mm
+                return CourseEvent(
+                    passed_gate=True,
+                    finished=self.finished,
+                    gate_index=passed,
+                )
 
         self._last_x_mm = x_mm
         return CourseEvent()
@@ -331,17 +495,64 @@ def _self_test() -> None:
             2.0 * v3.gates[0].half_gap_mm, FLYPPY_GEOMETRY_V3.gate_gap_height_mm
         )
 
-        for physical in (v2, v3):
+        v4 = FlyppyCourse(seed=7, gate_count=2, environment_version="v4")
+        assert math.isclose(v4.floor_z_mm, FLYPPY_GEOMETRY_V4.corridor_low_z_mm)
+        assert math.isclose(v4.ceiling_z_mm, FLYPPY_GEOMETRY_V4.corridor_high_z_mm)
+        assert math.isclose(v4.gates[0].x_mm, FLYPPY_GEOMETRY_V4.first_gate_x_mm)
+        assert math.isclose(v4.gates[0].center_z_mm, v3.gates[0].center_z_mm)
+        assert math.isclose(2.0 * v4.gates[0].half_gap_mm, FLYPPY_GEOMETRY_V4.gate_gap_height_mm)
+
+        v5 = FlyppyCourse(seed=7, gate_count=6, environment_version="v5")
+        assert math.isclose(v5.floor_z_mm, FLYPPY_GEOMETRY_V4.corridor_low_z_mm)
+        assert math.isclose(v5.ceiling_z_mm, FLYPPY_GEOMETRY_V4.corridor_high_z_mm)
+        assert math.isclose(v5.gates[0].x_mm, FLYPPY_GEOMETRY_V4.first_gate_x_mm)
+        assert math.isclose(2.0 * v5.gates[0].half_gap_mm, FLYPPY_GEOMETRY_V4.gate_gap_height_mm)
+        v5_repeat = FlyppyCourse(seed=7, gate_count=6, environment_version="v5")
+        assert [gate.center_z_mm for gate in v5.gates] == [
+            gate.center_z_mm for gate in v5_repeat.gates
+        ]
+        v5_centers = [gate.center_z_mm for gate in v5.gates]
+        assert max(v5_centers) - min(v5_centers) > FLYPPY_GEOMETRY_V4.gate_gap_height_mm
+        assert all(
+            abs(b - a) >= 0.25 * FLYPPY_GEOMETRY_V4.gate_gap_height_mm
+            for a, b in zip(v5_centers, v5_centers[1:])
+        )
+
+        v6 = FlyppyCourse(seed=7, gate_count=6, environment_version="v6")
+        v6_repeat = FlyppyCourse(seed=7, gate_count=6, environment_version="v6")
+        assert [gate.center_z_mm for gate in v6.gates] == [
+            gate.center_z_mm for gate in v6_repeat.gates
+        ]
+        v6_centers = [gate.center_z_mm for gate in v6.gates]
+        assert max(v6_centers) - min(v6_centers) > FLYPPY_GEOMETRY_V4.gate_gap_height_mm
+        safe_half_gap_mm = FLYPPY_GEOMETRY_V4.gate_gap_half_height_mm - 1.0
+        assert all(
+            max(0.0, abs(b - a) - 2.0 * safe_half_gap_mm) <= 1.5
+            for a, b in zip(v6_centers, v6_centers[1:])
+        )
+        v7 = FlyppyCourse(seed=7, gate_count=6, environment_version="v7")
+        assert [gate.center_z_mm for gate in v7.gates] == v6_centers
+
+        for physical in (v2, v3, v4, v5, v6, v7):
             physical_gate = physical.gates[0]
             assert not physical.update(
                 physical_gate.x_mm - 1.0,
                 physical_gate.center_z_mm,
                 analytic_body_collision=False,
+                body_min_x_mm=physical_gate.x_mm - 1.5,
             ).collision
             event = physical.update(
                 physical_gate.x_mm + 0.1,
                 physical_gate.center_z_mm,
                 analytic_body_collision=False,
+                body_min_x_mm=physical_gate.x_mm - 0.5,
+            )
+            assert not event.passed_gate
+            event = physical.update(
+                physical_gate.x_mm + 1.5,
+                physical_gate.center_z_mm,
+                analytic_body_collision=False,
+                body_min_x_mm=physical_gate.x_mm + physical_gate.half_thickness_mm + 0.01,
             )
             assert event.passed_gate
 

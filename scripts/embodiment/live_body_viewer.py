@@ -16,7 +16,9 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import struct
+import subprocess
 import time
 import zlib
 
@@ -30,10 +32,12 @@ from flyppy_world import FlyppyWorld
 
 
 DEFAULT_CAMERA = {
+    # User-selected side-on presentation framing.
     "azimuth": 90.0,
-    "elevation": -18.0,
-    "distance": 14.0,
+    "elevation": 0.0,
+    "distance": 39.82183821893437,
 }
+CAMERA_FORWARD_LOOK_MM = 10.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gate-count", type=int, default=6)
     parser.add_argument(
         "--environment-version",
-        choices=("v1", "v2", "v3"),
+        choices=("v1", "v2", "v3", "v4", "v5", "v6", "v7"),
         default=None,
         help="explicit physical environment; overrides missing/stale run metadata",
     )
@@ -95,6 +99,63 @@ def write_bytes_atomic(path: Path, payload: bytes) -> None:
     os.replace(temp, path)
 
 
+def start_jpeg_writer(path: Path, *, width: int, height: int, fps: float):
+    """Start a persistent ffmpeg JPEG encoder, or return None when unavailable."""
+
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        f"{fps:.6f}",
+        "-i",
+        "pipe:0",
+        "-an",
+        "-f",
+        "image2",
+        "-update",
+        "1",
+        "-atomic_writing",
+        "1",
+        "-q:v",
+        "5",
+        str(path),
+    ]
+    return subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        bufsize=0,
+    )
+
+
+def stop_jpeg_writer(process) -> None:
+    if process is None:
+        return
+    try:
+        if process.stdin is not None:
+            process.stdin.close()
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=2.0)
+
+
 def read_camera_state(path: Path, previous: dict[str, float]) -> dict[str, float]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -132,12 +193,12 @@ def infer_training_context(
     except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
         gate_index = 0
         environment_version = str(explicit_environment_version or "v1")
-    if environment_version not in {"v1", "v2", "v3"}:
+    if environment_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7"}:
         environment_version = "v1"
     return max(0, gate_index), environment_version
 
 
-def read_pose(path: Path) -> tuple[tuple[int, int], float, np.ndarray, np.ndarray] | None:
+def read_pose(path: Path) -> tuple[tuple[int, int], float, np.ndarray, np.ndarray, float | None] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -147,9 +208,11 @@ def read_pose(path: Path) -> tuple[tuple[int, int], float, np.ndarray, np.ndarra
         sim_time_s = float(payload.get("sim_time_s", 0.0))
         qpos = np.asarray(payload["qpos"], dtype=np.float64)
         qvel = np.asarray(payload["qvel"], dtype=np.float64)
+        raw_gate_height = payload.get("gate_height_center_z_mm")
+        gate_height_center_z_mm = None if raw_gate_height is None else float(raw_gate_height)
     except (KeyError, TypeError, ValueError):
         return None
-    return key, sim_time_s, qpos, qvel
+    return key, sim_time_s, qpos, qvel, gate_height_center_z_mm
 
 
 def interpolate_qpos(
@@ -191,7 +254,7 @@ def main() -> int:
     )
     world = FlyppyWorld(course)
     spawn_z = (course.floor_z_mm + course.ceiling_z_mm) / 2.0
-    body_cls = FlyBodyV3MuscleAdapter if environment_version == "v3" else FlyBodyMuscleAdapter
+    body_cls = FlyBodyV3MuscleAdapter if environment_version in {"v3", "v4", "v5", "v6", "v7"} else FlyBodyMuscleAdapter
     body = body_cls(
         tethered=False,
         world=world,
@@ -203,15 +266,17 @@ def main() -> int:
 
     live_dir = args.experiment / "live"
     live_path = live_dir / "body.json"
-    frame_path = live_dir / "fly.png"
+    png_frame_path = live_dir / "fly.png"
+    jpeg_frame_path = live_dir / "fly.jpg"
     camera_path = live_dir / "camera.json"
-    # fly.png belongs to this detached renderer, not to training. Never display
-    # a frame inherited from a previous observer process while waiting for the
-    # current run's first body snapshot.
-    try:
-        frame_path.unlink(missing_ok=True)
-    except OSError:
-        pass
+    # Rendered frames belong to this detached observer, not to training. Never
+    # display a frame inherited from a previous observer process while waiting
+    # for the current run's first body snapshot.
+    for stale_frame in (png_frame_path, jpeg_frame_path):
+        try:
+            stale_frame.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     last_key: tuple[int, int] | None = None
     last_camera_mtime: int | None = None
@@ -222,6 +287,13 @@ def main() -> int:
         height=args.height,
         width=args.width,
     )
+    jpeg_writer = start_jpeg_writer(
+        jpeg_frame_path,
+        width=args.width,
+        height=args.height,
+        fps=args.poll_hz,
+    )
+    frame_path = jpeg_frame_path if jpeg_writer is not None else png_frame_path
 
     camera = mj.MjvCamera()
     mj.mjv_defaultCamera(camera)
@@ -274,15 +346,16 @@ def main() -> int:
                     pose_b_qpos = None
                     pose_b_qvel = None
                     last_source_arrival = None
-                    try:
-                        frame_path.unlink(missing_ok=True)
-                    except OSError:
-                        pass
+                    for stale_frame in (png_frame_path, jpeg_frame_path):
+                        try:
+                            stale_frame.unlink(missing_ok=True)
+                        except OSError:
+                            pass
                     if not waiting_for_telemetry:
                         print("body_viewer=waiting-for-telemetry")
                     waiting_for_telemetry = True
             elif pose is not None:
-                key, source_time, incoming_qpos, incoming_qvel = pose
+                key, source_time, incoming_qpos, incoming_qvel, gate_height_center_z_mm = pose
                 if incoming_qpos.shape != body.sim.mj_data.qpos.shape:
                     raise RuntimeError(
                         f"qpos shape mismatch: telemetry={incoming_qpos.shape} viewer={body.sim.mj_data.qpos.shape}"
@@ -298,6 +371,8 @@ def main() -> int:
 
                 if key != last_key:
                     episode_changed = last_key is None or key[0] != last_key[0]
+                    if episode_changed and gate_height_center_z_mm is not None:
+                        world.set_gate_center_z_mm(body.sim, 1, gate_height_center_z_mm)
                     arrival = now
                     if episode_changed or pose_b_qpos is None:
                         pose_a_qpos = incoming_qpos.copy()
@@ -355,11 +430,28 @@ def main() -> int:
                 camera.azimuth = camera_state["azimuth"]
                 camera.elevation = camera_state["elevation"]
                 camera.distance = camera_state["distance"]
-                camera.lookat[:] = np.asarray(body.thorax_position_mm(), dtype=np.float64)
+                thorax = np.asarray(body.thorax_position_mm(), dtype=np.float64)
+                camera.lookat[:] = np.asarray(
+                    (
+                        thorax[0] + CAMERA_FORWARD_LOOK_MM,
+                        0.0,
+                        (course.floor_z_mm + course.ceiling_z_mm) / 2.0,
+                    ),
+                    dtype=np.float64,
+                )
 
                 renderer.update_scene(body.sim.mj_data, camera=camera)
                 frame = renderer.render()
-                write_bytes_atomic(frame_path, encode_rgb_png(frame))
+                if jpeg_writer is not None and jpeg_writer.stdin is not None:
+                    try:
+                        jpeg_writer.stdin.write(np.ascontiguousarray(frame[:, :, :3]).tobytes())
+                    except (BrokenPipeError, OSError):
+                        stop_jpeg_writer(jpeg_writer)
+                        jpeg_writer = None
+                        frame_path = png_frame_path
+                        write_bytes_atomic(frame_path, encode_rgb_png(frame))
+                else:
+                    write_bytes_atomic(frame_path, encode_rgb_png(frame))
 
                 if native_viewer is not None:
                     native_viewer.sync()
@@ -370,6 +462,7 @@ def main() -> int:
     except KeyboardInterrupt:
         return 0
     finally:
+        stop_jpeg_writer(jpeg_writer)
         renderer.close()
         if native_viewer is not None:
             native_viewer.close()

@@ -38,8 +38,12 @@ enum ReplayRecord {
     Restart,
 }
 
-fn default_true() -> bool { true }
-fn default_one() -> usize { 1 }
+fn default_true() -> bool {
+    true
+}
+fn default_one() -> usize {
+    1
+}
 
 #[derive(Debug, Serialize)]
 struct SampleStats {
@@ -94,20 +98,32 @@ fn main() -> Result<()> {
     let mut records = Vec::new();
     for (line_no, raw) in text.lines().enumerate() {
         let raw = raw.trim();
-        if raw.is_empty() { continue; }
+        if raw.is_empty() {
+            continue;
+        }
         records.push(
             serde_json::from_str::<ReplayRecord>(raw)
                 .with_context(|| format!("parse replay record line {}", line_no + 1))?,
         );
     }
-    if records.is_empty() { bail!("replay sequence is empty"); }
+    if records.is_empty() {
+        bail!("replay sequence is empty");
+    }
 
     let mut neural_step = 0u64;
     let mut samples = Vec::new();
     for record in records {
         match record {
-            ReplayRecord::Step { stimuli, plasticity, steps, sample, normal_step } => {
-                if steps == 0 { bail!("replay step count must be >= 1"); }
+            ReplayRecord::Step {
+                stimuli,
+                plasticity,
+                steps,
+                sample,
+                normal_step,
+            } => {
+                if steps == 0 {
+                    bail!("replay step count must be >= 1");
+                }
                 let stimuli = stimuli
                     .into_iter()
                     .map(|(neuron, current)| Stimulus { neuron, current })

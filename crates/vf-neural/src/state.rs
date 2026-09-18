@@ -48,9 +48,7 @@ impl NeuralState {
             .enumerate()
             .find(|(_, value)| *value > 2)
         {
-            bail!(
-                "state activity event at neuron {index} is {value}; expected 0, 1, or 2"
-            );
+            bail!("state activity event at neuron {index} is {value}; expected 0, 1, or 2");
         }
         if self
             .membrane

@@ -12,9 +12,7 @@ use vf_neural::{
     ConnectomeSnapshot, NeuralParams, OutgoingPropagationGraph, PlasticFastGraph, Stimulus,
     gpu_population_frontier_profiled::GpuPopulationRuntime,
 };
-use vf_runner::checkpoint::{
-    load_checkpoint, save_checkpoint_with_global_weight_version,
-};
+use vf_runner::checkpoint::{load_checkpoint, save_checkpoint_with_global_weight_version};
 
 #[derive(Debug, Parser)]
 #[command(name = "population-frontier-profile-bridge")]
@@ -63,7 +61,9 @@ enum Request {
         #[serde(default)]
         global_weight_version: u64,
     },
-    SaveCheckpoint { path: PathBuf },
+    SaveCheckpoint {
+        path: PathBuf,
+    },
     StepBatch {
         slots: Vec<SlotStepRequest>,
         #[serde(default = "default_true")]
@@ -80,17 +80,25 @@ enum Request {
         #[serde(default = "default_one")]
         steps: usize,
     },
-    FrontierStats { slot: usize },
+    FrontierStats {
+        slot: usize,
+    },
     CommitSlot {
         slot: usize,
         source_weight_version: u64,
     },
-    RestartSlot { slot: usize },
+    RestartSlot {
+        slot: usize,
+    },
     Quit,
 }
 
-fn default_true() -> bool { true }
-fn default_one() -> usize { 1 }
+fn default_true() -> bool {
+    true
+}
+fn default_one() -> usize {
+    1
+}
 
 #[derive(Debug, Serialize)]
 struct ReadyResponse<'a> {
@@ -187,9 +195,9 @@ fn resolve_groups(
         let mut indices = Vec::with_capacity(group.body_ids.len());
         for body_id in group.body_ids {
             indices.push(
-                snapshot
-                    .index_of_body_id(body_id)
-                    .with_context(|| format!("group {name:?} contains unknown body ID {body_id}"))?,
+                snapshot.index_of_body_id(body_id).with_context(|| {
+                    format!("group {name:?} contains unknown body ID {body_id}")
+                })?,
             );
         }
         if indices.is_empty() {
@@ -269,7 +277,9 @@ fn calculate_frontier_stats(
     let mut candidate_incoming_edges = 0usize;
     let mut candidate_plastic_edges = 0usize;
     for (post, &is_candidate) in candidate.iter().enumerate() {
-        if !is_candidate { continue; }
+        if !is_candidate {
+            continue;
+        }
         candidate_posts += 1;
         candidate_incoming_edges +=
             snapshot.row_offsets[post + 1] as usize - snapshot.row_offsets[post] as usize;
@@ -291,7 +301,9 @@ fn calculate_frontier_stats(
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    if args.slots == 0 { bail!("--slots must be >= 1"); }
+    if args.slots == 0 {
+        bail!("--slots must be >= 1");
+    }
 
     let snapshot = ConnectomeSnapshot::load_dir(&args.snapshot)
         .with_context(|| format!("load MaleCNS snapshot from {}", args.snapshot.display()))?;
@@ -327,7 +339,9 @@ fn main() -> Result<()> {
 
     for line in stdin.lock().lines() {
         let line = line?;
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         let request = match serde_json::from_str::<Request>(&line) {
             Ok(value) => value,
             Err(error) => {
@@ -339,9 +353,16 @@ fn main() -> Result<()> {
         let result = match request {
             Request::Ping => write_json(
                 &mut stdout,
-                &SimpleResponse { ok: true, event: "pong", global_weight_version },
+                &SimpleResponse {
+                    ok: true,
+                    event: "pong",
+                    global_weight_version,
+                },
             ),
-            Request::LoadCheckpoint { path, global_weight_version: requested_version } => {
+            Request::LoadCheckpoint {
+                path,
+                global_weight_version: requested_version,
+            } => {
                 let result = (|| -> Result<()> {
                     let (manifest, state) = load_checkpoint(
                         &path,
@@ -372,7 +393,9 @@ fn main() -> Result<()> {
                         },
                     )
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::SaveCheckpoint { path } => {
@@ -396,7 +419,9 @@ fn main() -> Result<()> {
                         },
                     )
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::StepBatch { slots, plasticity } => {
@@ -407,8 +432,12 @@ fn main() -> Result<()> {
                     let mut read_flat = Vec::<usize>::new();
                     let mut read_meta = Vec::<(usize, u64)>::new();
                     for request in &slots {
-                        if request.slot >= runtime.slot_count() { bail!("slot out of range"); }
-                        if !seen.insert(request.slot) { bail!("duplicate slot in batch"); }
+                        if request.slot >= runtime.slot_count() {
+                            bail!("slot out of range");
+                        }
+                        if !seen.insert(request.slot) {
+                            bail!("duplicate slot in batch");
+                        }
                         active_slots[request.slot] = true;
                         stimuli_by_slot[request.slot] = build_stimuli(
                             &snapshot,
@@ -450,43 +479,74 @@ fn main() -> Result<()> {
                         .collect();
                     write_json(
                         &mut stdout,
-                        &BatchStepResponse { ok: true, step: neural_step, slots: response },
+                        &BatchStepResponse {
+                            ok: true,
+                            step: neural_step,
+                            slots: response,
+                        },
                     )
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
-            Request::StepSlot { slot, stimulate, stimulate_body, plasticity, steps } => {
+            Request::StepSlot {
+                slot,
+                stimulate,
+                stimulate_body,
+                plasticity,
+                steps,
+            } => {
                 let result = (|| -> Result<()> {
-                    if slot >= runtime.slot_count() || steps == 0 { bail!("invalid slot/steps"); }
+                    if slot >= runtime.slot_count() || steps == 0 {
+                        bail!("invalid slot/steps");
+                    }
                     let mut stimuli_by_slot = vec![Vec::<Stimulus>::new(); runtime.slot_count()];
                     let mut active_slots = vec![false; runtime.slot_count()];
                     active_slots[slot] = true;
-                    stimuli_by_slot[slot] = build_stimuli(
-                        &snapshot,
-                        &groups,
-                        &stimulate,
-                        &stimulate_body,
+                    stimuli_by_slot[slot] =
+                        build_stimuli(&snapshot, &groups, &stimulate, &stimulate_body)?;
+                    runtime.step_batch_no_read(
+                        &stimuli_by_slot,
+                        &active_slots,
+                        plasticity,
+                        steps,
                     )?;
-                    runtime.step_batch_no_read(&stimuli_by_slot, &active_slots, plasticity, steps)?;
                     neural_step += steps as u64;
-                    write_json(&mut stdout, &StepResponse { ok: true, step: neural_step })
+                    write_json(
+                        &mut stdout,
+                        &StepResponse {
+                            ok: true,
+                            step: neural_step,
+                        },
+                    )
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::FrontierStats { slot } => {
                 let result = (|| -> Result<()> {
-                    if slot >= runtime.slot_count() { bail!("slot out of range"); }
+                    if slot >= runtime.slot_count() {
+                        bail!("slot out of range");
+                    }
                     let active = runtime.active_neuron_indices(slot)?;
-                    let mut stats = calculate_frontier_stats(&snapshot, &outgoing, &plastic, &active);
+                    let mut stats =
+                        calculate_frontier_stats(&snapshot, &outgoing, &plastic, &active);
                     stats.slot = slot;
                     write_json(&mut stdout, &stats)
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
-            Request::CommitSlot { slot, source_weight_version } => {
+            Request::CommitSlot {
+                slot,
+                source_weight_version,
+            } => {
                 let result = (|| -> Result<()> {
                     if source_weight_version > global_weight_version {
                         bail!("slot source version is newer than global version");
@@ -507,7 +567,9 @@ fn main() -> Result<()> {
                         },
                     )
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::RestartSlot { slot } => {
@@ -515,7 +577,11 @@ fn main() -> Result<()> {
                 match result {
                     Ok(()) => write_json(
                         &mut stdout,
-                        &SimpleResponse { ok: true, event: "slot_restarted", global_weight_version },
+                        &SimpleResponse {
+                            ok: true,
+                            event: "slot_restarted",
+                            global_weight_version,
+                        },
                     ),
                     Err(error) => write_error(&mut stdout, error),
                 }
@@ -523,7 +589,11 @@ fn main() -> Result<()> {
             Request::Quit => {
                 write_json(
                     &mut stdout,
-                    &SimpleResponse { ok: true, event: "bye", global_weight_version },
+                    &SimpleResponse {
+                        ok: true,
+                        event: "bye",
+                        global_weight_version,
+                    },
                 )?;
                 break;
             }

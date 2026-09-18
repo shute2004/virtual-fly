@@ -69,9 +69,15 @@ enum Request {
         #[serde(default)]
         read_body: Vec<u64>,
     },
-    SaveWeights { path: PathBuf },
-    SaveCheckpoint { path: PathBuf },
-    LoadCheckpoint { path: PathBuf },
+    SaveWeights {
+        path: PathBuf,
+    },
+    SaveCheckpoint {
+        path: PathBuf,
+    },
+    LoadCheckpoint {
+        path: PathBuf,
+    },
     Quit,
 }
 
@@ -344,15 +350,17 @@ fn main() -> Result<()> {
                     for (name, current) in stimulate {
                         match groups.get(&name) {
                             Some(group) => {
-                                stimuli.extend(group.indices.iter().copied().map(|neuron| Stimulus {
-                                    neuron,
-                                    current,
-                                }));
+                                stimuli.extend(
+                                    group
+                                        .indices
+                                        .iter()
+                                        .copied()
+                                        .map(|neuron| Stimulus { neuron, current }),
+                                );
                             }
                             None => {
-                                request_error = Some(anyhow::anyhow!(
-                                    "unknown stimulation group {name:?}"
-                                ));
+                                request_error =
+                                    Some(anyhow::anyhow!("unknown stimulation group {name:?}"));
                                 break;
                             }
                         }
@@ -380,9 +388,8 @@ fn main() -> Result<()> {
                                     read_group_indices.push((name, group.indices.clone()));
                                 }
                                 None => {
-                                    request_error = Some(anyhow::anyhow!(
-                                        "unknown read group {name:?}"
-                                    ));
+                                    request_error =
+                                        Some(anyhow::anyhow!("unknown read group {name:?}"));
                                     break;
                                 }
                             }
@@ -393,9 +400,8 @@ fn main() -> Result<()> {
                             match snapshot.index_of_body_id(body_id) {
                                 Some(index) => read_body_indices.push((body_id, index)),
                                 None => {
-                                    request_error = Some(anyhow::anyhow!(
-                                        "unknown read body ID {body_id}"
-                                    ));
+                                    request_error =
+                                        Some(anyhow::anyhow!("unknown read body ID {body_id}"));
                                     break;
                                 }
                             }
@@ -414,7 +420,8 @@ fn main() -> Result<()> {
                             match neural_step.checked_add(1) {
                                 Some(next) => neural_step = next,
                                 None => {
-                                    step_error = Some(anyhow::anyhow!("neural step counter overflow"));
+                                    step_error =
+                                        Some(anyhow::anyhow!("neural step counter overflow"));
                                     break;
                                 }
                             }
@@ -493,7 +500,10 @@ fn main() -> Result<()> {
             Request::SaveWeights { path } => {
                 let result = (|| -> Result<()> {
                     let weights = runtime.weights()?;
-                    let bytes: Vec<u8> = weights.iter().flat_map(|value| value.to_le_bytes()).collect();
+                    let bytes: Vec<u8> = weights
+                        .iter()
+                        .flat_map(|value| value.to_le_bytes())
+                        .collect();
                     if let Some(parent) = path.parent() {
                         fs::create_dir_all(parent)?;
                     }

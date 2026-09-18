@@ -3,8 +3,8 @@ use rayon::prelude::*;
 
 use crate::{
     model::{
-        ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, NeuralParams, Stimulus,
-        activity_sign_u8, assumed_fast_sign, nt,
+        ACTIVITY_DEPOLARIZING, ACTIVITY_HYPERPOLARIZING, NeuralParams, Stimulus, activity_sign_u8,
+        assumed_fast_sign, nt,
     },
     snapshot::ConnectomeSnapshot,
     state::NeuralState,
@@ -151,8 +151,8 @@ impl CpuRuntime {
                         // means reduced release around an unmodelled baseline and
                         // is therefore not invented as a signed punishment signal.
                         if event_sign > 0.0 {
-                            dopaminergic_input += snapshot.synapse_counts[edge] as f32
-                                * params.modulator_scale;
+                            dopaminergic_input +=
+                                snapshot.synapse_counts[edge] as f32 * params.modulator_scale;
                         }
                     } else {
                         let sign = assumed_fast_sign(snapshot.neurotransmitters[pre]);
@@ -221,8 +221,7 @@ impl CpuRuntime {
                     let pre_event = activity_sign_u8(spikes_before[pre]);
                     let local = traces[pre] * post_event - traces[post] * pre_event;
                     *eligibility = *eligibility * params.eligibility_decay + local;
-                    *weight = (*weight
-                        + params.learning_rate * modulation[post] * *eligibility)
+                    *weight = (*weight + params.learning_rate * modulation[post] * *eligibility)
                         .clamp(0.0, params.weight_max);
                 });
         }
@@ -276,11 +275,28 @@ mod tests {
         ConnectomeSnapshot::from_edges(
             4,
             &[
-                EdgeInput { pre: 0, post: 1, synapse_count: 20 },
-                EdgeInput { pre: 1, post: 2, synapse_count: 20 },
-                EdgeInput { pre: 3, post: 1, synapse_count: 20 },
+                EdgeInput {
+                    pre: 0,
+                    post: 1,
+                    synapse_count: 20,
+                },
+                EdgeInput {
+                    pre: 1,
+                    post: 2,
+                    synapse_count: 20,
+                },
+                EdgeInput {
+                    pre: 3,
+                    post: 1,
+                    synapse_count: 20,
+                },
             ],
-            vec![nt::ACETYLCHOLINE, nt::ACETYLCHOLINE, nt::ACETYLCHOLINE, nt::DOPAMINE],
+            vec![
+                nt::ACETYLCHOLINE,
+                nt::ACETYLCHOLINE,
+                nt::ACETYLCHOLINE,
+                nt::DOPAMINE,
+            ],
         )
         .unwrap()
     }
@@ -293,7 +309,15 @@ mod tests {
         let mut params = NeuralParams::default();
         params.synapse_scale = 0.06;
         let mut runtime = CpuRuntime::new(tiny_snapshot(), params);
-        runtime.step(&[Stimulus { neuron: 0, current: 2.0 }], false).unwrap();
+        runtime
+            .step(
+                &[Stimulus {
+                    neuron: 0,
+                    current: 2.0,
+                }],
+                false,
+            )
+            .unwrap();
         assert_eq!(runtime.spikes()[0], ACTIVITY_DEPOLARIZING);
         runtime.step(&[], false).unwrap();
         assert_eq!(runtime.spikes()[1], ACTIVITY_DEPOLARIZING);
@@ -309,8 +333,16 @@ mod tests {
         let snapshot = ConnectomeSnapshot::from_edges(
             3,
             &[
-                EdgeInput { pre: 0, post: 1, synapse_count: 20 },
-                EdgeInput { pre: 1, post: 2, synapse_count: 20 },
+                EdgeInput {
+                    pre: 0,
+                    post: 1,
+                    synapse_count: 20,
+                },
+                EdgeInput {
+                    pre: 1,
+                    post: 2,
+                    synapse_count: 20,
+                },
             ],
             vec![nt::HISTAMINE, nt::GLUTAMATE, nt::ACETYLCHOLINE],
         )
@@ -319,7 +351,15 @@ mod tests {
         params.synapse_scale = 0.06;
         let mut runtime = CpuRuntime::new(snapshot, params);
 
-        runtime.step(&[Stimulus { neuron: 0, current: 2.0 }], false).unwrap();
+        runtime
+            .step(
+                &[Stimulus {
+                    neuron: 0,
+                    current: 2.0,
+                }],
+                false,
+            )
+            .unwrap();
         assert_eq!(runtime.spikes()[0], ACTIVITY_DEPOLARIZING);
         runtime.step(&[], false).unwrap();
         assert_eq!(runtime.spikes()[1], ACTIVITY_HYPERPOLARIZING);
@@ -343,8 +383,14 @@ mod tests {
             runtime
                 .step(
                     &[
-                        Stimulus { neuron: 0, current: 2.0 },
-                        Stimulus { neuron: 3, current: 2.0 },
+                        Stimulus {
+                            neuron: 0,
+                            current: 2.0,
+                        },
+                        Stimulus {
+                            neuron: 3,
+                            current: 2.0,
+                        },
                     ],
                     true,
                 )
@@ -361,8 +407,14 @@ mod tests {
         runtime
             .step(
                 &[
-                    Stimulus { neuron: 0, current: 2.0 },
-                    Stimulus { neuron: 3, current: 2.0 },
+                    Stimulus {
+                        neuron: 0,
+                        current: 2.0,
+                    },
+                    Stimulus {
+                        neuron: 3,
+                        current: 2.0,
+                    },
                 ],
                 true,
             )

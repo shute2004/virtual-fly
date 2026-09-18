@@ -7,11 +7,30 @@ cd "$ROOT"
 SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 RETINOTOPIC_MAP="$SNAPSHOT/retinotopic-vision-v1.json"
+HALTERE_SENSORY_MAP="${VF_HALTERE_SENSORY_MAP:-$SNAPSHOT/haltere-campaniform-sensory-v1.json}"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 BODY_MOTOR_MAP="$SNAPSHOT/body-motor-neurons-v0.json"
 NEURAL_CALIBRATION="$ROOT/artifacts/embodiment/neural-runtime-calibration-v1.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
 EXPERIMENT="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v3}"
+ENVIRONMENT_VERSION="${VF_FLYPPY_ENVIRONMENT_VERSION:-v3}"
+FLIGHT_BODY_VERSION="${VF_FLYBODY_VERSION:-v3}"
+HALTERE_CURRENT_GAIN="${VF_HALTERE_CURRENT_GAIN:-0.0}"
+HALTERE_TRANSDUCTION="${VF_HALTERE_TRANSDUCTION:-angular-acceleration-v1}"
+case "$ENVIRONMENT_VERSION" in
+  v3|v4|v5|v6|v7) ;;
+  *)
+    echo "VF_FLYPPY_ENVIRONMENT_VERSION must be v3, v4, v5, v6, or v7" >&2
+    exit 2
+    ;;
+esac
+case "$FLIGHT_BODY_VERSION" in
+  v3|v4|v5|v6|v7|v8) ;;
+  *)
+    echo "VF_FLYBODY_VERSION must be v3, v4, v5, v6, v7, or v8" >&2
+    exit 2
+    ;;
+esac
 # Logical population and body-process count are independent.  On the current M1
 # reference machine, long packed-runtime calibration over N=4/8/12/16 selected
 # N=4 for maximum aggregate control-step throughput.  Keep the calibrated value
@@ -19,6 +38,8 @@ EXPERIMENT="${VF_EXPERIMENT_DIR:-artifacts/experiments/flyppy-v3}"
 POPULATION_REQUEST="${VF_FLYPPY_POPULATION:-auto}"
 AUTO_POPULATION="${VF_FLYPPY_AUTO_POPULATION:-4}"
 EPISODES="${VF_FLYPPY_EPISODES:-24}"
+CHECKPOINT_EVERY="${VF_FLYPPY_CHECKPOINT_EVERY:-32}"
+FRESH="${VF_FLYPPY_FRESH:-0}"
 WRITE_LATEST_REPORTS="${VF_FLYPPY_WRITE_LATEST_REPORTS:-1}"
 
 # Production curriculum is batch-based.  The older adaptive policy changed
@@ -30,10 +51,10 @@ CURRICULUM_MODE="${VF_FLYPPY_CURRICULUM_MODE:-boundary-band}"
 BOUNDARY_BATCH_SIZE="${VF_FLYPPY_BOUNDARY_BATCH_SIZE:-24}"
 LAUNCH_MODE="${VF_FLYPPY_LAUNCH_MODE:-async}"
 case "$CURRICULUM_MODE" in
-  adaptive|boundary-band)
+  adaptive|boundary-band|gate2-height)
     ;;
   *)
-    echo "VF_FLYPPY_CURRICULUM_MODE must be adaptive or boundary-band" >&2
+    echo "VF_FLYPPY_CURRICULUM_MODE must be adaptive, boundary-band, or gate2-height" >&2
     exit 2
     ;;
 esac
@@ -93,6 +114,17 @@ PYTHON_RUNNER=("${VF_PYTHON[@]}")
   echo "VF_FLYPPY_EPISODES must be a positive integer" >&2
   exit 2
 }
+[[ "$CHECKPOINT_EVERY" =~ ^[1-9][0-9]*$ ]] || {
+  echo "VF_FLYPPY_CHECKPOINT_EVERY must be a positive integer" >&2
+  exit 2
+}
+case "$FRESH" in
+  0|1) ;;
+  *)
+    echo "VF_FLYPPY_FRESH must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
 case "$WRITE_LATEST_REPORTS" in
   0|1) ;;
   *)
@@ -131,10 +163,11 @@ fi
   --snapshot "$SNAPSHOT" \
   --groups "$GROUPS" \
   --retinotopic-map "$RETINOTOPIC_MAP" \
+  --haltere-sensory-map "$HALTERE_SENSORY_MAP" \
   --wing-motor-map "$WING_MOTOR_MAP" \
   --body-motor-map "$BODY_MOTOR_MAP"
 
-EXPECTED_VIEWER_GRAPH_SCHEMA=3
+EXPECTED_VIEWER_GRAPH_SCHEMA=4
 VIEWER_SCHEMA=0
 if [ -f "$VIEWER_GRAPH" ]; then
   VIEWER_SCHEMA="$("${PYTHON_RUNNER[@]}" -c 'import json,sys
@@ -186,8 +219,8 @@ unset VF_COURSE_START_GATE || true
   scripts/analysis/export_flyppy_population_report.py
 
 BODY_PROCESS_REQUEST="${VF_FLYPPY_BODY_PROCESSES:-auto}"
-printf 'shared_weight_population=%s population_request=%s episodes=%s experiment=%s synapse_scale=%s body_runtime=packed body_processes=%s curriculum=%s boundary_batch=%s launch_mode=%s vision=%s rays_per_ommatidium=%s framebuffer=%s\n' \
-  "$POPULATION" "$POPULATION_REQUEST" "$EPISODES" "$EXPERIMENT" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST" "$CURRICULUM_MODE" "$BOUNDARY_BATCH_SIZE" "$LAUNCH_MODE" "$VISION_MODE" "$OMMATIDIA_RAYS" "$([ "$VISION_MODE" = "raster" ] && printf true || printf false)"
+printf 'shared_weight_population=%s population_request=%s episodes=%s checkpoint_every=%s fresh=%s experiment=%s environment=%s flight_body=%s haltere_gain=%s synapse_scale=%s body_runtime=packed body_processes=%s curriculum=%s boundary_batch=%s launch_mode=%s vision=%s rays_per_ommatidium=%s framebuffer=%s\n' \
+  "$POPULATION" "$POPULATION_REQUEST" "$EPISODES" "$CHECKPOINT_EVERY" "$FRESH" "$EXPERIMENT" "$ENVIRONMENT_VERSION" "$FLIGHT_BODY_VERSION" "$HALTERE_CURRENT_GAIN" "$VF_NEURAL_SYNAPSE_SCALE" "$BODY_PROCESS_REQUEST" "$CURRICULUM_MODE" "$BOUNDARY_BATCH_SIZE" "$LAUNCH_MODE" "$VISION_MODE" "$OMMATIDIA_RAYS" "$([ "$VISION_MODE" = "raster" ] && printf true || printf false)"
 
 TRAIN_ARGS=(
   "${PYTHON_RUNNER[@]}" scripts/embodiment/train_flyppy_population_packed.py
@@ -200,10 +233,19 @@ TRAIN_ARGS=(
   --body-motor-map "$BODY_MOTOR_MAP"
   --viewer-graph "$VIEWER_GRAPH"
   --output-dir "$EXPERIMENT"
+  --environment-version "$ENVIRONMENT_VERSION"
+  --flight-body-version "$FLIGHT_BODY_VERSION"
+  --haltere-sensory-map "$HALTERE_SENSORY_MAP"
+  --haltere-current-gain "$HALTERE_CURRENT_GAIN"
+  --haltere-transduction "$HALTERE_TRANSDUCTION"
+  --checkpoint-every "$CHECKPOINT_EVERY"
   --curriculum-mode "$CURRICULUM_MODE"
   --boundary-batch-size "$BOUNDARY_BATCH_SIZE"
   --launch-mode "$LAUNCH_MODE"
 )
+if [ "$FRESH" = "1" ]; then
+  TRAIN_ARGS+=(--fresh)
+fi
 if [ "${VF_POPULATION_TELEMETRY:-0}" = "1" ]; then
   TRAIN_ARGS+=(--telemetry)
 fi

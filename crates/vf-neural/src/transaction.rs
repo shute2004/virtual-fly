@@ -108,7 +108,13 @@ mod tests {
         stale.observe_delta(-2.0, weight_max);
 
         let latest_global = 1.0;
-        assert_eq!(stale.apply(latest_global), sequential(latest_global, &[7.0, -2.0], weight_max));
-        assert_ne!(stale.apply(latest_global), sequential(9.0, &[7.0, -2.0], weight_max));
+        assert_eq!(
+            stale.apply(latest_global),
+            sequential(latest_global, &[7.0, -2.0], weight_max)
+        );
+        assert_ne!(
+            stale.apply(latest_global),
+            sequential(9.0, &[7.0, -2.0], weight_max)
+        );
     }
 }

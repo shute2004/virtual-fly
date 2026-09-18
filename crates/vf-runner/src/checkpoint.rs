@@ -49,13 +49,7 @@ pub fn save_checkpoint_with_global_weight_version(
     state: &NeuralState,
     global_weight_version: u64,
 ) -> Result<CheckpointManifest> {
-    save_checkpoint_impl(
-        directory,
-        dataset,
-        step,
-        state,
-        Some(global_weight_version),
-    )
+    save_checkpoint_impl(directory, dataset, step, state, Some(global_weight_version))
 }
 
 fn save_checkpoint_impl(
@@ -70,11 +64,9 @@ fn save_checkpoint_impl(
 
     let temp = temp_directory(directory);
     if temp.exists() {
-        fs::remove_dir_all(&temp)
-            .with_context(|| format!("failed to clear {}", temp.display()))?;
+        fs::remove_dir_all(&temp).with_context(|| format!("failed to clear {}", temp.display()))?;
     }
-    fs::create_dir_all(&temp)
-        .with_context(|| format!("failed to create {}", temp.display()))?;
+    fs::create_dir_all(&temp).with_context(|| format!("failed to create {}", temp.display()))?;
 
     let manifest = CheckpointManifest {
         schema_version: SCHEMA_VERSION,
@@ -95,7 +87,10 @@ fn save_checkpoint_impl(
     write_f32(temp.join(&manifest.membrane_file), &state.membrane)?;
     write_u32(temp.join(&manifest.spikes_file), &state.spikes)?;
     write_u32(temp.join(&manifest.refractory_file), &state.refractory)?;
-    write_f32(temp.join(&manifest.activity_trace_file), &state.activity_trace)?;
+    write_f32(
+        temp.join(&manifest.activity_trace_file),
+        &state.activity_trace,
+    )?;
     write_f32(temp.join(&manifest.modulation_file), &state.modulation)?;
     write_f32(temp.join(&manifest.weights_file), &state.weights)?;
     write_f32(temp.join(&manifest.eligibility_file), &state.eligibility)?;
@@ -190,8 +185,8 @@ fn write_le_words<T: bytemuck::Pod + Copy>(
     values: &[T],
     to_le_bytes: impl Fn(T) -> [u8; 4],
 ) -> Result<()> {
-    let file = fs::File::create(&path)
-        .with_context(|| format!("failed to create {}", path.display()))?;
+    let file =
+        fs::File::create(&path).with_context(|| format!("failed to create {}", path.display()))?;
     let mut writer = BufWriter::with_capacity(4 * 1024 * 1024, file);
 
     #[cfg(target_endian = "little")]
@@ -220,8 +215,7 @@ fn write_le_words<T: bytemuck::Pod + Copy>(
 }
 
 fn read_f32(path: PathBuf) -> Result<Vec<f32>> {
-    let bytes = fs::read(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let bytes = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
     if bytes.len() % 4 != 0 {
         bail!("{} does not contain whole f32 values", path.display());
     }
@@ -232,8 +226,7 @@ fn read_f32(path: PathBuf) -> Result<Vec<f32>> {
 }
 
 fn read_u32(path: PathBuf) -> Result<Vec<u32>> {
-    let bytes = fs::read(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let bytes = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
     if bytes.len() % 4 != 0 {
         bail!("{} does not contain whole u32 values", path.display());
     }
@@ -268,8 +261,7 @@ mod tests {
         assert_eq!(saved.step, 42);
         assert_eq!(saved.schema_version, 3);
         assert_eq!(saved.global_weight_version, None);
-        let (loaded_manifest, loaded) =
-            load_checkpoint(&root, "synthetic:test", 3, 2).unwrap();
+        let (loaded_manifest, loaded) = load_checkpoint(&root, "synthetic:test", 3, 2).unwrap();
         assert_eq!(loaded_manifest.step, 42);
         assert_eq!(loaded_manifest.global_weight_version, None);
         assert_eq!(loaded.membrane, state.membrane);
@@ -299,17 +291,11 @@ mod tests {
             eligibility: vec![0.0],
         };
 
-        let saved = save_checkpoint_with_global_weight_version(
-            &root,
-            "synthetic:test",
-            7,
-            &state,
-            184,
-        )
-        .unwrap();
+        let saved =
+            save_checkpoint_with_global_weight_version(&root, "synthetic:test", 7, &state, 184)
+                .unwrap();
         assert_eq!(saved.global_weight_version, Some(184));
-        let (loaded_manifest, loaded) =
-            load_checkpoint(&root, "synthetic:test", 1, 1).unwrap();
+        let (loaded_manifest, loaded) = load_checkpoint(&root, "synthetic:test", 1, 1).unwrap();
         assert_eq!(loaded_manifest.global_weight_version, Some(184));
         assert_eq!(loaded.weights, state.weights);
         fs::remove_dir_all(&root).unwrap();

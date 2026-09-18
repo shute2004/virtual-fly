@@ -20,7 +20,7 @@ whereas direct steering muscles are synchronous.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import math
 from pathlib import Path
@@ -50,6 +50,11 @@ class PeripheralSnapshot:
     dvm_activation: dict[str, float]
     active_spikes: int
     selected_motor_units: int
+    # Mean per-MN activation is kept separately from the legacy saturating
+    # aggregate. The mean is the A-IFM Ca/power proxy used by the v4 body seam;
+    # v1-v3 continue to use the historical aggregate unchanged.
+    dlm_mean_activation: dict[str, float] = field(default_factory=dict)
+    dvm_mean_activation: dict[str, float] = field(default_factory=dict)
 
     @staticmethod
     def _key(side: str, muscle: str) -> str:
@@ -63,6 +68,12 @@ class PeripheralSnapshot:
 
     def power_dvm(self, side: str) -> float:
         return float(self.dvm_activation.get(side, 0.0))
+
+    def mean_power_dlm(self, side: str) -> float:
+        return float(self.dlm_mean_activation.get(side, self.power_dlm(side)))
+
+    def mean_power_dvm(self, side: str) -> float:
+        return float(self.dvm_mean_activation.get(side, self.power_dvm(side)))
 
     def compact_diagnostics(self) -> dict[str, object]:
         active_units = sum(value > 1e-4 for value in self.activation_by_body.values())
@@ -83,6 +94,10 @@ class PeripheralSnapshot:
                     ":hg2",
                     ":hg3",
                     ":hg4",
+                    ":ps1",
+                    ":ps2",
+                    ":tp1",
+                    ":tp2",
                 )
             )
             and value > 1e-4
@@ -94,6 +109,10 @@ class PeripheralSnapshot:
             "dlm_right": self.power_dlm("right"),
             "dvm_left": self.power_dvm("left"),
             "dvm_right": self.power_dvm("right"),
+            "dlm_mean_left": self.mean_power_dlm("left"),
+            "dlm_mean_right": self.mean_power_dlm("right"),
+            "dvm_mean_left": self.mean_power_dvm("left"),
+            "dvm_mean_right": self.mean_power_dvm("right"),
             "steering": steering,
         }
 
@@ -273,6 +292,14 @@ class WingMusclePeriphery:
         dvm_activation = {
             side: self._saturating_sum(values) for side, values in dvm_units.items()
         }
+        dlm_mean_activation = {
+            side: (sum(values) / len(values) if values else 0.0)
+            for side, values in dlm_units.items()
+        }
+        dvm_mean_activation = {
+            side: (sum(values) / len(values) if values else 0.0)
+            for side, values in dvm_units.items()
+        }
 
         return PeripheralSnapshot(
             activation_by_body=dict(self._activation),
@@ -281,4 +308,6 @@ class WingMusclePeriphery:
             dvm_activation=dvm_activation,
             active_spikes=active_spikes,
             selected_motor_units=len(self.units),
+            dlm_mean_activation=dlm_mean_activation,
+            dvm_mean_activation=dvm_mean_activation,
         )

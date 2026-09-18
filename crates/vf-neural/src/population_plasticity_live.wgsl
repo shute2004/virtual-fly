@@ -38,7 +38,7 @@ struct LiveParams {
 struct Control {
     slot: u32,
     active_mask: u32,
-    _pad0: u32,
+    plasticity_mask: u32,
     _pad1: u32,
 }
 
@@ -62,6 +62,10 @@ fn linear_invocation_index(gid: vec3<u32>, num_workgroups: vec3<u32>) -> u32 {
 
 fn slot_is_active(slot: u32) -> bool {
     return (control.active_mask & (1u << slot)) != 0u;
+}
+
+fn slot_is_plastic(slot: u32) -> bool {
+    return (control.plasticity_mask & (1u << slot)) != 0u;
 }
 
 fn activity_sign(event: u32) -> f32 {
@@ -99,7 +103,7 @@ fn discover_live_plasticity(
     if flat >= total { return; }
 
     let slot = flat / params.neuron_count;
-    if !slot_is_active(slot) { return; }
+    if !slot_is_active(slot) || !slot_is_plastic(slot) { return; }
     let neuron = flat % params.neuron_count;
     let neuron_base = slot * params.neuron_count;
 
@@ -156,7 +160,7 @@ fn plasticity_live_step(
     if flat_word >= total_words { return; }
 
     let slot = flat_word / params.bitmap_words;
-    if !slot_is_active(slot) { return; }
+    if !slot_is_active(slot) || !slot_is_plastic(slot) { return; }
     let word_index = flat_word % params.bitmap_words;
     let word = atomicLoad(&live_current[flat_word]);
     var next_word = 0u;

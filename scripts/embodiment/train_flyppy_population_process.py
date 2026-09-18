@@ -37,14 +37,23 @@ from virtual_fly.training.checkpointing import (
 )
 from virtual_fly.training.population_schedule import checkpoint_can_flush, launch_round_for_index
 from virtual_fly.training.curriculum import (
+    GateHeightCurriculumConfig,
     SpawnCondition,
     boundary_condition_for_attempt,
+    boundary_frontier_role,
+    boundary_target_gates,
+    frontier_focus_condition,
+    frontier_focus_level,
+    gate_height_condition_for_attempt,
     current_adaptive_condition,
     next_boundary_attempt_for_group,
+    next_gate_height_attempt_for_group,
     ensure_boundary_state,
+    ensure_gate_height_state,
     load_state as load_curriculum_state,
     record_adaptive_result,
     record_boundary_result,
+    record_gate_height_result,
 )
 
 
@@ -57,6 +66,7 @@ class ProcessSlotState:
     spawn_x_mm: float = 0.0
     spawn_z_mm: float = 0.0
     initial_speed_mm_s: float = 0.0
+    initial_vz_mm_s: float = 0.0
     control_steps: int = 0
     passed_gates: int = 0
     collision: bool = False
@@ -74,17 +84,38 @@ class ProcessSlotState:
     boundary_ease_level: float | None = None
     boundary_attempt_index: int | None = None
     boundary_batch_number: int | None = None
+    frontier_role: str = "evaluate"
+    frontier_target_gate: int | None = None
+    course_start_gate_index: int | None = None
+    gate_height_role: str | None = None
+    gate_height_center_z_mm: float | None = None
+    gate_height_attempt_index: int | None = None
+    gate_height_batch_number: int | None = None
+    gate_height_learning: bool | None = None
     launch_round: int = 0
 
 
 def worker_config(args) -> dict[str, object]:
     return {
         "seed": int(args.seed),
+        "fixed_course_seed": (
+            None if getattr(args, "fixed_course_seed", None) is None else int(args.fixed_course_seed)
+        ),
         "gate_count": int(args.gate_count),
+        "environment_version": str(args.environment_version),
+        "flight_body_version": str(getattr(args, "flight_body_version", "v3")),
+        "vertical_steering_gain": float(getattr(args, "vertical_steering_gain", 1.0)),
+        "measured_steering_gain": float(getattr(args, "measured_steering_gain", 1.0)),
+        "neutral_trim_strength": float(getattr(args, "neutral_trim_strength", 1.0)),
+        "steering_tau_ms": float(getattr(args, "steering_tau_ms", 12.0)),
+        "steering_spike_increment": float(getattr(args, "steering_spike_increment", 0.85)),
         "wing_motor_map": str(args.wing_motor_map),
         "body_motor_map": str(args.body_motor_map),
         "retinotopic_map": str(args.retinotopic_map),
+        "haltere_sensory_map": str(args.haltere_sensory_map),
         "photoreceptor_current_gain": float(args.photoreceptor_current_gain),
+        "haltere_current_gain": float(args.haltere_current_gain),
+        "haltere_transduction": str(getattr(args, "haltere_transduction", "angular-acceleration-v1")),
     }
 
 
@@ -95,9 +126,19 @@ def reset_slot(
     episode: int,
     source_weight_version: int,
     condition: SpawnCondition,
+    initial_vz_mm_s: float = 0.0,
     boundary_ease_level: float | None = None,
     boundary_attempt_index: int | None = None,
     boundary_batch_number: int | None = None,
+    frontier_role: str = "evaluate",
+    frontier_target_gate: int | None = None,
+    course_start_gate_index: int | None = None,
+    gate_height_role: str | None = None,
+    gate_height_center_z_mm: float | None = None,
+    gate_height_attempt_index: int | None = None,
+    gate_height_batch_number: int | None = None,
+    gate_height_learning: bool | None = None,
+    gate_center_overrides: dict[int, float] | None = None,
     launch_round: int = 0,
 ) -> None:
     slot.active = True
@@ -106,6 +147,7 @@ def reset_slot(
     slot.spawn_x_mm = float(condition.x_mm)
     slot.spawn_z_mm = float(condition.z_mm)
     slot.initial_speed_mm_s = float(condition.speed_mm_s)
+    slot.initial_vz_mm_s = float(initial_vz_mm_s)
     slot.control_steps = 0
     slot.passed_gates = 0
     slot.collision = False
@@ -119,6 +161,16 @@ def reset_slot(
     slot.boundary_ease_level = boundary_ease_level
     slot.boundary_attempt_index = boundary_attempt_index
     slot.boundary_batch_number = boundary_batch_number
+    slot.frontier_role = str(frontier_role)
+    slot.frontier_target_gate = frontier_target_gate
+    slot.course_start_gate_index = (
+        None if course_start_gate_index is None else int(course_start_gate_index)
+    )
+    slot.gate_height_role = None if gate_height_role is None else str(gate_height_role)
+    slot.gate_height_center_z_mm = None if gate_height_center_z_mm is None else float(gate_height_center_z_mm)
+    slot.gate_height_attempt_index = None if gate_height_attempt_index is None else int(gate_height_attempt_index)
+    slot.gate_height_batch_number = None if gate_height_batch_number is None else int(gate_height_batch_number)
+    slot.gate_height_learning = None if gate_height_learning is None else bool(gate_height_learning)
     slot.launch_round = int(launch_round)
     slot.last_retinal = None
     slot.last_motor = None
@@ -129,6 +181,9 @@ def reset_slot(
         spawn_x_mm=slot.spawn_x_mm,
         spawn_z_mm=slot.spawn_z_mm,
         initial_speed_mm_s=slot.initial_speed_mm_s,
+        initial_vz_mm_s=slot.initial_vz_mm_s,
+        course_start_gate_index=slot.course_start_gate_index,
+        gate_center_overrides=gate_center_overrides,
     )
     slot.final_velocity = tuple(float(value) for value in initial["velocity"])
 
@@ -138,6 +193,7 @@ def result_for_slot(
     commit: dict[str, object],
     *,
     curriculum_mode: str = "adaptive",
+    environment_version: str = "v3",
 ) -> dict[str, object]:
     return {
         "episode": slot.episode,
@@ -158,12 +214,21 @@ def result_for_slot(
         "spawn_x_mm": slot.spawn_x_mm,
         "spawn_z_mm": slot.spawn_z_mm,
         "initial_speed_mm_s": slot.initial_speed_mm_s,
-        "environment_version": "v3",
+        "initial_vz_mm_s": slot.initial_vz_mm_s,
+        "environment_version": environment_version,
         "motor_boundary": "whole-body",
         "curriculum_mode": curriculum_mode,
         "boundary_ease_level": slot.boundary_ease_level,
         "boundary_attempt_index": slot.boundary_attempt_index,
         "boundary_batch_number": slot.boundary_batch_number,
+        "frontier_role": slot.frontier_role,
+        "frontier_target_gate": slot.frontier_target_gate,
+        "course_start_gate_index": slot.course_start_gate_index,
+        "gate_height_role": slot.gate_height_role,
+        "gate_height_center_z_mm": slot.gate_height_center_z_mm,
+        "gate_height_attempt_index": slot.gate_height_attempt_index,
+        "gate_height_batch_number": slot.gate_height_batch_number,
+        "gate_height_learning": slot.gate_height_learning,
         "launch_round": slot.launch_round,
         "reward_events": slot.reward_events,
         "aversive_events": slot.aversive_events,
@@ -172,10 +237,11 @@ def result_for_slot(
 
 def main() -> int:
     args = reference.parse_args()
+    probe_seed = int(args.fixed_course_seed) if args.fixed_course_seed is not None else int(args.seed)
     probe_course = FlyppyCourse(
-        seed=args.seed,
+        seed=probe_seed,
         gate_count=args.gate_count,
-        environment_version="v3",
+        environment_version=args.environment_version,
     )
     first_gate = probe_course.gates[0]
     reference.validate(args, first_gate)
@@ -225,7 +291,8 @@ def main() -> int:
         checkpoint_exists=checkpoint_exists,
     )
     state["curriculum_mode"] = args.curriculum_mode
-    state["environment_version"] = "v3"
+    state["environment_version"] = args.environment_version
+    state["flight_body_version"] = getattr(args, "flight_body_version", "v3")
     state["motor_boundary"] = "whole-body"
     adaptive = reference.adaptive_config(args, first_gate)
     boundary = (
@@ -238,6 +305,28 @@ def main() -> int:
         ensure_boundary_state(state, boundary)
         # This field is meaningful only to the historical adaptive policy. Keep
         # it neutral once an experiment switches to asynchronous batch updates.
+        state["consecutive_failures"] = 0
+
+    gate_height: GateHeightCurriculumConfig | None = None
+    gate_height_issued_attempts: set[int] = set()
+    if args.curriculum_mode == "gate2-height":
+        gate2 = probe_course.gates[1]
+        target_center = float(gate2.center_z_mm) if args.gate2_height_target_z_mm is None else float(args.gate2_height_target_z_mm)
+        first_center = float(first_gate.center_z_mm)
+        delta = target_center - first_center
+        default_start = first_center + max(-1.50, min(1.50, delta))
+        start_center = default_start if args.gate2_height_start_z_mm is None else float(args.gate2_height_start_z_mm)
+        gate_height = GateHeightCurriculumConfig(
+            gate_index=1,
+            start_center_z_mm=start_center,
+            target_center_z_mm=target_center,
+            step_mm=float(args.gate2_height_step_mm),
+            batch_size=int(args.boundary_batch_size),
+            current_success_rate=float(args.gate2_height_current_success_rate),
+            retention_success_rate=float(args.gate2_height_retention_success_rate),
+            seed=int(args.seed),
+        )
+        ensure_gate_height_state(state, gate_height)
         state["consecutive_failures"] = 0
 
     try:
@@ -278,6 +367,19 @@ def main() -> int:
     )
     by_slot = {worker.slot_index: worker for worker in workers}
     slots = [ProcessSlotState(slot=index) for index in range(args.population)]
+    fixed_course_seed = getattr(args, "fixed_course_seed", None)
+    course_models = {
+        slot.slot: FlyppyCourse(
+            seed=(
+                int(fixed_course_seed)
+                if fixed_course_seed is not None
+                else args.seed + slot.slot
+            ),
+            gate_count=args.gate_count,
+            environment_version=args.environment_version,
+        )
+        for slot in slots
+    }
 
     control_dts = {round(worker.control_dt_s, 15) for worker in workers}
     if len(control_dts) != 1:
@@ -289,8 +391,9 @@ def main() -> int:
     telemetry_mode = "always" if args.telemetry else "viewer-demand"
     print(
         "population_runtime=enabled population={} shared_weight=true weight_averaging=false "
-        "environment=v3 motor_boundary=whole-body body_runtime=process telemetry={} launch_mode={}".format(
+        "environment={} motor_boundary=whole-body body_runtime=process telemetry={} launch_mode={}".format(
             args.population,
+            args.environment_version,
             telemetry_mode,
             args.launch_mode,
         )
@@ -351,7 +454,37 @@ def main() -> int:
                     ease_level: float | None = None
                     attempt_index: int | None = None
                     batch_number: int | None = None
-                    if boundary is None:
+                    frontier_role = "evaluate"
+                    frontier_target_gate: int | None = None
+                    course_start_gate_index: int | None = None
+                    gate_height_role_value: str | None = None
+                    gate_height_center: float | None = None
+                    gate_height_attempt: int | None = None
+                    gate_height_batch: int | None = None
+                    gate_height_learning: bool | None = None
+                    gate_center_overrides: dict[int, float] | None = None
+                    if gate_height is not None:
+                        gate_height_attempt = next_gate_height_attempt_for_group(
+                            state,
+                            gate_height,
+                            group_index=slot.slot,
+                            group_count=args.population,
+                            issued_attempts=gate_height_issued_attempts,
+                        )
+                        if gate_height_attempt is None:
+                            return False
+                        gate_height_batch = int(dict(state["gate_height_curriculum"])["batch_number"])
+                        gate_height_center, gate_height_role_value = gate_height_condition_for_attempt(
+                            state,
+                            gate_height,
+                            gate_height_attempt,
+                            group_count=args.population,
+                        )
+                        gate_center_overrides = {gate_height.gate_index: gate_height_center}
+                        gate_height_learning = True
+                        gate_height_issued_attempts.add(gate_height_attempt)
+                        condition = current_adaptive_condition(state)
+                    elif boundary is None:
                         condition = current_adaptive_condition(state)
                     else:
                         attempt_index = next_boundary_attempt_for_group(
@@ -370,7 +503,57 @@ def main() -> int:
                             attempt_index,
                             group_count=args.population,
                         )
+                        frontier_target_gate = boundary_target_gates(
+                            state,
+                            boundary,
+                            gate_count=args.gate_count,
+                        )
+                        frontier_role = boundary_frontier_role(
+                            attempt_index,
+                            group_count=args.population,
+                        )
+                        if frontier_role == "focus":
+                            focus_level = frontier_focus_level(
+                                state,
+                                boundary,
+                                gate_count=args.gate_count,
+                            )
+                            course = course_models[slot.slot]
+                            target_local_index = frontier_target_gate - 1
+                            target_gate = course.gates[target_local_index]
+                            previous_gate = (
+                                course.gates[target_local_index - 1]
+                                if target_local_index > 0
+                                else None
+                            )
+                            condition = frontier_focus_condition(
+                                condition,
+                                target_gate_x_mm=float(target_gate.x_mm),
+                                target_gate_z_mm=float(target_gate.center_z_mm),
+                                previous_gate_x_mm=(
+                                    None
+                                    if previous_gate is None
+                                    else float(previous_gate.x_mm)
+                                ),
+                                previous_gate_z_mm=(
+                                    None
+                                    if previous_gate is None
+                                    else float(previous_gate.center_z_mm)
+                                ),
+                                previous_gate_half_gap_mm=(
+                                    None
+                                    if previous_gate is None
+                                    else float(previous_gate.half_gap_mm)
+                                ),
+                                focus_level=focus_level,
+                            )
+                            course_start_gate_index = (
+                                course.source_gate_offset + target_local_index
+                            )
                         boundary_issued_attempts.add(attempt_index)
+                    fixed_spawn = reference.fixed_spawn_condition(args)
+                    if fixed_spawn is not None:
+                        condition = fixed_spawn
                     episode = start_episode + launched
                     launch_round = launch_round_for_index(launched, args.population)
                     reset_slot(
@@ -379,9 +562,19 @@ def main() -> int:
                         episode=episode,
                         source_weight_version=brain.global_weight_version,
                         condition=condition,
+                        initial_vz_mm_s=(args.fixed_spawn_vz_mm_s if fixed_spawn is not None else 0.0),
                         boundary_ease_level=ease_level,
                         boundary_attempt_index=attempt_index,
                         boundary_batch_number=batch_number,
+                        frontier_role=frontier_role,
+                        frontier_target_gate=frontier_target_gate,
+                        course_start_gate_index=course_start_gate_index,
+                        gate_height_role=gate_height_role_value,
+                        gate_height_center_z_mm=gate_height_center,
+                        gate_height_attempt_index=gate_height_attempt,
+                        gate_height_batch_number=gate_height_batch,
+                        gate_height_learning=gate_height_learning,
+                        gate_center_overrides=gate_center_overrides,
                         launch_round=launch_round,
                     )
                     launched += 1
@@ -434,14 +627,17 @@ def main() -> int:
                             read_body = tuple(dict.fromkeys((*body_ids, *viewer_ids)))
                         else:
                             read_body = body_ids
-                        batch_requests.append(
-                            {
-                                "slot": slot.slot,
-                                "stimulate_body": retinal["body_currents"],
-                                "read_body": read_body,
-                            }
-                        )
+                        request_payload = {
+                            "slot": slot.slot,
+                            "stimulate_body": retinal["body_currents"],
+                            "read_body": read_body,
+                        }
+                        if gate_height is not None:
+                            request_payload["plasticity"] = bool(slot.gate_height_learning)
+                        batch_requests.append(request_payload)
 
+                    # One neural batch advances every active slot together. Gate-height
+                    # current/review episodes are both ordinary plastic learning episodes.
                     batch_spikes = brain.step_batch(batch_requests, plasticity=True)
 
                     # Apply each slot's individual MN output concurrently.
@@ -477,24 +673,46 @@ def main() -> int:
 
                         reward = False
                         aversive = False
+                        aversive_current_applied = None
+                        gate_miss_distance_mm = None
                         if bool(act["passed_gate"]):
                             slot.passed_gates += 1
                             slot.reward_events += 1
                             brain.step_slot(
                                 slot.slot,
                                 stimulate={"reward_dan": args.reward_current},
-                                plasticity=True,
+                                plasticity=(
+                                    True if gate_height is None else bool(slot.gate_height_learning)
+                                ),
                                 steps=args.reinforcement_steps,
                             )
                             reward = True
+                            # gate2-height isolates acquisition of the second gate.
+                            # Once the complete body clears that gate and PAM is
+                            # delivered, end the trial before an unrelated later
+                            # gate/side collision can inject PPL into the same
+                            # learning episode. Other curricula retain historical
+                            # full-course termination semantics.
+                            if (
+                                gate_height is not None
+                                and slot.passed_gates >= gate_height.gate_index + 1
+                            ):
+                                slot.finished = True
                         if bool(act["collision"]):
                             slot.collision = True
                             slot.collision_reason = act["collision_reason"]
                             slot.aversive_events += 1
+                            aversive_current_applied, gate_miss_distance_mm = reference.gate_collision_aversive_current(
+                                args,
+                                act.get("gate_miss_distance_mm"),
+                                act["collision_reason"],
+                            )
                             brain.step_slot(
                                 slot.slot,
-                                stimulate={"aversive_dan": args.aversive_current},
-                                plasticity=True,
+                                stimulate={"aversive_dan": aversive_current_applied},
+                                plasticity=(
+                                    True if gate_height is None else bool(slot.gate_height_learning)
+                                ),
                                 steps=args.reinforcement_steps,
                             )
                             aversive = True
@@ -534,17 +752,25 @@ def main() -> int:
                                         "retinal_input": retinal_diag,
                                         "reward_stimulated": reward,
                                         "aversive_stimulated": aversive,
+                                        "aversive_current": aversive_current_applied,
+                                        "gate_miss_distance_mm": gate_miss_distance_mm,
                                         "passed_gate": bool(act["passed_gate"]),
                                         "collision": bool(act["collision"]),
                                         "collision_reason": act["collision_reason"],
-                                        "finished": bool(act["finished"]),
-                                        "environment_version": "v3",
+                                        "finished": bool(slot.finished),
+                                        "environment_version": args.environment_version,
                                         "motor_boundary": "whole-body",
                                         "curriculum_mode": args.curriculum_mode,
                                         "launch_mode": args.launch_mode,
                                         "boundary_ease_level": slot.boundary_ease_level,
                                         "boundary_attempt_index": slot.boundary_attempt_index,
                                         "boundary_batch_number": slot.boundary_batch_number,
+                                        "frontier_role": slot.frontier_role,
+                                        "frontier_target_gate": slot.frontier_target_gate,
+                                        "course_start_gate_index": slot.course_start_gate_index,
+                                        "gate_height_role": slot.gate_height_role,
+                                        "gate_height_center_z_mm": slot.gate_height_center_z_mm,
+                                        "gate_height_learning": slot.gate_height_learning,
                                         "launch_round": slot.launch_round,
                                     },
                                     separators=(",", ":"),
@@ -587,6 +813,7 @@ def main() -> int:
                                     aversive=aversive,
                                     motor=slot.last_motor or {},
                                     retinal=retinal_diag,
+                                    gate_height_center_z_mm=slot.gate_height_center_z_mm,
                                 )
 
                         if (
@@ -599,6 +826,11 @@ def main() -> int:
                     trajectory.flush()
 
                     for slot in sorted(terminal_slots, key=lambda item: item.slot):
+                        transaction_stats = (
+                            brain.transaction_stats(slot.slot)
+                            if gate_height is not None
+                            else None
+                        )
                         commit = brain.commit_slot(
                             slot.slot,
                             source_weight_version=slot.source_weight_version,
@@ -606,7 +838,28 @@ def main() -> int:
                         completed += 1
                         state["curriculum_episodes"] = int(state["curriculum_episodes"]) + 1
                         batch_completed = None
-                        if boundary is None:
+                        if gate_height is not None:
+                            if slot.gate_height_attempt_index is None or slot.gate_height_role is None:
+                                raise RuntimeError("gate2-height slot completed without curriculum identity")
+                            batch_completed = record_gate_height_result(
+                                state,
+                                gate_height,
+                                success=slot.passed_gates >= 2,
+                                attempt_index=slot.gate_height_attempt_index,
+                                role=slot.gate_height_role,
+                            )
+                            if batch_completed is not None:
+                                gate_height_issued_attempts.clear()
+                                print(
+                                    "gate2_height_batch_complete frontier={:.3f}->{:.3f} rates={} adjustment={} mastered={}".format(
+                                        batch_completed["frontier_center_before_z_mm"],
+                                        batch_completed["frontier_center_after_z_mm"],
+                                        batch_completed["role_success_rates"],
+                                        batch_completed["adjustment"],
+                                        batch_completed["mastered_centers_z_mm"],
+                                    )
+                                )
+                        elif boundary is None:
                             record_adaptive_result(
                                 state,
                                 adaptive,
@@ -617,26 +870,38 @@ def main() -> int:
                                 raise RuntimeError(
                                     "boundary-band slot completed without an attempt index"
                                 )
+                            target_gates = boundary_target_gates(
+                                state,
+                                boundary,
+                                gate_count=args.gate_count,
+                            )
                             batch_completed = record_boundary_result(
                                 state,
                                 boundary,
-                                success=slot.passed_gates > 0,
+                                passed_gates=slot.passed_gates,
+                                gate_count=args.gate_count,
                                 attempt_index=slot.boundary_attempt_index,
                                 group=slot.slot,
+                                frontier_role=slot.frontier_role,
                             )
                             if batch_completed is not None:
                                 # Every condition in the old band has now produced
                                 # an outcome.  The next band can reuse attempt IDs.
                                 boundary_issued_attempts.clear()
                                 print(
-                                    "boundary_batch_complete success={}/{} rate={:.3f} raw_rate={:.3f} "
-                                    "aggregation={} adjustment={} hard={} easy={}".format(
+                                    "boundary_batch_complete target_gates={} mastered={} next_target={} "
+                                    "success={}/{} rate={:.3f} raw_rate={:.3f} aggregation={} "
+                                    "adjustment={} gate_rates={} hard={} easy={}".format(
+                                        batch_completed["evaluated_target_gates"],
+                                        batch_completed["frontier_mastered_gates"],
+                                        batch_completed["frontier_target_gates"],
                                         batch_completed["successes"],
                                         batch_completed["attempts"],
                                         batch_completed["success_rate"],
                                         batch_completed["raw_success_rate"],
                                         batch_completed["aggregation"],
                                         batch_completed["adjustment"],
+                                        batch_completed["gate_pass_rates"],
                                         batch_completed["hard"],
                                         batch_completed["easy"],
                                     )
@@ -645,6 +910,7 @@ def main() -> int:
                             slot,
                             commit,
                             curriculum_mode=args.curriculum_mode,
+                            environment_version=args.environment_version,
                         )
                         results.append(result)
                         commit_record = {
@@ -669,6 +935,20 @@ def main() -> int:
                             "boundary_ease_level": slot.boundary_ease_level,
                             "boundary_attempt_index": slot.boundary_attempt_index,
                             "boundary_batch_number": slot.boundary_batch_number,
+                            "frontier_role": slot.frontier_role,
+                            "frontier_target_gate": slot.frontier_target_gate,
+                            "course_start_gate_index": slot.course_start_gate_index,
+                            "gate_height_role": slot.gate_height_role,
+                            "gate_height_center_z_mm": slot.gate_height_center_z_mm,
+                            "gate_height_attempt_index": slot.gate_height_attempt_index,
+                            "gate_height_batch_number": slot.gate_height_batch_number,
+                            "gate_height_learning": slot.gate_height_learning,
+                            "transaction_dirty_edges": (
+                                None if transaction_stats is None else int(transaction_stats["dirty_edges"])
+                            ),
+                            "transaction_nonzero_shift_edges": (
+                                None if transaction_stats is None else int(transaction_stats["nonzero_shift_edges"])
+                            ),
                             "launch_round": slot.launch_round,
                         }
                         commit_log.write(
@@ -697,6 +977,7 @@ def main() -> int:
                         if (
                             args.launch_mode == "async"
                             and boundary is None
+                            and gate_height is None
                             and launched < args.episodes
                         ):
                             launch_slot(slot)
@@ -723,7 +1004,7 @@ def main() -> int:
                                 if launched >= args.episodes:
                                     break
                                 launch_slot(idle_slot)
-                    elif boundary is not None and launched < args.episodes:
+                    elif (boundary is not None or gate_height is not None) and launched < args.episodes:
                         # Async boundary-band mode keeps the fixed per-slot attempt
                         # assignment but immediately refills an idle slot while
                         # conditions for that slot remain in the current batch.
@@ -748,7 +1029,7 @@ def main() -> int:
     staleness_values = [int(item["staleness"]) for item in commit_records]
     summary = {
         "schema_version": 13,
-        "experiment": "flyppy_v3_shared_weight_population",
+        "experiment": f"flyppy_{args.environment_version}_shared_weight_population",
         "backend": backend_name,
         "persistent_runtime": True,
         "population": args.population,
@@ -757,7 +1038,8 @@ def main() -> int:
         "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
         "body_runtime": "process-isolated",
         "launch_mode": args.launch_mode,
-        "environment_version": "v3",
+        "environment_version": args.environment_version,
+        "flight_body_version": getattr(args, "flight_body_version", "v3"),
         "motor_boundary": "whole-body",
         "physical_spec": {
             "morphology": FLYBODY_V3.morphology,
@@ -768,7 +1050,7 @@ def main() -> int:
             "morphology_sex": FLYBODY_V3.morphology_sex,
         },
         "environment_spec": {
-            "version": "v3",
+            "version": args.environment_version,
             "corridor_low_z_mm": probe_course.floor_z_mm,
             "corridor_high_z_mm": probe_course.ceiling_z_mm,
             "lateral_half_width_mm": probe_course.lateral_half_width_mm,
@@ -800,7 +1082,7 @@ def main() -> int:
         "telemetry_dir": str(output / "live"),
         "viewer_graph": str(args.viewer_graph),
         "elapsed_seconds": elapsed,
-        "teaching_signal": "gate pass -> PAM reward DAN current; collision -> PPL aversive DAN current; curriculum changes episode-reset initial conditions only",
+        "teaching_signal": "gate pass -> PAM reward DAN current; gate collision -> PPL current graded by vertical miss distance; floor/ceiling -> full PPL current; focused frontier episodes create local success experience but never count as mastery; only full-course evaluation episodes advance the arbitrary gate-count frontier",
     }
     reference.save_json_atomic(summary_path, summary)
     publisher.publish_status(

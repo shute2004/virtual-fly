@@ -10,8 +10,9 @@ SNAPSHOT="${VF_SNAPSHOT:-$ROOT/artifacts/malecns-v1.0}"
 GROUPS="$SNAPSHOT/embodiment-groups-v0.json"
 WING_MOTOR_MAP="$SNAPSHOT/wing-motor-neurons-v0.json"
 VIEWER_GRAPH="$ROOT/artifacts/embodiment/neural-viewer-graph-v1.json"
-EXPECTED_VIEWER_GRAPH_SCHEMA=3
+EXPECTED_VIEWER_GRAPH_SCHEMA=4
 NATIVE_BODY_WINDOW="${VF_NATIVE_BODY_WINDOW:-0}"
+SKIP_BODY_RENDERER="${VF_SKIP_BODY_RENDERER:-0}"
 VIEWER_ENVIRONMENT_VERSION="${VF_VIEWER_ENVIRONMENT_VERSION:-}"
 
 if [ "$#" -gt 0 ]; then
@@ -32,7 +33,7 @@ except Exception:
     print(0)' "$VIEWER_GRAPH")"
 fi
 if [ "$VIEWER_SCHEMA" != "$EXPECTED_VIEWER_GRAPH_SCHEMA" ]; then
-  printf 'preparing schematic CNS viewer graph...\n'
+  printf 'preparing anatomical MaleCNS viewer graph...\n'
   uv run python scripts/data/prepare_neural_viewer_graph.py \
     --snapshot "$SNAPSHOT" \
     --groups "$GROUPS" \
@@ -76,26 +77,33 @@ if ! kill -0 "$SERVER_PID" >/dev/null 2>&1; then
   exit 1
 fi
 
-BODY_LAUNCHER=(uv run python)
-if [ "$(uname -s)" = "Darwin" ]; then
-  BODY_LAUNCHER=(uv run mjpython)
-fi
-BODY_ARGS=(--experiment "$EXPERIMENT")
-if [ -n "$VIEWER_ENVIRONMENT_VERSION" ]; then
-  BODY_ARGS+=(--environment-version "$VIEWER_ENVIRONMENT_VERSION")
-fi
-if [ "$NATIVE_BODY_WINDOW" = "1" ]; then
-  BODY_ARGS+=(--native-window)
+if [ "$SKIP_BODY_RENDERER" != "0" ] && [ "$SKIP_BODY_RENDERER" != "1" ]; then
+  echo "VF_SKIP_BODY_RENDERER must be 0 or 1" >&2
+  exit 2
 fi
 
-"${BODY_LAUNCHER[@]}" scripts/embodiment/live_body_viewer.py "${BODY_ARGS[@]}" >"$BODY_LOG" 2>&1 &
-BODY_PID=$!
+if [ "$SKIP_BODY_RENDERER" != "1" ]; then
+  BODY_LAUNCHER=(uv run python)
+  if [ "$(uname -s)" = "Darwin" ]; then
+    BODY_LAUNCHER=(uv run mjpython)
+  fi
+  BODY_ARGS=(--experiment "$EXPERIMENT")
+  if [ -n "$VIEWER_ENVIRONMENT_VERSION" ]; then
+    BODY_ARGS+=(--environment-version "$VIEWER_ENVIRONMENT_VERSION")
+  fi
+  if [ "$NATIVE_BODY_WINDOW" = "1" ]; then
+    BODY_ARGS+=(--native-window)
+  fi
 
-sleep 0.5
-if ! kill -0 "$BODY_PID" >/dev/null 2>&1; then
-  printf '%s\n' 'FlyBody renderer failed:' >&2
-  cat "$BODY_LOG" >&2 || true
-  exit 1
+  "${BODY_LAUNCHER[@]}" scripts/embodiment/live_body_viewer.py "${BODY_ARGS[@]}" >"$BODY_LOG" 2>&1 &
+  BODY_PID=$!
+
+  sleep 0.5
+  if ! kill -0 "$BODY_PID" >/dev/null 2>&1; then
+    printf '%s\n' 'FlyBody renderer failed:' >&2
+    cat "$BODY_LOG" >&2 || true
+    exit 1
+  fi
 fi
 
 case "$(uname -s)" in
@@ -115,8 +123,12 @@ case "$(uname -s)" in
 esac
 
 printf 'learning_viewer=%s\n' "$URL"
-printf 'FlyBody=main interactive MuJoCo render (drag orbit / wheel zoom)\n'
-printf 'MaleCNS=inset schematic 3D observer\n'
+if [ "$SKIP_BODY_RENDERER" = "1" ]; then
+  printf 'FlyBody=pre-rendered playback frames\n'
+else
+  printf 'FlyBody=main interactive MuJoCo render (drag orbit / wheel zoom)\n'
+fi
+printf 'MaleCNS=anatomical soma-coordinate 3D observer\n'
 printf 'telemetry=%s/live\n' "$EXPERIMENT"
 printf 'viewer_server_log=%s\n' "$SERVER_LOG"
 printf 'body_renderer_log=%s\n' "$BODY_LOG"
@@ -132,7 +144,7 @@ while true; do
     cat "$SERVER_LOG" >&2 || true
     exit 1
   fi
-  if ! kill -0 "$BODY_PID" >/dev/null 2>&1; then
+  if [ -n "$BODY_PID" ] && ! kill -0 "$BODY_PID" >/dev/null 2>&1; then
     printf '%s\n' 'FlyBody renderer exited unexpectedly:' >&2
     cat "$BODY_LOG" >&2 || true
     exit 1

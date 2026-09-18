@@ -9,9 +9,7 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use vf_neural::{ConnectomeSnapshot, NeuralParams, Stimulus, gpu_population::GpuPopulationRuntime};
-use vf_runner::checkpoint::{
-    load_checkpoint, save_checkpoint_with_global_weight_version,
-};
+use vf_runner::checkpoint::{load_checkpoint, save_checkpoint_with_global_weight_version};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -52,6 +50,8 @@ struct SlotStepRequest {
     stimulate_body: Vec<(u64, f32)>,
     #[serde(default)]
     read_body: Vec<u64>,
+    #[serde(default)]
+    plasticity: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +63,9 @@ enum Request {
         #[serde(default)]
         global_weight_version: u64,
     },
-    SaveCheckpoint { path: PathBuf },
+    SaveCheckpoint {
+        path: PathBuf,
+    },
     StepBatch {
         slots: Vec<SlotStepRequest>,
         #[serde(default = "default_true")]
@@ -80,17 +82,31 @@ enum Request {
         #[serde(default = "default_one")]
         steps: usize,
     },
-    TransactionStats { slot: usize },
+    TransactionStats {
+        slot: usize,
+    },
+    TransactionContrast {
+        control_slot: usize,
+        reward_slot: usize,
+        aversive_slot: usize,
+        epsilon: f32,
+    },
     CommitSlot {
         slot: usize,
         source_weight_version: u64,
     },
-    RestartSlot { slot: usize },
+    RestartSlot {
+        slot: usize,
+    },
     Quit,
 }
 
-fn default_true() -> bool { true }
-fn default_one() -> usize { 1 }
+fn default_true() -> bool {
+    true
+}
+fn default_one() -> usize {
+    1
+}
 
 #[derive(Debug, Serialize)]
 struct ReadyResponse<'a> {
@@ -144,6 +160,36 @@ struct TransactionStatsResponse {
 }
 
 #[derive(Debug, Serialize)]
+struct TransactionEffectResponse {
+    changed_edges: usize,
+    shift_changed_edges: usize,
+    bound_changed_edges: usize,
+    positive_shift_edges: usize,
+    negative_shift_edges: usize,
+    sum_shift_delta: f64,
+    sum_abs_shift_delta: f64,
+    max_abs_shift_delta: f32,
+}
+
+#[derive(Debug, Serialize)]
+struct TransactionContrastResponse {
+    ok: bool,
+    event: &'static str,
+    plastic_edges: usize,
+    reward: TransactionEffectResponse,
+    aversive: TransactionEffectResponse,
+    shared_changed_edges: usize,
+    reward_only_changed_edges: usize,
+    aversive_only_changed_edges: usize,
+    shared_shift_edges: usize,
+    shared_same_sign_shift_edges: usize,
+    shared_opposite_sign_shift_edges: usize,
+    shift_dot: f64,
+    reward_shift_norm_sq: f64,
+    aversive_shift_norm_sq: f64,
+}
+
+#[derive(Debug, Serialize)]
 struct CommitResponse {
     ok: bool,
     event: &'static str,
@@ -176,7 +222,10 @@ struct ErrorResponse {
     error: String,
 }
 
-fn resolve_groups(snapshot: &ConnectomeSnapshot, config: GroupConfigFile) -> Result<HashMap<String, Group>> {
+fn resolve_groups(
+    snapshot: &ConnectomeSnapshot,
+    config: GroupConfigFile,
+) -> Result<HashMap<String, Group>> {
     if !matches!(config.schema_version, 1 | 2) {
         bail!("unsupported group config schema {}", config.schema_version);
     }
@@ -211,7 +260,13 @@ fn build_stimuli(
         let group = groups
             .get(name)
             .with_context(|| format!("unknown stimulation group {name:?}"))?;
-        stimuli.extend(group.indices.iter().copied().map(|neuron| Stimulus { neuron, current }));
+        stimuli.extend(
+            group
+                .indices
+                .iter()
+                .copied()
+                .map(|neuron| Stimulus { neuron, current }),
+        );
     }
     for &(body_id, current) in body {
         let neuron = snapshot
@@ -279,7 +334,9 @@ fn main() -> Result<()> {
 
     for line in stdin.lock().lines() {
         let line = line?;
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         let request = match serde_json::from_str::<Request>(&line) {
             Ok(request) => request,
             Err(error) => {
@@ -291,9 +348,16 @@ fn main() -> Result<()> {
         let result = match request {
             Request::Ping => write_json(
                 &mut stdout,
-                &SimpleResponse { ok: true, event: "pong", global_weight_version },
+                &SimpleResponse {
+                    ok: true,
+                    event: "pong",
+                    global_weight_version,
+                },
             ),
-            Request::LoadCheckpoint { path, global_weight_version: requested_version } => {
+            Request::LoadCheckpoint {
+                path,
+                global_weight_version: requested_version,
+            } => {
                 let result = (|| -> Result<()> {
                     let (manifest, state) = load_checkpoint(
                         &path,
@@ -325,7 +389,9 @@ fn main() -> Result<()> {
                     )?;
                     Ok(())
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::SaveCheckpoint { path } => {
@@ -350,7 +416,9 @@ fn main() -> Result<()> {
                     )?;
                     Ok(())
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::StepBatch { slots, plasticity } => {
@@ -358,6 +426,7 @@ fn main() -> Result<()> {
                     let mut seen = HashSet::new();
                     let mut stimuli_by_slot = vec![Vec::<Stimulus>::new(); runtime.slot_count()];
                     let mut active = vec![false; runtime.slot_count()];
+                    let mut plasticity_by_slot = vec![plasticity; runtime.slot_count()];
                     let mut read_flat = Vec::<usize>::new();
                     let mut read_meta = Vec::<(usize, u64)>::new();
                     for slot_request in &slots {
@@ -365,9 +434,14 @@ fn main() -> Result<()> {
                             bail!("population slot {} is out of range", slot_request.slot);
                         }
                         if !seen.insert(slot_request.slot) {
-                            bail!("duplicate population slot {} in one batch", slot_request.slot);
+                            bail!(
+                                "duplicate population slot {} in one batch",
+                                slot_request.slot
+                            );
                         }
                         active[slot_request.slot] = true;
+                        plasticity_by_slot[slot_request.slot] =
+                            slot_request.plasticity.unwrap_or(plasticity);
                         stimuli_by_slot[slot_request.slot] = build_stimuli(
                             &snapshot,
                             &groups,
@@ -382,11 +456,11 @@ fn main() -> Result<()> {
                             read_meta.push((slot_request.slot, body_id));
                         }
                     }
-                    let events = runtime.step_batch_with_read(
+                    let events = runtime.step_batch_with_read_per_slot(
                         &stimuli_by_slot,
                         &active,
                         &read_flat,
-                        plasticity,
+                        &plasticity_by_slot,
                     )?;
                     neural_step = neural_step
                         .checked_add(active.iter().filter(|&&v| v).count() as u64)
@@ -410,29 +484,54 @@ fn main() -> Result<()> {
                         .collect();
                     write_json(
                         &mut stdout,
-                        &BatchStepResponse { ok: true, step: neural_step, slots: slot_readouts },
+                        &BatchStepResponse {
+                            ok: true,
+                            step: neural_step,
+                            slots: slot_readouts,
+                        },
                     )?;
                     Ok(())
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
-            Request::StepSlot { slot, stimulate, stimulate_body, plasticity, steps } => {
+            Request::StepSlot {
+                slot,
+                stimulate,
+                stimulate_body,
+                plasticity,
+                steps,
+            } => {
                 let result = (|| -> Result<()> {
-                    if steps == 0 { bail!("steps must be >= 1"); }
-                    if slot >= runtime.slot_count() { bail!("population slot {slot} is out of range"); }
+                    if steps == 0 {
+                        bail!("steps must be >= 1");
+                    }
+                    if slot >= runtime.slot_count() {
+                        bail!("population slot {slot} is out of range");
+                    }
                     let mut stimuli_by_slot = vec![Vec::<Stimulus>::new(); runtime.slot_count()];
                     let mut active = vec![false; runtime.slot_count()];
                     active[slot] = true;
-                    stimuli_by_slot[slot] = build_stimuli(&snapshot, &groups, &stimulate, &stimulate_body)?;
+                    stimuli_by_slot[slot] =
+                        build_stimuli(&snapshot, &groups, &stimulate, &stimulate_body)?;
                     runtime.step_batch_no_read(&stimuli_by_slot, &active, plasticity, steps)?;
                     neural_step = neural_step
                         .checked_add(steps as u64)
                         .context("population neural step counter overflow")?;
-                    write_json(&mut stdout, &StepResponse { ok: true, step: neural_step })?;
+                    write_json(
+                        &mut stdout,
+                        &StepResponse {
+                            ok: true,
+                            step: neural_step,
+                        },
+                    )?;
                     Ok(())
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::TransactionStats { slot } => {
@@ -458,10 +557,67 @@ fn main() -> Result<()> {
                     )?;
                     Ok(())
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
-            Request::CommitSlot { slot, source_weight_version } => {
+            Request::TransactionContrast {
+                control_slot,
+                reward_slot,
+                aversive_slot,
+                epsilon,
+            } => {
+                let result = (|| -> Result<()> {
+                    let stats = runtime.transaction_contrast(
+                        control_slot,
+                        reward_slot,
+                        aversive_slot,
+                        epsilon,
+                    )?;
+                    let effect = |item: vf_neural::gpu_population::TransactionEffectStats| {
+                        TransactionEffectResponse {
+                            changed_edges: item.changed_edges,
+                            shift_changed_edges: item.shift_changed_edges,
+                            bound_changed_edges: item.bound_changed_edges,
+                            positive_shift_edges: item.positive_shift_edges,
+                            negative_shift_edges: item.negative_shift_edges,
+                            sum_shift_delta: item.sum_shift_delta,
+                            sum_abs_shift_delta: item.sum_abs_shift_delta,
+                            max_abs_shift_delta: item.max_abs_shift_delta,
+                        }
+                    };
+                    write_json(
+                        &mut stdout,
+                        &TransactionContrastResponse {
+                            ok: true,
+                            event: "transaction_contrast",
+                            plastic_edges: stats.plastic_edges,
+                            reward: effect(stats.reward),
+                            aversive: effect(stats.aversive),
+                            shared_changed_edges: stats.shared_changed_edges,
+                            reward_only_changed_edges: stats.reward_only_changed_edges,
+                            aversive_only_changed_edges: stats.aversive_only_changed_edges,
+                            shared_shift_edges: stats.shared_shift_edges,
+                            shared_same_sign_shift_edges: stats.shared_same_sign_shift_edges,
+                            shared_opposite_sign_shift_edges: stats
+                                .shared_opposite_sign_shift_edges,
+                            shift_dot: stats.shift_dot,
+                            reward_shift_norm_sq: stats.reward_shift_norm_sq,
+                            aversive_shift_norm_sq: stats.aversive_shift_norm_sq,
+                        },
+                    )?;
+                    Ok(())
+                })();
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
+                Ok(())
+            }
+            Request::CommitSlot {
+                slot,
+                source_weight_version,
+            } => {
                 let result = (|| -> Result<()> {
                     if source_weight_version > global_weight_version {
                         bail!(
@@ -489,7 +645,9 @@ fn main() -> Result<()> {
                     )?;
                     Ok(())
                 })();
-                if let Err(error) = result { write_error(&mut stdout, error)?; }
+                if let Err(error) = result {
+                    write_error(&mut stdout, error)?;
+                }
                 Ok(())
             }
             Request::RestartSlot { slot } => {
@@ -497,7 +655,11 @@ fn main() -> Result<()> {
                 match result {
                     Ok(()) => write_json(
                         &mut stdout,
-                        &SimpleResponse { ok: true, event: "slot_restarted", global_weight_version },
+                        &SimpleResponse {
+                            ok: true,
+                            event: "slot_restarted",
+                            global_weight_version,
+                        },
                     ),
                     Err(error) => write_error(&mut stdout, error),
                 }
@@ -505,7 +667,11 @@ fn main() -> Result<()> {
             Request::Quit => {
                 write_json(
                     &mut stdout,
-                    &SimpleResponse { ok: true, event: "bye", global_weight_version },
+                    &SimpleResponse {
+                        ok: true,
+                        event: "bye",
+                        global_weight_version,
+                    },
                 )?;
                 break;
             }

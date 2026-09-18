@@ -31,8 +31,13 @@ impl GpuPopulationRuntime {
             &self._neuron_state_buffer,
             self.neuron_count * self.slot_count,
         )?;
-        let current_spikes = if self.current_is_b { &self.spikes_b } else { &self.spikes_a };
-        let all_spikes = self.read_buffer::<u32>(current_spikes, self.neuron_count * self.slot_count)?;
+        let current_spikes = if self.current_is_b {
+            &self.spikes_b
+        } else {
+            &self.spikes_a
+        };
+        let all_spikes =
+            self.read_buffer::<u32>(current_spikes, self.neuron_count * self.slot_count)?;
         let ns = slot * self.neuron_count;
         let ne = ns + self.neuron_count;
         let neurons = &all_neurons[ns..ne];

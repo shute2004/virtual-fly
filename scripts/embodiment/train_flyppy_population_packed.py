@@ -74,15 +74,19 @@ def _spawn_packed(
     return handles
 
 
-def _output_dir_from_argv() -> Path:
-    default = Path("artifacts/experiments/flyppy-v3")
+def _argv_value(name: str, default: str) -> str:
     args = sys.argv[1:]
     for index, arg in enumerate(args):
-        if arg == "--output-dir" and index + 1 < len(args):
-            return Path(args[index + 1])
-        if arg.startswith("--output-dir="):
-            return Path(arg.split("=", 1)[1])
+        if arg == name and index + 1 < len(args):
+            return str(args[index + 1])
+        prefix = f"{name}="
+        if arg.startswith(prefix):
+            return str(arg.split("=", 1)[1])
     return default
+
+
+def _output_dir_from_argv() -> Path:
+    return Path(_argv_value("--output-dir", "artifacts/experiments/flyppy-v3"))
 
 
 def _patch_runtime_metadata(output_dir: Path) -> None:
@@ -99,6 +103,8 @@ def _patch_runtime_metadata(output_dir: Path) -> None:
         ),
         "vision_framebuffer": (_RESOLVED_VISION_MODE or "raster") == "raster",
         "viewer_telemetry": "on-demand",
+        "environment_version": _argv_value("--environment-version", "v3"),
+        "flight_body_version": _argv_value("--flight-body-version", "v3"),
     }
     for name in ("summary.json", "population-state.json"):
         path = output_dir / name

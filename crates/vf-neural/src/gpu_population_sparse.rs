@@ -67,7 +67,7 @@ struct ParamsGpu {
 struct ControlGpu {
     slot: u32,
     active_mask: u32,
-    _pad0: u32,
+    plasticity_mask: u32,
     _pad1: u32,
 }
 
@@ -414,7 +414,7 @@ impl GpuPopulationRuntime {
                 bail!("population read index {index} is out of range");
             }
         }
-        self.write_control(0, active_mask);
+        self.write_control(0, active_mask, if plasticity { active_mask } else { 0 });
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let neuron_dispatch = dispatch_grid((self.slot_count * self.neuron_count) as u32, max_groups)?;
         let plastic_dispatch = if plasticity && self.plastic_edge_count > 0 {
@@ -484,7 +484,7 @@ impl GpuPopulationRuntime {
     ) -> Result<()> {
         if steps == 0 { bail!("population neural steps must be >= 1"); }
         let active_mask = self.prepare_step(stimuli_by_slot, active_slots)?;
-        self.write_control(0, active_mask);
+        self.write_control(0, active_mask, if plasticity { active_mask } else { 0 });
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let neuron_dispatch = dispatch_grid((self.slot_count * self.neuron_count) as u32, max_groups)?;
         let plastic_dispatch = if plasticity && self.plastic_edge_count > 0 {
@@ -506,7 +506,7 @@ impl GpuPopulationRuntime {
 
     pub fn commit_and_restart_slot(&mut self, slot: usize) -> Result<()> {
         self.validate_slot(slot)?;
-        self.write_control(slot, 0);
+        self.write_control(slot, 0, 0);
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let plastic_dispatch = dispatch_grid(self.plastic_edge_count as u32, max_groups)?;
         let neuron_dispatch = dispatch_grid(self.neuron_count as u32, max_groups)?;
@@ -539,7 +539,7 @@ impl GpuPopulationRuntime {
 
     pub fn restart_slot(&mut self, slot: usize) -> Result<()> {
         self.validate_slot(slot)?;
-        self.write_control(slot, 0);
+        self.write_control(slot, 0, 0);
         let max_groups = self.device.limits().max_compute_workgroups_per_dimension;
         let plastic_dispatch = dispatch_grid(self.plastic_edge_count as u32, max_groups)?;
         let neuron_dispatch = dispatch_grid(self.neuron_count as u32, max_groups)?;
@@ -629,8 +629,8 @@ impl GpuPopulationRuntime {
         Ok(())
     }
 
-    fn write_control(&self, slot: usize, active_mask: u32) {
-        let control = ControlGpu { slot: slot as u32, active_mask, _pad0: 0, _pad1: 0 };
+    fn write_control(&self, slot: usize, active_mask: u32, plasticity_mask: u32) {
+        let control = ControlGpu { slot: slot as u32, active_mask, plasticity_mask, _pad1: 0 };
         self.queue.write_buffer(&self.control_buffer, 0, bytemuck::bytes_of(&control));
     }
 

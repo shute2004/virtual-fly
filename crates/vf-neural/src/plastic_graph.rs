@@ -78,7 +78,8 @@ impl PlasticFastGraph {
                 }
             }
             row_offsets.push(
-                u32::try_from(edge_indices.len()).context("PlasticFastGraph edge count exceeds u32")?,
+                u32::try_from(edge_indices.len())
+                    .context("PlasticFastGraph edge count exceeds u32")?,
             );
         }
 

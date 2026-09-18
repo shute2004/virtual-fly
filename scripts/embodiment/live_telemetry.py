@@ -120,7 +120,7 @@ class LiveTelemetryPublisher:
         self._cached_active = self.always_enabled
 
         # A new run must never inherit an old run's apparent live state.
-        for name in ("status.json", "body.json", "neural.json", "fly.png"):
+        for name in ("status.json", "body.json", "neural.json", "fly.png", "fly.jpg"):
             try:
                 (self.root / name).unlink(missing_ok=True)
             except OSError:
@@ -281,6 +281,7 @@ class LiveTelemetryPublisher:
         aversive: bool,
         motor: Mapping[str, Any],
         retinal: Mapping[str, Any],
+        gate_height_center_z_mm: float | None = None,
     ) -> None:
         self._write(
             "body.json",
@@ -299,6 +300,9 @@ class LiveTelemetryPublisher:
                 "aversive": bool(aversive),
                 "motor": dict(motor),
                 "retinal": dict(retinal),
+                "gate_height_center_z_mm": (
+                    None if gate_height_center_z_mm is None else float(gate_height_center_z_mm)
+                ),
             },
         )
 

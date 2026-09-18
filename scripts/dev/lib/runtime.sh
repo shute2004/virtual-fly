@@ -18,6 +18,11 @@ vf_resolve_python() {
 }
 
 vf_resolve_cargo() {
+  # Keep Rust build artifacts out of the repository.  Cargo's default `target/`
+  # directory can add hundreds of MB to virtual-fly after one bridge build.
+  if [ -z "${CARGO_TARGET_DIR:-}" ]; then
+    export CARGO_TARGET_DIR="${VF_CARGO_TARGET_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/cargo-target}"
+  fi
   if command -v cargo >/dev/null 2>&1; then
     VF_CARGO=(cargo)
   elif [ -x "$HOME/.cargo/bin/cargo" ]; then

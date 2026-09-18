@@ -6,8 +6,7 @@ use serde::Serialize;
 use vf_neural::{
     ConnectomeSnapshot, NeuralParams, PlasticFastGraph, Stimulus,
     gpu_population::GpuPopulationRuntime as FrontierRuntime,
-    gpu_population_reference::GpuPopulationRuntime as ReferenceRuntime,
-    model::nt,
+    gpu_population_reference::GpuPopulationRuntime as ReferenceRuntime, model::nt,
 };
 
 #[derive(Debug, Parser)]
@@ -90,16 +89,34 @@ fn main() -> Result<()> {
     let active = [true];
     let read_all = (0..snapshot.neuron_count()).collect::<Vec<_>>();
     let sequence = [
-        vec![Stimulus { neuron: pre, current: 2.0 }],
+        vec![Stimulus {
+            neuron: pre,
+            current: 2.0,
+        }],
         vec![
-            Stimulus { neuron: dopamine_pre, current: 2.0 },
-            Stimulus { neuron: post, current: 2.0 },
+            Stimulus {
+                neuron: dopamine_pre,
+                current: 2.0,
+            },
+            Stimulus {
+                neuron: post,
+                current: 2.0,
+            },
         ],
         vec![],
         vec![],
-        vec![Stimulus { neuron: pre, current: -2.0 }],
-        vec![Stimulus { neuron: dopamine_pre, current: 2.0 }],
-        vec![Stimulus { neuron: post, current: -2.0 }],
+        vec![Stimulus {
+            neuron: pre,
+            current: -2.0,
+        }],
+        vec![Stimulus {
+            neuron: dopamine_pre,
+            current: 2.0,
+        }],
+        vec![Stimulus {
+            neuron: post,
+            current: -2.0,
+        }],
         vec![],
         vec![],
         vec![],
@@ -110,10 +127,9 @@ fn main() -> Result<()> {
     // internal-state readback API to the live runtime.
     for (step, stimuli) in sequence.iter().enumerate() {
         let by_slot = [stimuli.clone()];
-        let reference_events = reference
-            .step_batch_with_read(&by_slot, &active, &read_all, true)?;
-        let frontier_events = frontier
-            .step_batch_with_read(&by_slot, &active, &read_all, true)?;
+        let reference_events =
+            reference.step_batch_with_read(&by_slot, &active, &read_all, true)?;
+        let frontier_events = frontier.step_batch_with_read(&by_slot, &active, &read_all, true)?;
         if reference_events != frontier_events {
             bail!("all-neuron event mismatch at step {step}");
         }
@@ -127,11 +143,19 @@ fn main() -> Result<()> {
     assert_f32_bits_eq("membrane", &a.membrane, &b.membrane)?;
     assert_f32_bits_eq("trace", &a.trace, &b.trace)?;
     assert_f32_bits_eq("modulation", &a.modulation, &b.modulation)?;
-    if a.refractory != b.refractory { bail!("final refractory mismatch"); }
-    if a.spikes != b.spikes { bail!("final spike mismatch"); }
+    if a.refractory != b.refractory {
+        bail!("final refractory mismatch");
+    }
+    if a.spikes != b.spikes {
+        bail!("final spike mismatch");
+    }
     assert_f32_bits_eq("plastic_weight", &a.plastic_weight, &b.plastic_weight)?;
     assert_f32_bits_eq("eligibility", &a.eligibility, &b.eligibility)?;
-    assert_f32_bits_eq("transaction_shift", &a.transaction_shift, &b.transaction_shift)?;
+    assert_f32_bits_eq(
+        "transaction_shift",
+        &a.transaction_shift,
+        &b.transaction_shift,
+    )?;
     assert_f32_bits_eq("transaction_lo", &a.transaction_lo, &b.transaction_lo)?;
     assert_f32_bits_eq("transaction_hi", &a.transaction_hi, &b.transaction_hi)?;
 
@@ -139,7 +163,11 @@ fn main() -> Result<()> {
     frontier.commit_and_restart_slot(0)?;
     let reference_weights = reference.global_weights()?;
     let frontier_weights = frontier.global_weights()?;
-    assert_f32_bits_eq("committed_global_weights", &reference_weights, &frontier_weights)?;
+    assert_f32_bits_eq(
+        "committed_global_weights",
+        &reference_weights,
+        &frontier_weights,
+    )?;
 
     println!(
         "{}",

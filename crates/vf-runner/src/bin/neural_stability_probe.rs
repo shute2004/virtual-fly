@@ -93,11 +93,9 @@ impl Runtime {
 
     fn spikes(&self) -> Result<Vec<u32>> {
         match self {
-            Runtime::Cpu(runtime) => Ok(runtime
-                .spikes()
-                .iter()
-                .map(|&event| event as u32)
-                .collect()),
+            Runtime::Cpu(runtime) => {
+                Ok(runtime.spikes().iter().map(|&event| event as u32).collect())
+            }
             Runtime::Gpu(runtime) => runtime.read_spikes(),
         }
     }
@@ -195,12 +193,7 @@ fn main() -> Result<()> {
 
         let mut events = Vec::with_capacity(args.zero_input_steps + 1);
         runtime.step(&stimuli)?;
-        events.push(event_count(
-            0,
-            true,
-            &runtime.spikes()?,
-            &stimulated_mask,
-        ));
+        events.push(event_count(0, true, &runtime.spikes()?, &stimulated_mask));
         for step in 1..=args.zero_input_steps {
             runtime.step(&[])?;
             events.push(event_count(
@@ -230,11 +223,7 @@ fn main() -> Result<()> {
             .unwrap_or(0);
         let final_total_events = events.last().map_or(0, |sample| sample.total);
         let peak_total_events = events.iter().map(|sample| sample.total).max().unwrap_or(0);
-        let zero_tail = events
-            .iter()
-            .rev()
-            .take(4)
-            .all(|sample| sample.total == 0);
+        let zero_tail = events.iter().rev().take(4).all(|sample| sample.total == 0);
         results.push(ScaleResult {
             synapse_scale: scale,
             events,

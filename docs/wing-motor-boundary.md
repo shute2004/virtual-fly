@@ -120,12 +120,14 @@ gate pass
   -> released PAM01 (PAM-gamma5) DANへcurrent
 
 collision
-  -> released PPL101 (PPL1-gamma1pedc) DANへcurrent
+  -> released PPL1 punishment ensemble (PPL101/PPL103/PPL106) DANへcurrent
 ```
 
 `reward=+1`、`punishment=-1`、scalar reward、直接weight updateは存在しない。刺激後のdopamineとplasticityはMaleCNS connectivity上のneural runtimeで発生する。
 
-PAM01内にも生理学的heterogeneityがあり得るため、「PAM01の全細胞が自然条件で完全に同一のreward信号」という主張はしない。この刺激対象は明示的な実験条件である。
+PAM01内にも生理学的heterogeneityがあり得るため、「PAM01の全細胞が自然条件で完全に同一のreward信号」という主張はしない。aversive側も同様で、PPL1 ensembleはreleased MaleCNS上の実在DANを用いた実験条件である。
+
+PPL101単独では、実collision trajectoryの一部でevent直前eligibilityと投射先が重ならず追加plasticityが0になることを確認した。一方、PPL101/PPL103/PPL106の6細胞ensembleでは同じtrajectoryで4,935 plastic edgesにevent固有差が生じたため、単一compartment依存を避ける最小変更としてこのensembleへ拡張した。外部scalar punishmentやweight targetは追加していない。
 
 ## 5. 学習起動
 

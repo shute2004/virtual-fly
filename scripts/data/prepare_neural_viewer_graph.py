@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
-"""Build a compact static MaleCNS graph for the detached live viewer.
+"""Build a compact anatomically positioned MaleCNS graph for the live viewer.
 
-The full released graph has ~25.6M edges. The observer therefore keeps the
-reinforcement and wing-motor boundary plus a bounded set of strongly connected
-CNS neurons. This graph is viewer-only and is never fed back into learning.
-
-Coordinates are deliberately schematic. They preserve released body IDs,
-connections, side labels and broad annotation categories, but they are not
-morphology/skeleton coordinates. The layout is shaped as bilateral brain lobes,
-optic lobes and a ventral nerve cord so live activity is easier to interpret
-than the previous rectangular hash bands.
+The released MaleCNS graph has ~25.6M edges, so the live observer displays a
+bounded set of strong connections plus the reinforcement and wing-motor boundary.
+Unlike the earlier schematic layout, displayed neurons use released MaleCNS soma
+coordinates.  A deterministic sample of all released soma positions is included
+as a viewer-only anatomical background point cloud.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import math
 from pathlib import Path
 
 import numpy as np
@@ -45,19 +39,26 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("artifacts/embodiment/neural-viewer-graph-v1.json"),
     )
+    parser.add_argument(
+        "--anatomy-annotations",
+        type=Path,
+        default=None,
+        help="official MaleCNS annotations containing somaLocation; defaults to snapshot annotations",
+    )
     parser.add_argument("--max-nodes", type=int, default=2500)
     parser.add_argument("--max-edges", type=int, default=6000)
+    parser.add_argument("--max-anatomy-points", type=int, default=20000)
     return parser.parse_args()
 
 
-def stable_unit(body_id: int, salt: str) -> float:
-    digest = hashlib.blake2b(f"{body_id}:{salt}".encode(), digest_size=8).digest()
-    return int.from_bytes(digest, "little") / float(2**64 - 1)
-
-
 def clean_text(value: object) -> str:
-    if value is None or pd.isna(value):
+    if value is None:
         return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
     return str(value)
 
 
@@ -81,68 +82,60 @@ def classify_region(superclass: str, neuron_type: str, nerve: str) -> str:
     return "central_brain"
 
 
-def ellipsoid_point(
-    body_id: int,
+def location_vector(value: object) -> np.ndarray | None:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    try:
+        vector = np.asarray(value, dtype=np.float64).reshape(3)
+    except (TypeError, ValueError):
+        return None
+    if not np.all(np.isfinite(vector)):
+        return None
+    return vector
+
+
+def row_location(row: pd.Series | None) -> np.ndarray | None:
+    if row is None:
+        return None
+    for name in ("somaLocation", "tosomaLocation"):
+        if name in row.index:
+            vector = location_vector(row.get(name))
+            if vector is not None:
+                return vector
+    return None
+
+
+def anatomical_transform(
+    vector: np.ndarray,
     *,
-    salt: str,
-    center: tuple[float, float, float],
-    radii: tuple[float, float, float],
+    center: np.ndarray,
+    scale: float,
 ) -> list[float]:
-    # Deterministic approximately uniform volume sample inside an ellipsoid.
-    azimuth = 2.0 * math.pi * stable_unit(body_id, f"{salt}:azimuth")
-    cos_polar = 2.0 * stable_unit(body_id, f"{salt}:polar") - 1.0
-    sin_polar = math.sqrt(max(0.0, 1.0 - cos_polar * cos_polar))
-    radius = stable_unit(body_id, f"{salt}:radius") ** (1.0 / 3.0)
-    unit = (
-        radius * sin_polar * math.cos(azimuth),
-        radius * cos_polar,
-        radius * sin_polar * math.sin(azimuth),
-    )
+    """Map MaleCNS EM voxels into viewer axes without changing relative scale.
+
+    MaleCNS x is left/right.  Its long z axis runs brain->VNC, so viewer y uses
+    -z to keep the brain above the VNC.  Source y becomes viewer depth.
+    """
+
+    delta = (vector - center) * scale
     return [
-        center[0] + radii[0] * unit[0],
-        center[1] + radii[1] * unit[1],
-        center[2] + radii[2] * unit[2],
+        round(float(-delta[0]), 5),
+        round(float(-delta[2]), 5),
+        round(float(delta[1]), 5),
     ]
-
-
-def schematic_position(
-    body_id: int,
-    side: str,
-    superclass: str,
-    neuron_type: str,
-    nerve: str,
-) -> tuple[list[float], str]:
-    region = classify_region(superclass, neuron_type, nerve)
-    side_norm = side.strip().upper()
-    if side_norm == "L":
-        sign = -1.0
-    elif side_norm == "R":
-        sign = 1.0
-    else:
-        sign = -1.0 if stable_unit(body_id, "side") < 0.5 else 1.0
-
-    if region == "optic_lobe":
-        center = (sign * 4.5, 1.2, 0.0)
-        radii = (1.65, 2.45, 2.05)
-    elif region == "ventral_nerve_cord":
-        center = (sign * 0.75, -5.2, 0.0)
-        radii = (1.15, 4.2, 1.35)
-    else:
-        center = (sign * 1.55, 1.35, 0.0)
-        radii = (2.7, 3.0, 2.55)
-
-    return ellipsoid_point(
-        body_id,
-        salt=region,
-        center=center,
-        radii=radii,
-    ), region
 
 
 def main() -> int:
     args = parse_args()
     if args.max_nodes < 256 or args.max_edges < 256:
         raise SystemExit("viewer graph budgets are too small")
+    if args.max_anatomy_points < 1000:
+        raise SystemExit("max-anatomy-points must be >= 1000")
 
     manifest = json.loads((args.snapshot / "manifest.json").read_text(encoding="utf-8"))
     body_ids = np.fromfile(args.snapshot / manifest["body_ids_file"], dtype="<u8")
@@ -182,13 +175,57 @@ def main() -> int:
         if len(selected_edges) >= args.max_edges:
             break
 
-    annotations = pd.read_feather(args.snapshot / manifest["annotations_file"])
+    annotation_path = args.anatomy_annotations or (args.snapshot / manifest["annotations_file"])
+    annotations = pd.read_feather(annotation_path)
+    if "somaLocation" not in annotations.columns and args.anatomy_annotations is None:
+        raw_candidate = (
+            args.snapshot.parent
+            / "raw"
+            / "male-cns-v1.0"
+            / "body-annotations-male-cns-v1.0-minconf-0.5.feather"
+        )
+        if raw_candidate.exists():
+            annotation_path = raw_candidate
+            annotations = pd.read_feather(annotation_path)
     annotations = annotations.drop_duplicates("bodyId").set_index("bodyId")
+    if "somaLocation" not in annotations.columns:
+        raise RuntimeError(
+            "MaleCNS annotations lack somaLocation; provide the official v1.0 annotation feather with --anatomy-annotations"
+        )
+
+    aligned = annotations.reindex(body_ids)
+    all_locations: list[np.ndarray] = []
+    all_location_body_ids: list[int] = []
+    for body_id, (_, row) in zip(body_ids.tolist(), aligned.iterrows(), strict=True):
+        location = row_location(row)
+        if location is not None:
+            all_locations.append(location)
+            all_location_body_ids.append(int(body_id))
+    if not all_locations:
+        raise RuntimeError("MaleCNS snapshot contains no usable soma coordinates")
+
+    location_array = np.stack(all_locations)
+    minimum = location_array.min(axis=0)
+    maximum = location_array.max(axis=0)
+    center = (minimum + maximum) / 2.0
+    longest_extent = float(np.max(maximum - minimum))
+    if longest_extent <= 0.0:
+        raise RuntimeError("degenerate MaleCNS soma coordinate extent")
+    scale = 14.0 / longest_extent
+
+    location_by_body = {
+        body_id: location
+        for body_id, location in zip(all_location_body_ids, all_locations, strict=True)
+    }
     index_by_body = {int(body): i for i, body in enumerate(body_ids.tolist())}
+
     nodes = []
     for body_id in sorted(selected):
+        location = location_by_body.get(body_id)
+        if location is None:
+            continue
         row = annotations.loc[body_id] if body_id in annotations.index else None
-        side = "" if row is None else clean_text(row.get("side", ""))
+        side = "" if row is None else clean_text(row.get("somaSide", row.get("side", "")))
         superclass = "" if row is None else clean_text(row.get("superclass", ""))
         neuron_type = "" if row is None else clean_text(row.get("type", ""))
         nerve = ""
@@ -197,13 +234,7 @@ def main() -> int:
                 clean_text(row.get(name, ""))
                 for name in ("nerve", "entryNerve", "exitNerve")
             ).strip()
-        position, region = schematic_position(
-            body_id,
-            side,
-            superclass,
-            neuron_type,
-            nerve,
-        )
+        region = classify_region(superclass, neuron_type, nerve)
         dense = index_by_body.get(body_id)
         nodes.append(
             {
@@ -213,21 +244,44 @@ def main() -> int:
                 "type": neuron_type,
                 "region": region,
                 "nt": int(nt[dense]) if dense is not None else 0,
-                "position": position,
+                "position": anatomical_transform(location, center=center, scale=scale),
             }
         )
 
-    selected_lookup = set(selected)
+    displayed = {int(node["body_id"]) for node in nodes}
+    missing_required = sorted(required - displayed)
+    if missing_required:
+        raise RuntimeError(
+            "required viewer neurons lack released soma/tosoma coordinates: "
+            + ",".join(str(value) for value in missing_required[:16])
+        )
+
     edges = [
         {"pre": pre, "post": post, "synapse_count": count}
         for pre, post, count in selected_edges
-        if pre in selected_lookup and post in selected_lookup
+        if pre in displayed and post in displayed
     ]
+
+    sample_count = min(args.max_anatomy_points, len(all_locations))
+    rng = np.random.default_rng(0)
+    sample_indices = np.sort(
+        rng.choice(len(all_locations), size=sample_count, replace=False)
+        if sample_count < len(all_locations)
+        else np.arange(len(all_locations), dtype=np.int64)
+    )
+    anatomy_points = [
+        anatomical_transform(location_array[int(index)], center=center, scale=scale)
+        for index in sample_indices.tolist()
+    ]
+
     payload = {
-        "schema_version": 3,
-        "layout": "schematic-bilateral-brain-optic-lobes-vnc-not-anatomical",
+        "schema_version": 4,
+        "layout": "male-cns-v1.0-released-soma-coordinates",
         "source_dataset": manifest.get("dataset"),
+        "coordinate_source": "official somaLocation/tosomaLocation; MaleCNS EM 8 nm voxel space",
+        "viewer_axes": "x=-source_x, y=-source_z, z=source_y; one isotropic display scale",
         "viewer_only": True,
+        "anatomy_points": anatomy_points,
         "nodes": nodes,
         "edges": edges,
     }
@@ -235,6 +289,7 @@ def main() -> int:
     args.output.write_text(
         json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8"
     )
+    print(f"anatomy_points={len(anatomy_points)}")
     print(f"viewer_nodes={len(nodes)} viewer_edges={len(edges)}")
     print(f"viewer_graph={args.output}")
     return 0

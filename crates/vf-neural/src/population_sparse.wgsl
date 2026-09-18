@@ -46,7 +46,7 @@ struct Params {
 struct Control {
     slot: u32,
     active_mask: u32,
-    _pad0: u32,
+    plasticity_mask: u32,
     _pad1: u32,
 }
 
@@ -81,6 +81,10 @@ fn is_dopamine(neuron: u32) -> bool {
 
 fn slot_is_active(slot: u32) -> bool {
     return (control.active_mask & (1u << slot)) != 0u;
+}
+
+fn slot_is_plastic(slot: u32) -> bool {
+    return (control.plasticity_mask & (1u << slot)) != 0u;
 }
 
 fn activity_sign(event: u32) -> f32 {
@@ -183,7 +187,7 @@ fn plasticity_step(
     let total = params.slot_count * params.plastic_edge_count;
     if flat >= total { return; }
     let slot = flat / params.plastic_edge_count;
-    if !slot_is_active(slot) { return; }
+    if !slot_is_active(slot) || !slot_is_plastic(slot) { return; }
     let plastic_edge = flat % params.plastic_edge_count;
     let plastic_base = slot * params.plastic_edge_count;
     let neuron_base = slot * params.neuron_count;

@@ -19,10 +19,7 @@ use vf_neural::{ConnectomeSnapshot, CpuRuntime, NeuralParams, Stimulus};
 struct Args {
     #[arg(long, default_value = "artifacts/malecns-v1.0")]
     snapshot: PathBuf,
-    #[arg(
-        long,
-        default_value = "artifacts/malecns-v1.0/conditioning-v0.json"
-    )]
+    #[arg(long, default_value = "artifacts/malecns-v1.0/conditioning-v0.json")]
     config: PathBuf,
     #[arg(long, default_value = "artifacts/experiments/conditioning-v0")]
     output: PathBuf,
@@ -117,7 +114,10 @@ fn main() -> Result<()> {
     .context("invalid conditioning config")?;
 
     if config.schema_version != 1 {
-        bail!("unsupported conditioning config schema {}", config.schema_version);
+        bail!(
+            "unsupported conditioning config schema {}",
+            config.schema_version
+        );
     }
     if config.dataset != snapshot.manifest.dataset {
         bail!(
@@ -206,7 +206,10 @@ fn main() -> Result<()> {
     fs::write(&result_path, serde_json::to_vec_pretty(&result)?)?;
 
     println!("backend={}", result.backend);
-    println!("cycles={} elapsed={:.3}s", result.cycles, result.elapsed_seconds);
+    println!(
+        "cycles={} elapsed={:.3}s",
+        result.cycles, result.elapsed_seconds
+    );
     println!(
         "changed_synapses={} / {} mean_abs_delta={:.9} max_abs_delta={:.6}",
         result.synapses.changed,
@@ -242,7 +245,10 @@ fn resolve_group(
     let mut indices = Vec::with_capacity(group.len());
     for neuron in group {
         let index = snapshot.index_of_body_id(neuron.body_id).with_context(|| {
-            format!("{name}: body id {} is not present in snapshot", neuron.body_id)
+            format!(
+                "{name}: body id {} is not present in snapshot",
+                neuron.body_id
+            )
         })?;
         indices.push(index);
     }
@@ -442,8 +448,8 @@ fn mean_or_zero(sum: f64, count: usize) -> f64 {
 }
 
 fn write_f32_le(path: &Path, values: &[f32]) -> Result<()> {
-    let mut file = fs::File::create(path)
-        .with_context(|| format!("failed to create {}", path.display()))?;
+    let mut file =
+        fs::File::create(path).with_context(|| format!("failed to create {}", path.display()))?;
     for &value in values {
         file.write_all(&value.to_le_bytes())?;
     }

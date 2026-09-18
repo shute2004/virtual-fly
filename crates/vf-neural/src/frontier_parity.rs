@@ -1,8 +1,6 @@
 use crate::{
-    EdgeInput, NeuralParams, Stimulus,
-    gpu_population::GpuPopulationRuntime as FrontierRuntime,
-    gpu_population_reference::GpuPopulationRuntime as ReferenceRuntime,
-    model::nt,
+    EdgeInput, NeuralParams, Stimulus, gpu_population::GpuPopulationRuntime as FrontierRuntime,
+    gpu_population_reference::GpuPopulationRuntime as ReferenceRuntime, model::nt,
     snapshot::ConnectomeSnapshot,
 };
 
@@ -26,15 +24,51 @@ fn snapshot() -> ConnectomeSnapshot {
     ConnectomeSnapshot::from_edges(
         7,
         &[
-            EdgeInput { pre: 0, post: 5, synapse_count: 50 },
-            EdgeInput { pre: 1, post: 5, synapse_count: 25 },
-            EdgeInput { pre: 2, post: 5, synapse_count: 10 },
-            EdgeInput { pre: 6, post: 5, synapse_count: 20 },
-            EdgeInput { pre: 0, post: 6, synapse_count: 10 },
-            EdgeInput { pre: 2, post: 6, synapse_count: 5 },
-            EdgeInput { pre: 3, post: 6, synapse_count: 40 },
-            EdgeInput { pre: 4, post: 6, synapse_count: 100 },
-            EdgeInput { pre: 5, post: 6, synapse_count: 30 },
+            EdgeInput {
+                pre: 0,
+                post: 5,
+                synapse_count: 50,
+            },
+            EdgeInput {
+                pre: 1,
+                post: 5,
+                synapse_count: 25,
+            },
+            EdgeInput {
+                pre: 2,
+                post: 5,
+                synapse_count: 10,
+            },
+            EdgeInput {
+                pre: 6,
+                post: 5,
+                synapse_count: 20,
+            },
+            EdgeInput {
+                pre: 0,
+                post: 6,
+                synapse_count: 10,
+            },
+            EdgeInput {
+                pre: 2,
+                post: 6,
+                synapse_count: 5,
+            },
+            EdgeInput {
+                pre: 3,
+                post: 6,
+                synapse_count: 40,
+            },
+            EdgeInput {
+                pre: 4,
+                post: 6,
+                synapse_count: 100,
+            },
+            EdgeInput {
+                pre: 5,
+                post: 6,
+                synapse_count: 30,
+            },
         ],
         vec![
             nt::ACETYLCHOLINE,
@@ -73,8 +107,16 @@ fn assert_slot_eq(
     assert_f32_bits_eq(&format!("{label}.modulation"), &a.modulation, &b.modulation);
     assert_eq!(a.refractory, b.refractory, "{label}.refractory mismatch");
     assert_eq!(a.spikes, b.spikes, "{label}.spikes mismatch");
-    assert_f32_bits_eq(&format!("{label}.plastic_weight"), &a.plastic_weight, &b.plastic_weight);
-    assert_f32_bits_eq(&format!("{label}.eligibility"), &a.eligibility, &b.eligibility);
+    assert_f32_bits_eq(
+        &format!("{label}.plastic_weight"),
+        &a.plastic_weight,
+        &b.plastic_weight,
+    );
+    assert_f32_bits_eq(
+        &format!("{label}.eligibility"),
+        &a.eligibility,
+        &b.eligibility,
+    );
     assert_f32_bits_eq(
         &format!("{label}.transaction_shift"),
         &a.transaction_shift,
@@ -101,18 +143,39 @@ fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
     let active = [true];
     let sequence = [
         vec![
-            Stimulus { neuron: 0, current: 1.2 },
-            Stimulus { neuron: 1, current: -1.2 },
-            Stimulus { neuron: 2, current: 1.2 },
+            Stimulus {
+                neuron: 0,
+                current: 1.2,
+            },
+            Stimulus {
+                neuron: 1,
+                current: -1.2,
+            },
+            Stimulus {
+                neuron: 2,
+                current: 1.2,
+            },
         ],
         vec![],
-        vec![Stimulus { neuron: 3, current: 1.2 }],
+        vec![Stimulus {
+            neuron: 3,
+            current: 1.2,
+        }],
         vec![],
-        vec![Stimulus { neuron: 0, current: -1.2 }],
+        vec![Stimulus {
+            neuron: 0,
+            current: -1.2,
+        }],
         vec![],
-        vec![Stimulus { neuron: 5, current: 1.2 }],
+        vec![Stimulus {
+            neuron: 5,
+            current: 1.2,
+        }],
         vec![],
-        vec![Stimulus { neuron: 2, current: 1.2 }],
+        vec![Stimulus {
+            neuron: 2,
+            current: 1.2,
+        }],
         vec![],
         vec![],
         vec![],
@@ -126,7 +189,10 @@ fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
         let frontier_events = frontier
             .step_batch_with_read(&by_slot, &active, &read_indices, true)
             .unwrap();
-        assert_eq!(reference_events, frontier_events, "spike mismatch at step {step}");
+        assert_eq!(
+            reference_events, frontier_events,
+            "spike mismatch at step {step}"
+        );
         assert_slot_eq(&format!("step{step}"), &reference, &frontier, 0);
     }
 
@@ -134,7 +200,11 @@ fn outgoing_frontier_is_bitwise_equal_to_dense_incoming_reference() {
     frontier.commit_and_restart_slot(0).unwrap();
     let reference_weights = reference.global_weights().unwrap();
     let frontier_weights = frontier.global_weights().unwrap();
-    assert_f32_bits_eq("committed_global_weight", &reference_weights, &frontier_weights);
+    assert_f32_bits_eq(
+        "committed_global_weight",
+        &reference_weights,
+        &frontier_weights,
+    );
 }
 
 #[test]
@@ -148,12 +218,24 @@ fn live_plasticity_bitmap_preserves_idle_slot_across_async_teaching_steps() {
     let both_active = [true, true];
     let first = [
         vec![
-            Stimulus { neuron: 0, current: 1.2 },
-            Stimulus { neuron: 2, current: 1.2 },
+            Stimulus {
+                neuron: 0,
+                current: 1.2,
+            },
+            Stimulus {
+                neuron: 2,
+                current: 1.2,
+            },
         ],
         vec![
-            Stimulus { neuron: 0, current: 1.2 },
-            Stimulus { neuron: 2, current: 1.2 },
+            Stimulus {
+                neuron: 0,
+                current: 1.2,
+            },
+            Stimulus {
+                neuron: 2,
+                current: 1.2,
+            },
         ],
     ];
     let a = reference
@@ -164,7 +246,16 @@ fn live_plasticity_bitmap_preserves_idle_slot_across_async_teaching_steps() {
         .unwrap();
     assert_eq!(a, b);
 
-    let second = [vec![Stimulus { neuron: 5, current: 1.2 }], vec![Stimulus { neuron: 5, current: 1.2 }]];
+    let second = [
+        vec![Stimulus {
+            neuron: 5,
+            current: 1.2,
+        }],
+        vec![Stimulus {
+            neuron: 5,
+            current: 1.2,
+        }],
+    ];
     reference
         .step_batch_with_read(&second, &both_active, &read_indices, true)
         .unwrap();
@@ -177,7 +268,13 @@ fn live_plasticity_bitmap_preserves_idle_slot_across_async_teaching_steps() {
     // Slot 0 receives extra plasticity-enabled teaching steps while slot 1 is
     // idle. A process-global bitmap phase must not discard slot 1's live set.
     let only_zero = [true, false];
-    let teaching = [vec![Stimulus { neuron: 2, current: 1.2 }], vec![]];
+    let teaching = [
+        vec![Stimulus {
+            neuron: 2,
+            current: 1.2,
+        }],
+        vec![],
+    ];
     for step in 0..3 {
         reference
             .step_batch_with_read(&teaching, &only_zero, &read_indices, true)
@@ -191,7 +288,13 @@ fn live_plasticity_bitmap_preserves_idle_slot_across_async_teaching_steps() {
 
     // Resume both slots and verify the previously idle slot evolves exactly as
     // the dense reference from its preserved eligibility state.
-    let resume = [vec![], vec![Stimulus { neuron: 2, current: 1.2 }]];
+    let resume = [
+        vec![],
+        vec![Stimulus {
+            neuron: 2,
+            current: 1.2,
+        }],
+    ];
     let a = reference
         .step_batch_with_read(&resume, &both_active, &read_indices, true)
         .unwrap();

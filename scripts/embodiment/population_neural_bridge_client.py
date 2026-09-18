@@ -58,9 +58,16 @@ class PopulationNeuralBridgeClient:
             "--slots",
             str(slots),
         ]
+        env = os.environ.copy()
+        if not env.get("CARGO_TARGET_DIR"):
+            cache_root = Path(env.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+            env["CARGO_TARGET_DIR"] = str(
+                Path(env.get("VF_CARGO_TARGET_DIR", cache_root / "virtual-fly" / "cargo-target"))
+            )
         self._proc = subprocess.Popen(
             command,
             cwd=root,
+            env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=None,
@@ -135,20 +142,21 @@ class PopulationNeuralBridgeClient:
     def step_batch(self, slot_requests: Sequence[Mapping], *, plasticity: bool = True) -> dict[int, dict[int, bool]]:
         slots = []
         for request in slot_requests:
-            slots.append(
-                {
-                    "slot": int(request["slot"]),
-                    "stimulate": {
-                        str(name): float(value)
-                        for name, value in dict(request.get("stimulate", {})).items()
-                    },
-                    "stimulate_body": [
-                        [int(body_id), float(current)]
-                        for body_id, current in request.get("stimulate_body", ())
-                    ],
-                    "read_body": [int(body_id) for body_id in request.get("read_body", ())],
-                }
-            )
+            slot_payload = {
+                "slot": int(request["slot"]),
+                "stimulate": {
+                    str(name): float(value)
+                    for name, value in dict(request.get("stimulate", {})).items()
+                },
+                "stimulate_body": [
+                    [int(body_id), float(current)]
+                    for body_id, current in request.get("stimulate_body", ())
+                ],
+                "read_body": [int(body_id) for body_id in request.get("read_body", ())],
+            }
+            if "plasticity" in request:
+                slot_payload["plasticity"] = bool(request["plasticity"])
+            slots.append(slot_payload)
         response = self._request(
             {"type": "step_batch", "slots": slots, "plasticity": bool(plasticity)}
         )
@@ -189,6 +197,29 @@ class PopulationNeuralBridgeClient:
         response = self._request({"type": "transaction_stats", "slot": int(slot)})
         if response.get("event") != "transaction_stats":
             raise PopulationNeuralBridgeError(f"unexpected transaction stats response: {response}")
+        return response
+
+    def transaction_contrast(
+        self,
+        *,
+        control_slot: int,
+        reward_slot: int,
+        aversive_slot: int,
+        epsilon: float = 1e-7,
+    ) -> dict:
+        response = self._request(
+            {
+                "type": "transaction_contrast",
+                "control_slot": int(control_slot),
+                "reward_slot": int(reward_slot),
+                "aversive_slot": int(aversive_slot),
+                "epsilon": float(epsilon),
+            }
+        )
+        if response.get("event") != "transaction_contrast":
+            raise PopulationNeuralBridgeError(
+                f"unexpected transaction contrast response: {response}"
+            )
         return response
 
     def commit_slot(self, slot: int, *, source_weight_version: int) -> dict:

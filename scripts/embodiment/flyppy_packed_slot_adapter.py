@@ -58,6 +58,9 @@ class PackedFlyppySlotHandle:
         spawn_x_mm: float,
         spawn_z_mm: float,
         initial_speed_mm_s: float,
+        initial_vz_mm_s: float = 0.0,
+        course_start_gate_index: int | None = None,
+        gate_center_overrides: dict[int, float] | None = None,
     ):
         return self.call(
             "reset",
@@ -67,6 +70,16 @@ class PackedFlyppySlotHandle:
                 "spawn_x_mm": float(spawn_x_mm),
                 "spawn_z_mm": float(spawn_z_mm),
                 "initial_speed_mm_s": float(initial_speed_mm_s),
+                "initial_vz_mm_s": float(initial_vz_mm_s),
+                "course_start_gate_index": (
+                    None
+                    if course_start_gate_index is None
+                    else int(course_start_gate_index)
+                ),
+                "gate_center_overrides": {
+                    int(key): float(value)
+                    for key, value in (gate_center_overrides or {}).items()
+                },
             },
         )
 

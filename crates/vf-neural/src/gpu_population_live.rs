@@ -148,80 +148,118 @@ mod implementation {
                 weight_max: params.weight_max,
                 _pad_f0: 0.0,
             };
-            let live_params_buffer = inner.device.create_buffer_init(
-                &wgpu::util::BufferInitDescriptor {
-                    label: Some("vf live plasticity params"),
-                    contents: bytemuck::bytes_of(&live_params),
-                    usage: wgpu::BufferUsages::UNIFORM,
-                },
-            );
+            let live_params_buffer =
+                inner
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("vf live plasticity params"),
+                        contents: bytemuck::bytes_of(&live_params),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    });
 
-            let live_layout = inner.device.create_bind_group_layout(
-                &wgpu::BindGroupLayoutDescriptor {
-                    label: Some("vf live plasticity bind group layout"),
-                    entries: &[
-                        storage_layout(0, true),
-                        storage_layout(1, true),
-                        storage_layout(2, true),
-                        storage_layout(3, true),
-                        storage_layout(4, false),
-                        storage_layout(5, false),
-                        storage_layout(6, true),
-                        storage_layout(7, false),
-                        storage_layout(8, false),
-                        uniform_layout(9),
-                        uniform_layout(10),
-                    ],
-                },
-            );
-            let live_pipeline_layout = inner.device.create_pipeline_layout(
-                &wgpu::PipelineLayoutDescriptor {
-                    label: Some("vf live plasticity pipeline layout"),
-                    bind_group_layouts: &[Some(&live_layout)],
-                    immediate_size: 0,
-                },
-            );
-            let live_shader = inner.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("vf live plasticity shader"),
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                    "population_plasticity_live.wgsl"
-                ))),
-            });
+            let live_layout =
+                inner
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("vf live plasticity bind group layout"),
+                        entries: &[
+                            storage_layout(0, true),
+                            storage_layout(1, true),
+                            storage_layout(2, true),
+                            storage_layout(3, true),
+                            storage_layout(4, false),
+                            storage_layout(5, false),
+                            storage_layout(6, true),
+                            storage_layout(7, false),
+                            storage_layout(8, false),
+                            uniform_layout(9),
+                            uniform_layout(10),
+                        ],
+                    });
+            let live_pipeline_layout =
+                inner
+                    .device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("vf live plasticity pipeline layout"),
+                        bind_group_layouts: &[Some(&live_layout)],
+                        immediate_size: 0,
+                    });
+            let live_shader = inner
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("vf live plasticity shader"),
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                        "population_plasticity_live.wgsl"
+                    ))),
+                });
             let create_live_pipeline = |entry_point: &'static str| {
-                inner.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some(entry_point),
-                    layout: Some(&live_pipeline_layout),
-                    module: &live_shader,
-                    entry_point: Some(entry_point),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    cache: None,
-                })
+                inner
+                    .device
+                    .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                        label: Some(entry_point),
+                        layout: Some(&live_pipeline_layout),
+                        module: &live_shader,
+                        entry_point: Some(entry_point),
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        cache: None,
+                    })
             };
             let live_discovery_pipeline = create_live_pipeline("discover_live_plasticity");
             let live_plasticity_pipeline = create_live_pipeline("plasticity_live_step");
 
-            let make_live_bind = |
-                spikes_prev: &wgpu::Buffer,
-                spikes_next: &wgpu::Buffer,
-                bits_current: &wgpu::Buffer,
-                bits_next: &wgpu::Buffer,
-                label: &'static str,
-            | {
+            let make_live_bind = |spikes_prev: &wgpu::Buffer,
+                                  spikes_next: &wgpu::Buffer,
+                                  bits_current: &wgpu::Buffer,
+                                  bits_next: &wgpu::Buffer,
+                                  label: &'static str| {
                 inner.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some(label),
                     layout: &live_layout,
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: inner._topology_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: inner._neuron_state_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: spikes_prev.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: spikes_next.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 4, resource: inner._plastic_synapse_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 5, resource: inner._transaction_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 6, resource: plastic_out_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 7, resource: bits_current.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 8, resource: bits_next.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 9, resource: live_params_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 10, resource: inner.control_buffer.as_entire_binding() },
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: inner._topology_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: inner._neuron_state_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: spikes_prev.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: spikes_next.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: inner._plastic_synapse_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: inner._transaction_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 6,
+                            resource: plastic_out_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 7,
+                            resource: bits_current.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 8,
+                            resource: bits_next.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 9,
+                            resource: live_params_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 10,
+                            resource: inner.control_buffer.as_entire_binding(),
+                        },
                     ],
                 })
             };
@@ -269,12 +307,24 @@ mod implementation {
             })
         }
 
-        pub fn adapter_name(&self) -> &str { self.inner.adapter_name() }
-        pub fn slot_count(&self) -> usize { self.inner.slot_count() }
-        pub fn neuron_count(&self) -> usize { self.inner.neuron_count() }
-        pub fn edge_count(&self) -> usize { self.inner.edge_count() }
-        pub fn plastic_edge_count(&self) -> usize { self.inner.plastic_edge_count() }
-        pub fn outgoing_edge_count(&self) -> usize { self.inner.outgoing_edge_count() }
+        pub fn adapter_name(&self) -> &str {
+            self.inner.adapter_name()
+        }
+        pub fn slot_count(&self) -> usize {
+            self.inner.slot_count()
+        }
+        pub fn neuron_count(&self) -> usize {
+            self.inner.neuron_count()
+        }
+        pub fn edge_count(&self) -> usize {
+            self.inner.edge_count()
+        }
+        pub fn plastic_edge_count(&self) -> usize {
+            self.inner.plastic_edge_count()
+        }
+        pub fn outgoing_edge_count(&self) -> usize {
+            self.inner.outgoing_edge_count()
+        }
 
         pub fn load_global_weights(&mut self, weights: &[f32]) -> Result<()> {
             self.inner.load_global_weights(weights)?;
@@ -283,10 +333,24 @@ mod implementation {
             Ok(())
         }
 
-        pub fn global_weights(&self) -> Result<Vec<f32>> { self.inner.global_weights() }
-        pub fn global_state(&self) -> Result<NeuralState> { self.inner.global_state() }
+        pub fn global_weights(&self) -> Result<Vec<f32>> {
+            self.inner.global_weights()
+        }
+        pub fn global_state(&self) -> Result<NeuralState> {
+            self.inner.global_state()
+        }
         pub fn transaction_stats(&self, slot: usize, weight_max: f32) -> Result<TransactionStats> {
             self.inner.transaction_stats(slot, weight_max)
+        }
+        pub fn transaction_contrast(
+            &self,
+            control_slot: usize,
+            reward_slot: usize,
+            aversive_slot: usize,
+            epsilon: f32,
+        ) -> Result<TransactionContrastStats> {
+            self.inner
+                .transaction_contrast(control_slot, reward_slot, aversive_slot, epsilon)
         }
 
         fn live_bind_group(&self, spike_is_b: bool, bitmap_is_b: bool) -> &wgpu::BindGroup {
@@ -372,22 +436,51 @@ mod implementation {
             read_flat_indices: &[usize],
             plasticity: bool,
         ) -> Result<Vec<u32>> {
+            let plasticity_slots = vec![plasticity; self.slot_count()];
+            self.step_batch_with_read_per_slot(
+                stimuli_by_slot,
+                active_slots,
+                read_flat_indices,
+                &plasticity_slots,
+            )
+        }
+
+        pub fn step_batch_with_read_per_slot(
+            &mut self,
+            stimuli_by_slot: &[Vec<Stimulus>],
+            active_slots: &[bool],
+            read_flat_indices: &[usize],
+            plasticity_slots: &[bool],
+        ) -> Result<Vec<u32>> {
+            if plasticity_slots.len() != self.slot_count() {
+                bail!(
+                    "population plasticity mask requires exactly {} slot flags",
+                    self.slot_count()
+                );
+            }
             let active_mask = self.inner.prepare_step(stimuli_by_slot, active_slots)?;
+            let mut plasticity_mask = 0u32;
+            for slot in 0..self.slot_count() {
+                if active_slots[slot] && plasticity_slots[slot] {
+                    plasticity_mask |= 1u32 << slot;
+                }
+            }
             for &index in read_flat_indices {
                 if index >= self.slot_count() * self.neuron_count() {
                     bail!("population read index {index} is out of range");
                 }
             }
-            self.inner.write_control(0, active_mask);
-            let max_groups = self.inner.device.limits().max_compute_workgroups_per_dimension;
-            let neuron_dispatch = dispatch_grid(
-                (self.slot_count() * self.neuron_count()) as u32,
-                max_groups,
-            )?;
-            let bitmap_dispatch = dispatch_grid(
-                (self.slot_count() * self.bitmap_words) as u32,
-                max_groups,
-            )?;
+            self.inner.write_control(0, active_mask, plasticity_mask);
+            let plasticity = plasticity_mask != 0;
+            let max_groups = self
+                .inner
+                .device
+                .limits()
+                .max_compute_workgroups_per_dimension;
+            let neuron_dispatch =
+                dispatch_grid((self.slot_count() * self.neuron_count()) as u32, max_groups)?;
+            let bitmap_dispatch =
+                dispatch_grid((self.slot_count() * self.bitmap_words) as u32, max_groups)?;
 
             let spike_is_b = self.inner.current_is_b;
             let bitmap_is_b = self.live_bitmap_is_b;
@@ -396,11 +489,12 @@ mod implementation {
             } else {
                 &self.inner.spikes_b
             };
-            let mut encoder = self.inner.device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor {
-                    label: Some("vf live population neural+gather encoder"),
-                },
-            );
+            let mut encoder =
+                self.inner
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("vf live population neural+gather encoder"),
+                    });
             self.encode_one_step(
                 &mut encoder,
                 spike_is_b,
@@ -413,11 +507,16 @@ mod implementation {
             if read_flat_indices.is_empty() {
                 self.inner.queue.submit([encoder.finish()]);
                 self.inner.current_is_b = !self.inner.current_is_b;
-                if plasticity { self.live_bitmap_is_b = !self.live_bitmap_is_b; }
+                if plasticity {
+                    self.live_bitmap_is_b = !self.live_bitmap_is_b;
+                }
                 return Ok(Vec::new());
             }
 
-            let indices = read_flat_indices.iter().map(|&v| v as u32).collect::<Vec<_>>();
+            let indices = read_flat_indices
+                .iter()
+                .map(|&v| v as u32)
+                .collect::<Vec<_>>();
             let read_bytes = exact_byte_size::<u32>(indices.len());
             let index_buffer = device_storage_init(
                 &self.inner.device,
@@ -436,17 +535,27 @@ mod implementation {
                 usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            let gather_bind_group = self.inner.device.create_bind_group(
-                &wgpu::BindGroupDescriptor {
-                    label: Some("vf live population gather bind group"),
-                    layout: &self.inner.spike_gather_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: next_spikes.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: index_buffer.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: output_buffer.as_entire_binding() },
-                    ],
-                },
-            );
+            let gather_bind_group =
+                self.inner
+                    .device
+                    .create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("vf live population gather bind group"),
+                        layout: &self.inner.spike_gather_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: next_spikes.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: index_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: output_buffer.as_entire_binding(),
+                            },
+                        ],
+                    });
             let gather_dispatch = dispatch_grid(indices.len() as u32, max_groups)?;
             {
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -460,7 +569,9 @@ mod implementation {
             encoder.copy_buffer_to_buffer(&output_buffer, 0, &staging, 0, read_bytes);
             self.inner.queue.submit([encoder.finish()]);
             self.inner.current_is_b = !self.inner.current_is_b;
-            if plasticity { self.live_bitmap_is_b = !self.live_bitmap_is_b; }
+            if plasticity {
+                self.live_bitmap_is_b = !self.live_bitmap_is_b;
+            }
             self.inner.map_staging::<u32>(&staging)
         }
 
@@ -471,23 +582,27 @@ mod implementation {
             plasticity: bool,
             steps: usize,
         ) -> Result<()> {
-            if steps == 0 { bail!("population neural steps must be >= 1"); }
+            if steps == 0 {
+                bail!("population neural steps must be >= 1");
+            }
             let active_mask = self.inner.prepare_step(stimuli_by_slot, active_slots)?;
-            self.inner.write_control(0, active_mask);
-            let max_groups = self.inner.device.limits().max_compute_workgroups_per_dimension;
-            let neuron_dispatch = dispatch_grid(
-                (self.slot_count() * self.neuron_count()) as u32,
-                max_groups,
-            )?;
-            let bitmap_dispatch = dispatch_grid(
-                (self.slot_count() * self.bitmap_words) as u32,
-                max_groups,
-            )?;
-            let mut encoder = self.inner.device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor {
-                    label: Some("vf live repeated neural encoder"),
-                },
-            );
+            self.inner
+                .write_control(0, active_mask, if plasticity { active_mask } else { 0 });
+            let max_groups = self
+                .inner
+                .device
+                .limits()
+                .max_compute_workgroups_per_dimension;
+            let neuron_dispatch =
+                dispatch_grid((self.slot_count() * self.neuron_count()) as u32, max_groups)?;
+            let bitmap_dispatch =
+                dispatch_grid((self.slot_count() * self.bitmap_words) as u32, max_groups)?;
+            let mut encoder =
+                self.inner
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("vf live repeated neural encoder"),
+                    });
             let mut spike_is_b = self.inner.current_is_b;
             let mut bitmap_is_b = self.live_bitmap_is_b;
             for _ in 0..steps {
@@ -500,7 +615,9 @@ mod implementation {
                     plasticity,
                 );
                 spike_is_b = !spike_is_b;
-                if plasticity { bitmap_is_b = !bitmap_is_b; }
+                if plasticity {
+                    bitmap_is_b = !bitmap_is_b;
+                }
             }
             self.inner.queue.submit([encoder.finish()]);
             self.inner.current_is_b = spike_is_b;
@@ -521,21 +638,19 @@ mod implementation {
         fn clear_all_live_bitmaps(&self) {
             let count = self.bitmap_words * self.slot_count();
             let zeros = vec![0u32; count.max(1)];
-            self.inner.queue.write_buffer(
-                &self.live_bitmap_a,
-                0,
-                bytemuck::cast_slice(&zeros),
-            );
-            self.inner.queue.write_buffer(
-                &self.live_bitmap_b,
-                0,
-                bytemuck::cast_slice(&zeros),
-            );
+            self.inner
+                .queue
+                .write_buffer(&self.live_bitmap_a, 0, bytemuck::cast_slice(&zeros));
+            self.inner
+                .queue
+                .write_buffer(&self.live_bitmap_b, 0, bytemuck::cast_slice(&zeros));
         }
 
         fn clear_live_slot(&self, slot: usize) -> Result<()> {
             self.inner.validate_slot(slot)?;
-            if self.bitmap_words == 0 { return Ok(()); }
+            if self.bitmap_words == 0 {
+                return Ok(());
+            }
             let zeros = vec![0u32; self.bitmap_words];
             let offset = (slot * self.bitmap_words * std::mem::size_of::<u32>()) as u64;
             self.inner.queue.write_buffer(
@@ -562,10 +677,9 @@ mod implementation {
             } else {
                 &self.inner.spikes_a
             };
-            let all_spikes = self.inner.read_buffer::<u32>(
-                current_spikes,
-                self.neuron_count() * self.slot_count(),
-            )?;
+            let all_spikes = self
+                .inner
+                .read_buffer::<u32>(current_spikes, self.neuron_count() * self.slot_count())?;
             let all_synapses = self.inner.read_buffer::<SynapseStateGpu>(
                 &self.inner._plastic_synapse_buffer,
                 self.plastic_edge_count() * self.slot_count(),
@@ -600,7 +714,6 @@ mod implementation {
 }
 
 pub use implementation::{
-    LiveRuntime as GpuPopulationRuntime,
-    PopulationDebugState,
-    TransactionStats,
+    LiveRuntime as GpuPopulationRuntime, PopulationDebugState, TransactionContrastStats,
+    TransactionEffectStats, TransactionStats,
 };
