@@ -126,7 +126,6 @@ def static_neural_panel(graph: dict, projected: dict[int, tuple[int, int]], chan
     overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay, "RGBA")
 
-    # Viewer subgraph topology.
     for edge in graph["edges"]:
         a = projected.get(int(edge["pre"])); b = projected.get(int(edge["post"]))
         if a is not None and b is not None:
@@ -147,31 +146,7 @@ def static_neural_panel(graph: dict, projected: dict[int, tuple[int, int]], chan
             color = (73, 221, 145, alpha) if edge["delta"] > 0 else (244, 145, 72, alpha)
             draw.line((a, b), fill=color, width=line_width)
 
-    panel = Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
-    d = ImageDraw.Draw(panel)
-    compact = width < 700
-    title = font(24 if compact else 27)
-    small = font(17 if compact else 19)
-    tiny = font(14 if compact else 16)
-    d.text((20 if compact else 24, 18), "MaleCNS activity" if compact else "MaleCNS neural activity", font=title, fill=(238, 242, 247))
-    d.text((20 if compact else 24, 50), "2,448 neurons / 5,868 edges" if compact else "2,448-neuron viewer subset / 5,868 connections", font=tiny, fill=(158, 168, 182))
-    if after:
-        if compact:
-            d.text((20, 72), "synaptic Δw  v240 → v966", font=small, fill=(220, 226, 234))
-            d.line((22, 103, 52, 103), fill=(73, 221, 145), width=3)
-            d.text((60, 94), "strengthened", font=tiny, fill=(174, 184, 196))
-            d.line((178, 103, 208, 103), fill=(244, 145, 72), width=3)
-            d.text((216, 94), "weakened", font=tiny, fill=(174, 184, 196))
-        else:
-            d.text((width-355, 20), "learned synaptic Δw: v240 → v966", font=small, fill=(220, 226, 234))
-            d.line((width-340, 52, width-305, 52), fill=(73, 221, 145), width=3)
-            d.text((width-295, 41), "strengthened", font=tiny, fill=(174, 184, 196))
-            d.line((width-178, 52, width-143, 52), fill=(244, 145, 72), width=3)
-            d.text((width-133, 41), "weakened", font=tiny, fill=(174, 184, 196))
-    else:
-        d.text((20 if compact else width-250, 72 if compact else 20), "baseline connectivity", font=small, fill=(185, 194, 207))
-    d.text((20 if compact else 24, height-30), "bright = active · plasticity OFF" if compact else "bright nodes = active neurons    evaluation plasticity = OFF", font=tiny, fill=(163, 174, 188))
-    return panel
+    return Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
 
 
 def active_panel(base: Image.Image, frame: dict, projected: dict[int, tuple[int, int]]) -> Image.Image:
@@ -184,34 +159,15 @@ def active_panel(base: Image.Image, frame: dict, projected: dict[int, tuple[int,
             continue
         draw.ellipse((p[0]-3, p[1]-3, p[0]+3, p[1]+3), fill=(255, 245, 180, 245))
         draw.ellipse((p[0]-6, p[1]-6, p[0]+6, p[1]+6), outline=(255, 245, 180, 85), width=1)
-    active_x = max(20, image.width - (145 if image.width < 700 else 190))
-    draw.text((active_x, image.height-30), f"active: {len(active):4d}", font=font(15 if image.width < 700 else 17), fill=(226, 231, 239, 255))
     return image
 
 
-def status_series(frames: list[dict]) -> list[str]:
-    state = "approaching Gate 2"
-    values = []
-    for frame in frames:
-        if frame.get("passed_gate") and int(frame.get("next_gate", 0)) >= 2:
-            state = "Gate 2 PASSED"
-        elif frame.get("collision"):
-            state = "Gate 2 COLLISION"
-        values.append(state)
-    return values
-
-
-def label_body(image: Image.Image, *, title: str, version: int, status: str) -> Image.Image:
+def label_body(image: Image.Image, label: str) -> Image.Image:
     out = image.copy()
     draw = ImageDraw.Draw(out, "RGBA")
-    draw.rounded_rectangle((18, 16, 420, 90), radius=12, fill=(4, 7, 11, 190))
-    draw.text((34, 25), title, font=font(29), fill=(250, 251, 253, 255))
-    draw.text((34, 59), f"checkpoint v{version}  ·  plasticity OFF", font=font(17), fill=(194, 204, 218, 255))
-    status_color = (92, 221, 143, 235) if "PASSED" in status else ((242, 103, 83, 235) if "COLLISION" in status else (232, 236, 242, 220))
-    draw.rounded_rectangle((18, image.height-52, 285, image.height-14), radius=10, fill=(4, 7, 11, 190))
-    draw.text((32, image.height-44), status, font=font(19), fill=status_color)
+    draw.rounded_rectangle((18, 16, 168, 66), radius=12, fill=(4, 7, 11, 190))
+    draw.text((34, 24), label, font=font(29), fill=(250, 251, 253, 255))
     return out
-
 
 def frame_files(directory: Path) -> list[Path]:
     return sorted(directory.glob("frame-*.jpg"))
@@ -250,8 +206,6 @@ def main() -> int:
         raise RuntimeError(f"before frame mismatch {len(before_images)} != {len(before_playback['frames'])}")
     if len(after_images) != len(after_playback["frames"]):
         raise RuntimeError(f"after frame mismatch {len(after_images)} != {len(after_playback['frames'])}")
-    before_status = status_series(before_playback["frames"])
-    after_status = status_series(after_playback["frames"])
     total = max(len(before_images), len(after_images))
 
     ffmpeg = shutil.which("ffmpeg")
@@ -260,8 +214,8 @@ def main() -> int:
     for i in range(total):
         bi = min(i, len(before_images)-1)
         ai = min(i, len(after_images)-1)
-        body_before = label_body(Image.open(before_images[bi]).convert("RGB"), title="BEFORE · untrained height adaptation", version=int(before_playback["global_weight_version"]), status=before_status[bi])
-        body_after = label_body(Image.open(after_images[ai]).convert("RGB"), title="AFTER · learned CNS state", version=int(after_playback["global_weight_version"]), status=after_status[ai])
+        body_before = label_body(Image.open(before_images[bi]).convert("RGB"), "Before")
+        body_after = label_body(Image.open(after_images[ai]).convert("RGB"), "After")
         neural_before = active_panel(before_panel, before_playback["frames"][bi], projected)
         neural_after = active_panel(after_panel, after_playback["frames"][ai], projected)
         canvas = Image.new("RGB", (body_width + neural_width, row_height * 2), (0, 0, 0))
