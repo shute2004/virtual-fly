@@ -173,7 +173,7 @@ The prepared repository cards, exact checkpoint hashes, and required file lists 
 
 ## 10. Historical provenance paths
 
-A small number of archived development notes and tracked historical reports retain absolute local filesystem paths from the machine on which the original run, traceback, or report was recorded. These strings are preserved as part of the original provenance record rather than rewritten after the fact. They are not installation requirements and are not dependencies of the current code. Current public documentation and commands use repository-relative or portable paths.
+A small number of archived development notes and tracked historical reports retain the structure of absolute local filesystem paths from the machine on which the original run, traceback, or report was recorded. Before the first public release, the local OS username in exactly 14 such files was replaced with `<local-user>` for privacy; the surrounding paths, historical result values, and scientific content were otherwise preserved. The original-to-public blob mapping is recorded in [`../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../canonical/canonical-v1/privacy-redaction-provenance.json) without reproducing the redacted username. These paths are not installation requirements or dependencies of the current code. Current public documentation and commands use repository-relative or portable paths.
 
 ## 11. Public browser experiments
 

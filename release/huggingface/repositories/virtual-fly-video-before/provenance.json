@@ -9,7 +9,7 @@
   "edge_count": 25582938,
   "global_weight_version": 240,
   "source_locator": "artifacts/experiments/flyppy-v7-envv7-frontier/checkpoint",
-  "source_hash_manifest": "https://github.com/shute2004/virtual-fly/blob/main/release/huggingface/checkpoint-artifacts-v1.json",
+  "source_hash_manifest": "https://github.com/shute2004/virtual-fly/blob/v0.1.0/release/huggingface/checkpoint-artifacts-v1.json",
   "malecns_official_source": "https://male-cns.janelia.org/download/",
   "malecns_license": "CC-BY-4.0",
   "checkpoint_neural_step": 26224,

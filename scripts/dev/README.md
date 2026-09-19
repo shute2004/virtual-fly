@@ -7,7 +7,7 @@
 - `preflight_flyppy_v3.sh` — FlyBody/Flyppy v3物理preflight
 - `train_flyppy_v3_population.sh` — production shared-weight population学習
 - `view_flyppy_v3.sh` — observer-only live viewer
-- `evaluate_flyppy_v3_fixed.sh` — frozen fixed evaluation
+- `evaluate_flyppy_v3_fixed.sh` — 重みを固定した条件評価（課題イベント由来のDAN刺激は有効）
 - `run_flyppy_scheduler_ab.sh` — async / wave A/B
 - `fork_flyppy_experiment.py` — persist済み状態からexperiment fork
 - `prepare_flyppy_population_inputs.py` — population入力準備

@@ -105,7 +105,7 @@ Observed upstream data, literature-derived choices, inferred mappings, engineeri
 
 - Python `>=3.12,<3.15`
 - [`uv`](https://docs.astral.sh/uv/)
-- a Rust toolchain with Cargo
+- Rust `>=1.87` with Cargo
 - MuJoCo-compatible local graphics support
 - for the **full canonical reproduction**: a wgpu-compatible GPU backend for the neural runtime
 

@@ -49,6 +49,8 @@ Frozen evaluation disables plasticity and task-triggered DAN currents. Both the 
 
 On 2026-09-19, `canonical/canonical-v1/reproduce.sh` was run from beginning to end using an isolated clean checkout of the original experiment commit `7fa464a`. This verification predates the privacy rewrite and is not represented as a run at `f9c86c9`. Because the public-equivalent commit changes no executable/configuration/scientific-generation logic, full training was not rerun solely for the privacy redaction.
 
+On 2026-09-20, the static reconstruction path was rerun from the public-equivalent `f9c86c9` code using fresh official MaleCNS source data. The semantic snapshot hash and all binary static artifacts matched the original reference. Every JSON artifact that differed in raw SHA-256 became byte-identical to the original reference after normalizing only the rewritten Git identity and the chained hashes caused by that identity change. This is the validation rule now implemented by the public reproducer; no training was started for this check.
+
 Verified:
 
 - fresh MaleCNS source download;

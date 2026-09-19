@@ -11,4 +11,4 @@ The checkpoint weights in this repository derive from the released MaleCNS `male
 
 Original `virtual-fly` source code and documentation are MIT licensed. No raw MaleCNS download, FlyBody asset, FlyGym source, or MuJoCo source is redistributed in this checkpoint repository. Those upstream resources remain under their own licenses and should be obtained from their official projects.
 
-Detailed third-party notices: https://github.com/shute2004/virtual-fly/blob/main/THIRD_PARTY_NOTICES.md
+Detailed third-party notices: https://github.com/shute2004/virtual-fly/blob/v0.1.0/THIRD_PARTY_NOTICES.md

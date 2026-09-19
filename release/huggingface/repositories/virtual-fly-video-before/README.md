@@ -37,8 +37,8 @@ The paired historical After repository is `shute2004/virtual-fly-video-after`.
 
 - Project overview: https://huggingface.co/shute2004/virtual-fly
 - GitHub source: https://github.com/shute2004/virtual-fly
-- Canonical package: https://github.com/shute2004/virtual-fly/tree/main/canonical/canonical-v1
-- Full artifact hash manifest: https://github.com/shute2004/virtual-fly/blob/main/release/huggingface/checkpoint-artifacts-v1.json
+- Canonical package: https://github.com/shute2004/virtual-fly/tree/v0.1.0/canonical/canonical-v1
+- Full artifact hash manifest: https://github.com/shute2004/virtual-fly/blob/v0.1.0/release/huggingface/checkpoint-artifacts-v1.json
 
 The checkpoint is not self-contained without a compatible MaleCNS snapshot and the `virtual-fly` runtime. Raw MaleCNS is intentionally not mirrored here; obtain it from the official MaleCNS source or use the GitHub reproduction path.
 

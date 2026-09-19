@@ -13,6 +13,9 @@ REFERENCE_MANIFEST="$SCRIPT_DIR/reference-manifest.json"
 ORIGINAL_EXPERIMENT_SHA="7fa464aad7269d34f46f1171080b51e095d1d811"
 PUBLIC_EQUIVALENT_SHA="f9c86c904d67ff974f3c43d37aab3619bc93fc1b"
 EXPECTED_SHA="$PUBLIC_EQUIVALENT_SHA"
+EXPECTED_CONFIG_SHA256="91f5e02cad1a3603b31f23f6fb95e5c6792fe3079c531e247d529b455bdc3ea2"
+EXPECTED_REFERENCE_MANIFEST_SHA256="89309f3c7c0968b750b36c1cd8eb75a550a7b5add0fefd45c292f36387cb9f59"
+STOP_AFTER_STATIC="${VF_CANONICAL_STOP_AFTER_STATIC:-0}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DEFAULT_OUTPUT_BASE="${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions"
 OUTPUT_ROOT="${VF_CANONICAL_OUTPUT_ROOT:-$DEFAULT_OUTPUT_BASE/canonical-v1-$STAMP}"
@@ -21,6 +24,26 @@ KEEP_WORKTREE="${VF_CANONICAL_KEEP_WORKTREE:-0}"
 
 if [ ! -f "$CONFIG" ] || [ ! -f "$REFERENCE_MANIFEST" ]; then
   echo "canonical config/reference manifest missing under $SCRIPT_DIR" >&2
+  exit 2
+fi
+sha256_file() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    echo "neither shasum nor sha256sum is available" >&2
+    return 127
+  fi
+}
+ACTUAL_CONFIG_SHA256="$(sha256_file "$CONFIG")"
+ACTUAL_REFERENCE_MANIFEST_SHA256="$(sha256_file "$REFERENCE_MANIFEST")"
+if [ "$ACTUAL_CONFIG_SHA256" != "$EXPECTED_CONFIG_SHA256" ]; then
+  echo "canonical config hash mismatch: expected $EXPECTED_CONFIG_SHA256, got $ACTUAL_CONFIG_SHA256" >&2
+  exit 2
+fi
+if [ "$ACTUAL_REFERENCE_MANIFEST_SHA256" != "$EXPECTED_REFERENCE_MANIFEST_SHA256" ]; then
+  echo "canonical reference manifest hash mismatch: expected $EXPECTED_REFERENCE_MANIFEST_SHA256, got $ACTUAL_REFERENCE_MANIFEST_SHA256" >&2
   exit 2
 fi
 if ! git -C "$REPO_ROOT" cat-file -e "$EXPECTED_SHA^{commit}" 2>/dev/null; then
@@ -161,14 +184,23 @@ cp "$CANONICAL_DERIVED/wing-pattern-neutral-trim-v1.json" "$DERIVED/wing-pattern
   --report "$REPORT/plastic-fast-graph-v1.md" \
   2>&1 | tee "$OUTPUT_ROOT/logs/prepare-plastic-fast-graph.log"
 
-# 3) Static byte/hash reproducibility checks. These artifacts are expected to be
-# deterministic at the pinned commit for the same official upstream source bytes.
-"$PY" - "$CONFIG" "$SNAP" "$DERIVED" "$INPUTS" "$OUTPUT_ROOT/source/wing_pattern_fmech.npy" "$OUTPUT_ROOT/static-hash-check.json" <<'PY'
+# 3) Static reproducibility checks. The privacy rewrite changed the Git commit
+# identity embedded in JSON provenance, but not scientific source, conditions,
+# upstream bytes, or generated scientific content. Binary artifacts therefore
+# remain byte-identical. For provenance-bearing JSON, validate both the actual
+# public bytes and a reference-equivalent byte stream obtained by replacing only
+# the public Git identity and the resulting chained artifact hashes with their
+# recorded original-experiment values. Every artifact is checked individually,
+# so a scientific-content change still fails at its source artifact.
+"$PY" - "$CONFIG" "$SNAP" "$DERIVED" "$INPUTS" "$OUTPUT_ROOT/source/wing_pattern_fmech.npy" "$OUTPUT_ROOT/static-hash-check.json" "$ORIGINAL_EXPERIMENT_SHA" "$PUBLIC_EQUIVALENT_SHA" <<'PY'
 import hashlib, json, sys
 from pathlib import Path
 config=Path(sys.argv[1]); snap=Path(sys.argv[2]); derived=Path(sys.argv[3]); inputs=Path(sys.argv[4]); wing=Path(sys.argv[5]); out=Path(sys.argv[6])
+original_sha=sys.argv[7]; public_sha=sys.argv[8]
 cfg=json.loads(config.read_text())
 expected=cfg["static_reference"]
+def sha_bytes(data):
+    return hashlib.sha256(data).hexdigest()
 def sha(p):
     h=hashlib.sha256()
     with p.open('rb') as f:
@@ -189,23 +221,56 @@ paths={
  "neutral_trim_pattern": derived/"wing-pattern-neutral-trim-v1.npy",
  "neutral_trim_metadata": derived/"wing-pattern-neutral-trim-v1.json",
 }
+actual_hashes={name:sha(path) for name,path in paths.items()}
+# All substitutions are fixed-length SHA-256/Git-SHA identity strings. Replacing
+# them in raw bytes preserves each generator's original JSON formatting exactly.
+replacements={public_sha:original_sha}
+for name, actual in actual_hashes.items():
+    replacements[actual]=expected["artifacts"][name]
+def reference_equivalent_sha(path):
+    data=path.read_bytes()
+    for current, recorded in replacements.items():
+        data=data.replace(current.encode("ascii"), recorded.encode("ascii"))
+    return sha_bytes(data)
 checks={}
 for name,p in paths.items():
-    actual=sha(p); exp=expected["artifacts"][name]
-    checks[name]={"path":str(p),"expected_sha256":exp,"actual_sha256":actual,"match":actual==exp}
+    actual=actual_hashes[name]; exp=expected["artifacts"][name]
+    equivalent=reference_equivalent_sha(p) if p.suffix.lower()==".json" else actual
+    match=actual==exp or equivalent==exp
+    checks[name]={
+        "path":str(p),
+        "expected_sha256":exp,
+        "actual_sha256":actual,
+        "reference_equivalent_sha256":equivalent,
+        "comparison":"byte-identical" if actual==exp else "privacy-provenance-equivalent",
+        "match":match,
+    }
 for name, meta in expected["plastic_fast_graph_components"].items():
     p=inputs/name; actual=sha(p); exp=meta["sha256"]
-    checks[name]={"path":str(p),"expected_sha256":exp,"actual_sha256":actual,"match":actual==exp,"size_bytes":p.stat().st_size}
+    checks[name]={"path":str(p),"expected_sha256":exp,"actual_sha256":actual,"reference_equivalent_sha256":actual,"comparison":"byte-identical","match":actual==exp,"size_bytes":p.stat().st_size}
 from virtual_fly.reproducibility import validate_production_snapshot
 snapshot_actual=validate_production_snapshot(snap)["snapshot_sha256"]
 snapshot_match=snapshot_actual==expected["snapshot_sha256"]
-result={"snapshot_sha256_expected":expected["snapshot_sha256"],"snapshot_sha256_actual":snapshot_actual,"snapshot_match":snapshot_match,"artifacts":checks,"all_match":snapshot_match and all(x["match"] for x in checks.values())}
+result={
+    "original_experiment_git_sha":original_sha,
+    "public_equivalent_git_sha":public_sha,
+    "snapshot_sha256_expected":expected["snapshot_sha256"],
+    "snapshot_sha256_actual":snapshot_actual,
+    "snapshot_match":snapshot_match,
+    "artifacts":checks,
+    "all_match":snapshot_match and all(x["match"] for x in checks.values()),
+}
 out.write_text(json.dumps(result,indent=2)+'\n')
 if not result["all_match"]:
     print(json.dumps(result,indent=2), file=sys.stderr)
     raise SystemExit("static canonical artifact hash mismatch")
 print("static_canonical_hashes=PASS")
 PY
+
+if [ "$STOP_AFTER_STATIC" = "1" ]; then
+  echo "canonical_stop_after_static=PASS"
+  exit 0
+fi
 
 SCALE="$($PY -c 'import json,sys; print(float(json.load(open(sys.argv[1]))["synapse_scale"]))' "$DERIVED/neural-runtime-calibration-v1.json")"
 [ "$SCALE" = "0.005" ] || { echo "unexpected neural synapse scale: $SCALE" >&2; exit 4; }
@@ -408,7 +473,7 @@ def sha(p):
 reference_result=cfg['reference_result']
 repro={
  'schema_version':1,'kind':'virtual-fly-canonical-v1-reproduction-run','created_at_utc':datetime.now(timezone.utc).isoformat(),
- 'canonical_reference':{'original_experiment_git_sha':'7fa464aad7269d34f46f1171080b51e095d1d811','public_equivalent_git_sha':expected_sha,'reference_manifest_sha256':sha(reference),'reference_result':reference_result},
+ 'canonical_reference':{'original_experiment_git_sha':'7fa464aad7269d34f46f1171080b51e095d1d811','public_equivalent_git_sha':expected_sha,'config_sha256':sha(config),'reference_manifest_sha256':sha(reference),'reference_result':reference_result},
  'code':train['reproducibility']['code'],'dependencies':train['reproducibility']['dependency_lock'],'runtime_versions':versions,
  'static_reproducibility':checks,
  'training':{
@@ -428,7 +493,7 @@ repro={
    'initial_outcome_reference':reference_result['initial_frozen'],'final_outcome_reference':reference_result['final_frozen'],
  },
  'reproducibility_scope':{
-   'deterministic_hash_required':['official source-derived MaleCNS snapshot','snapshot-derived static maps','measured wingbeat bytes','neutral trim','viewer graph','neural calibration','PlasticFastGraph binary arrays'],
+   'deterministic_hash_required':['scientific snapshot composite hash','static JSON content modulo privacy-rewrite Git provenance identity','measured wingbeat bytes','neutral trim pattern bytes','PlasticFastGraph binary arrays'],
    'not_bitwise_required':['async slot completion/commit ordering beyond contract','GPU floating-point weight trajectory','MuJoCo/GPU trajectory across hardware/platforms','final learned weight file hash','frozen trajectory coordinates/outcome across different hardware'],
    'required_semantic_invariants':['clean pinned scientific SHA','6 completed training episodes','global weight v0 -> v6','weights changed','weights-only checkpoint loads','frozen evaluation completes with plasticity OFF and DAN current amplitudes zero'],
  }
@@ -438,7 +503,7 @@ if train['episodes_this_run'] != 6 or train['global_weight_version_end'] != 6: r
 if weight['changed_exact'] <= 0: raise SystemExit('weight update semantic invariant failed')
 (root/'manifest.json').write_text(json.dumps(repro,indent=2)+'\n')
 lines=[
- '# Canonical v1 reproduction run','',f'- scientific Git SHA: `{expected_sha}`',f'- dirty: `{str(repro["code"]["dirty"]).lower()}`',f'- static artifact hashes: **{"PASS" if checks["all_match"] else "FAIL"}**',f'- training: {train["episodes_this_run"]} episodes, global v{train["global_weight_version_start"]} -> v{train["global_weight_version_end"]}',f'- changed stored weights: {weight["changed_exact"]:,}',f'- aggregate neural step: {train["checkpoint_neural_step"]}','', '## Frozen evaluation','',f'- initial: {initial["passed_gates"]} gate(s), terminal `{initial["terminal_reason"]}`, control {initial["control_steps"]}',f'- final: {final["passed_gates"]} gate(s), terminal `{final["terminal_reason"]}`, control {final["control_steps"]}','', 'The recorded canonical result remains the reference. This directory only verifies the end-to-end reproduction path; it does not replace the reference result.','', '## Reproducibility level','', '- Static source-derived artifacts are required to match the recorded SHA-256 hashes byte-for-byte.', '- Async/GPU/MuJoCo training and trajectories are not required to match bit-for-bit across hardware. The semantic invariants listed in `manifest.json` are required.',
+ '# Canonical v1 reproduction run','',f'- scientific Git SHA: `{expected_sha}`',f'- dirty: `{str(repro["code"]["dirty"]).lower()}`',f'- static artifact hashes: **{"PASS" if checks["all_match"] else "FAIL"}**',f'- training: {train["episodes_this_run"]} episodes, global v{train["global_weight_version_start"]} -> v{train["global_weight_version_end"]}',f'- changed stored weights: {weight["changed_exact"]:,}',f'- aggregate neural step: {train["checkpoint_neural_step"]}','', '## Frozen evaluation','',f'- initial: {initial["passed_gates"]} gate(s), terminal `{initial["terminal_reason"]}`, control {initial["control_steps"]}',f'- final: {final["passed_gates"]} gate(s), terminal `{final["terminal_reason"]}`, control {final["control_steps"]}','', 'The recorded canonical result remains the reference. This directory only verifies the end-to-end reproduction path; it does not replace the reference result.','', '## Reproducibility level','', '- Static binary artifacts are required to match the recorded SHA-256 hashes byte-for-byte. Provenance-bearing JSON must match after normalizing only the privacy-rewrite Git identity and its chained artifact hashes back to the recorded original-experiment values.', '- Async/GPU/MuJoCo training and trajectories are not required to match bit-for-bit across hardware. The semantic invariants listed in `manifest.json` are required.',
 ]
 (root/'report/reproduction.md').write_text('\n'.join(lines)+'\n')
 print(f"reproduction_manifest={root/'manifest.json'}")

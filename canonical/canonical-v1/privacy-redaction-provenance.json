@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "virtual-fly-pre-publication-privacy-redaction-map",
   "original_experiment_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
   "public_equivalent_git_sha": "f9c86c904d67ff974f3c43d37aab3619bc93fc1b",
@@ -11,6 +11,92 @@
       "historical reports",
       "historical logs and JSON provenance",
       "one archived development note"
+    ],
+    "file_mapping": [
+      {
+        "path": "docs/archive/2026-09-15/20260915_2040_Flyppyライブビューア不具合原因分析.md",
+        "original_blob_sha1": "c0f305d034ef4d295074b475801e9cae2a3e039a",
+        "public_blob_sha1": "f582b834c73db546f79e662558724b1bb73861cb",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/live_viewer_postmortem.md",
+        "original_blob_sha1": "919132a5f7775ad82c94cb1cfbced3de3225c464",
+        "public_blob_sha1": "f02e8a40306fa03ceedd817d850670bc1f3cf79d",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/population_frontier_verify.md",
+        "original_blob_sha1": "a153953adabe29829e26f77e5f1101701e743f41",
+        "public_blob_sha1": "364183d418e960809c4e71ac48e494c6ca11a479",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/population_input_prepare.md",
+        "original_blob_sha1": "a99044e659c048850e39a2205201b8bd4b1d7eb0",
+        "public_blob_sha1": "e34987857799ce578e6be3add2de9dc08983175e",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/population_live_verify.md",
+        "original_blob_sha1": "6021d15003c905eecc397693369f7c89035ec503",
+        "public_blob_sha1": "b5d4c23da1ebda2c6b9f5cfb115ab2fdf4195866",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/population_resume_probe.md",
+        "original_blob_sha1": "4822df00c308a8309a42f0ebe9e51056d31acb52",
+        "public_blob_sha1": "325ffa35019ca58004a6419eacd7d79be4ca365c",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/population_state_diagnostic.md",
+        "original_blob_sha1": "0b28a243b26278b4d3c84d750b3b2e7f724c8108",
+        "public_blob_sha1": "c93b8750eb81e7edbab018c65f36cf1e4fe771b7",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/profile_telemetry_off.json",
+        "original_blob_sha1": "b5270e443d09be24c0047beb1f5aecba7ff67783",
+        "public_blob_sha1": "c46b77d46f7991860eadbd0051c6f8d672a051fc",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/profile_telemetry_off.log",
+        "original_blob_sha1": "6eb3208576d870c7f1f342574586a857ce342b63",
+        "public_blob_sha1": "2b872b596d559f39b5bda76cc7e30894c42f3315",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/profile_telemetry_on.json",
+        "original_blob_sha1": "dd2e7d5503a131bbe64cc2ea3c3349f5d4f80686",
+        "public_blob_sha1": "7947b91ff283e6915c45658418a447a29662320f",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/profile_telemetry_on.log",
+        "original_blob_sha1": "1a78a1a3a9e627703ae42ea1a27ca6b7f11e4161",
+        "public_blob_sha1": "1a3d0fca5e7f3efb59369249b4e5f285b87b102d",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/viewer_detach_quiescence.md",
+        "original_blob_sha1": "c3c1e9b9eac7d574965e4371e5ddebc9a58cc9b5",
+        "public_blob_sha1": "7986bc3fa9a314cc73819fd8c554bede524ada74",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/viewer_production_e2e.md",
+        "original_blob_sha1": "04317df61c6a6aa42ffbc35fdbe0f649d8626ad3",
+        "public_blob_sha1": "c536103fb2c2f9f8e875fbee8f0ae3a77a8896ba",
+        "redaction_kind": "local-os-username-only"
+      },
+      {
+        "path": "reports/flyppy/viewer_runtime_overhead_v2.md",
+        "original_blob_sha1": "6b6bb30fc026af04ee2d6cb4408d95432eb0676b",
+        "public_blob_sha1": "2a47e23bfe8e917ef6c8a418e6c8ea6ff6985fbd",
+        "redaction_kind": "local-os-username-only"
+      }
     ]
   },
   "scientific_equivalence": {

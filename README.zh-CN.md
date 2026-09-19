@@ -107,7 +107,7 @@ Flyppy 物理环境
 
 - Python `>=3.12,<3.15`
 - [`uv`](https://docs.astral.sh/uv/)
-- Rust 开发环境 / Cargo
+- Rust `>=1.87` / Cargo
 - 能够运行 MuJoCo 的本地环境
 - **完整复现 canonical v1 时：** 神经运行系统可使用的 wgpu 兼容 GPU
 
