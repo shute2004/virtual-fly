@@ -106,28 +106,43 @@ If a DOI must be known before publication, use a manual Zenodo deposition and re
 
 ## 8. Creator metadata
 
-The repository currently uses the established Git/GitHub project identity `shute2004` in citation metadata rather than guessing a legal or scholarly name.
+For `v0.1.0`, the creator identity is intentionally the established Git/GitHub project identity `shute2004`. No legal name, ORCID, or affiliation is inferred from local machine/account information. Those optional fields may be added before the DOI-bearing release only if the project owner explicitly wants them in the permanent citation record.
 
-Before the first DOI-bearing release, the project owner should replace or enrich this with the preferred scholarly name, ORCID, and affiliation if those should appear in the permanent citation record.
+`CITATION.cff` and `.zenodo.json` are kept semantically synchronized for title, version, license, creator identity, repository identity, and project description. Because both files are present, current Zenodo GitHub integration uses `.zenodo.json` for archival metadata; `CITATION.cff` remains for GitHub and other citation tooling.
 
 ## 9. Pre-publication privacy/provenance audit
 
-The 2026-09-19 tracked-file scan found no high-confidence credential-shaped strings. It did find absolute local filesystem paths in 14 historical archive/report files. Those paths were retained rather than silently rewriting historical provenance.
+The 2026-09-19 tracked-file scan found no high-confidence credential-shaped strings and no personal email addresses in tracked files. It found absolute local filesystem paths in exactly 14 historical provenance files: one archived development note and 13 tracked reports/logs/JSON records.
 
-The repository remains private at the time of this audit. Before changing visibility to public, review those historical paths deliberately: either preserve them as part of the original development record or redact only machine/user-specific path components while documenting that sanitation. Do not rewrite scientific values, outcomes, hashes, or lineage metadata as part of such a cleanup.
+The decision for `v0.1.0` is to preserve those 14 originals unchanged. Their paths record the machine context of historical runs, tracebacks, or generated reports; rewriting them would alter the original provenance record. Current public READMEs and current multilingual documentation contain no `/Users/<local-user>/...` path. [`../../../reports/README.md`](../../../reports/README.md) and [`../../archive/README.md`](../../archive/README.md) explicitly explain that such historical paths are provenance rather than installation instructions.
 
-## 10. Release checklist
+## 10. Third-party fresh-clone preflight
+
+A fresh shallow clone of `main` at `b1245a7022d6460a9046ec6cf7af18bb09818868` was tested on 2026-09-19 without using the development checkout's virtual environment, Cargo build directory, MaleCNS snapshot, or generated artifacts.
+
+Verified from README-level instructions:
+
+- `uv sync --frozen` completed successfully;
+- Python standard-library discovery ran 103 tests: 103 passed;
+- `cargo test --workspace` ran 25 Rust tests: 25 passed;
+- `bash -n canonical/canonical-v1/reproduce.sh` passed;
+- the canonical README/config/reference manifest/reference report entry files were present.
+
+The full canonical experiment was deliberately not rerun as part of this publication preflight.
+
+## 11. Release checklist
 
 - [x] publication changes are on default `main`
 - [ ] repository visibility is intentionally set for public release
-- [ ] historical absolute local paths have been deliberately accepted or provenance-preservingly sanitized
-- [ ] clean release checkout
+- [x] historical absolute local paths deliberately accepted as preserved provenance, with public explanation
+- [x] third-party fresh-clone install/basic validation passed
+- [ ] clean release checkout at the final publication commit
 - [x] documentation links / JSON / CFF / package metadata validated
 - [x] canonical scientific reference files unchanged
 - [x] canonical vs. historical distinction visible in README and release notes
-- [x] release assets recorded with SHA-256 hashes
+- [x] release assets recorded with SHA-256 hashes and reverified locally
 - [x] third-party attribution included
-- [ ] preferred scholarly creator name / ORCID / affiliation finalized, if desired
+- [x] creator identity for `v0.1.0` intentionally set to `shute2004`; ORCID/affiliation omitted unless explicitly supplied
 - [ ] tag `v0.1.0`
 - [ ] GitHub Release created
 - [ ] Zenodo repository integration enabled

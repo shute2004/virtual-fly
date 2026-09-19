@@ -118,6 +118,18 @@ uv sync --frozen
 
 大型外部数据和实验生成物不会直接提交到 Git。
 
+### 基本验证
+
+安装完成后，无需下载 MaleCNS 数据或执行完整的 canonical 实验，也可以验证源码检出是否处于基本可用状态。
+
+```bash
+uv run python -m unittest discover -s tests -v
+cargo test --workspace
+bash -n canonical/canonical-v1/reproduce.sh
+```
+
+前两条命令分别运行 Python 侧的运行定义与调度测试，以及 Rust 神经运行系统测试。最后一条命令不会执行 canonical 实验，只检查复现脚本的 shell 入口是否具有有效语法。
+
 ## 复现 canonical v1
 
 复现脚本会一次完成：从官方来源重新获取 MaleCNS 数据、重新生成快照和派生产物、进行 6 个回合的基准学习、验证初始和最终检查点、执行固定评估并生成来源记录。

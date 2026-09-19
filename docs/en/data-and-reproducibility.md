@@ -152,7 +152,11 @@ Large files are not tracked in Git, including:
 
 Instead, Git tracks the small provenance records, configuration, hashes, and summary reports required to reacquire or regenerate them.
 
-## 9. Public browser experiments
+## 9. Historical provenance paths
+
+A small number of archived development notes and tracked historical reports retain absolute local filesystem paths from the machine on which the original run, traceback, or report was recorded. These strings are preserved as part of the original provenance record rather than rewritten after the fact. They are not installation requirements and are not dependencies of the current code. Current public documentation and commands use repository-relative or portable paths.
+
+## 10. Public browser experiments
 
 Results returned by browsers are treated as outside the trusted execution boundary.
 
@@ -167,7 +171,7 @@ At minimum, each result should identify:
 
 Important findings should be rerun on the server side or across multiple independent clients.
 
-## 10. Personal data
+## 11. Personal data
 
 Public experiments should not collect personal information or browser identifiers that are unnecessary for the neuroscience experiment.
 

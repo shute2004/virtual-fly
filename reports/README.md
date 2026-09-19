@@ -12,4 +12,6 @@ For publication-facing results, start with:
 
 Files named `latest.*`, continuously updated development summaries, one-off diagnostics, and historical fixed evaluations may describe older or mixed lineages. Their original context should be preserved rather than rewritten to match current semantics.
 
+Some tracked historical reports intentionally retain absolute local filesystem paths such as the machine path from which a run or traceback was recorded. These paths are provenance from the original execution, not installation instructions and not required by the current code. They are preserved instead of being silently rewritten; current public documentation and commands use repository-relative or portable paths.
+
 Large checkpoints, trajectories, videos, raw source data, and temporary reproduction bundles belong under gitignored local `artifacts/` or external archival storage, not under `reports/`.

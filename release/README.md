@@ -6,7 +6,8 @@ Large binaries and raw scientific artifacts must not be committed here. Assemble
 
 Current plan:
 
+- [`v0.1.0-notes.md`](v0.1.0-notes.md) — prepared GitHub Release notes
 - [`release-assets-v0.1.0.json`](release-assets-v0.1.0.json) — exact historical media/playback assets planned for the first public release
-- [`../docs/internal/en/release-and-zenodo.md`](../docs/internal/en/release-and-zenodo.md) — publication and DOI workflow
+- [`../docs/internal/en/release-and-zenodo.md`](../docs/internal/en/release-and-zenodo.md) — publication, preflight, and DOI workflow
 
 Canonical v1 itself is already represented by tracked config/provenance/reproduction files under [`../canonical/canonical-v1/`](../canonical/canonical-v1/); do not duplicate its raw source, snapshots, or checkpoints into Git release metadata.

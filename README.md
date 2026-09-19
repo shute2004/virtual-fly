@@ -116,6 +116,18 @@ uv sync --frozen
 
 Large upstream datasets and generated experiment artifacts are intentionally not stored in Git.
 
+### Basic validation
+
+After installation, a third party can verify the source checkout without downloading MaleCNS data or running the canonical experiment:
+
+```bash
+uv run python -m unittest discover -s tests -v
+cargo test --workspace
+bash -n canonical/canonical-v1/reproduce.sh
+```
+
+The first two commands exercise the Python semantic/orchestration tests and Rust neural-runtime tests. The final command checks the canonical reproducer shell entry point without executing the experiment.
+
 ## Reproduce canonical v1
 
 The canonical reproducer acquires fresh official sources, reconstructs the snapshot and derived artifacts, runs the six-episode canonical training, validates the initial/final checkpoints, performs frozen evaluation, and emits a provenance manifest.

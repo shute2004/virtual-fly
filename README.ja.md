@@ -118,6 +118,18 @@ uv sync --frozen
 
 大容量の外部データや実験生成物は、意図的にGitへ含めません。
 
+### 基本検証
+
+導入後、MaleCNSデータを取得したりcanonical実験全体を実行したりせずに、ソース一式の基本的な健全性を確認できます。
+
+```bash
+uv run python -m unittest discover -s tests -v
+cargo test --workspace
+bash -n canonical/canonical-v1/reproduce.sh
+```
+
+最初の2つはPython側の意味づけ・実行制御に関する試験と、Rust製神経実行系の試験です。最後のコマンドはcanonical再現スクリプトを実行せず、シェルの入口が構文上有効であることだけを確認します。
+
 ## canonical v1を再現する
 
 再現スクリプトは、公式配布元からのMaleCNSデータ新規取得、スナップショットと派生成果物の再生成、6エピソードの基準学習、初期・最終チェックポイントの検証、固定評価、来歴記録の生成までを一括で実行します。
