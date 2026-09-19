@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "kind": "virtual-fly-canonical-v1-reproduction-config",
+  "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+  "static_reference": {
+    "snapshot_sha256": "749faa40bb0e6dcb41ff2f1a424b706997ee127adcfdd1804efe925ad3165aa0",
+    "artifacts": {
+      "snapshot_manifest": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d",
+      "embodiment_groups": "6eadc642eb996a0a91aa8f35c633605b8f835f4bc88fc9c382d98eee01b2bd28",
+      "retina_map": "7b259d75ca9012337ccab373d8ff5427b628ffa95817d2c2225a4dea3c2b7c58",
+      "wing_motor_map": "e23a763a01415a2ac169adffc5053da7cfb31368d1cef4329ae78cfdf3ff5339",
+      "body_motor_map": "aa8891a67217effaf4b549ca27205483be2d29f5181f5e3a147752ceff0f30eb",
+      "haltere_full_map": "fae705bd644feed3aebfe4e9134d0d05c3abe9b50e250d078af5b187d3ea1b22",
+      "haltere_timing_map": "6b9d6ccca7b1aeaf56768ff6cc89e7ef3da5a1c0c8484c97a1f812b3c515d4d0",
+      "viewer_graph": "c3654fd6b0275fa96a14f746d8edd5d6b93982d0f6de23167ee07fc0419a19cd",
+      "neural_calibration": "abe71c984a3d94b9534a677fa8aee0fee180b8e0acd81728f0dce22fd4c9617d",
+      "measured_wingbeat": "f97b975ef1b5adbe42c208ea9665f3c37fa432914f56f3943f1697cdb090d1ce",
+      "neutral_trim_pattern": "c2a683380098de5b1ff70eae14cc40c8fcb388ffc55d29f1cb521c6c99f0ef68",
+      "neutral_trim_metadata": "36baf0bee066dc23815dde80b916fabbf822e790bdf3ce50aecea499b78491db"
+    },
+    "plastic_fast_graph_components": {
+      "plastic-fast-graph-v1.row_offsets.u32le": {
+        "sha256": "0c723a06d6da4543ec04ecb1182f57198992601c67b11d7efd6ba47d884d72c1",
+        "size_bytes": 666804
+      },
+      "plastic-fast-graph-v1.edge_indices.u32le": {
+        "sha256": "33cc4dfacd4ef7de082a13414667ef5b943497a472734937ab3635e4210708ee",
+        "size_bytes": 14735660
+      },
+      "plastic-fast-graph-v1.post_indices.u32le": {
+        "sha256": "a0e12ef9bcbb80c9ad19919fda5183cfa257d3661cfd31f02771ec230d44422b",
+        "size_bytes": 14735660
+      }
+    }
+  },
+  "training": {
+    "episodes": 6,
+    "population": 2,
+    "launch_mode": "async",
+    "curriculum_mode": "boundary-band",
+    "boundary_batch_size": 6,
+    "seed": 0,
+    "fixed_course_seed": 0,
+    "gate_count": 6,
+    "max_control_steps": 96,
+    "physics_steps": 10,
+    "trajectory_stride": 8,
+    "checkpoint_every": 2,
+    "body_version": "v7",
+    "environment_version": "v7",
+    "vision_mode": "direct-ray",
+    "rays_per_ommatidium": 13,
+    "photoreceptor_current_gain": 2.0,
+    "haltere_kind": "male-cns-haltere-timing-afferents-inferred-v1",
+    "haltere_gain": 0.05,
+    "haltere_transduction": "interaction-load-v2",
+    "neutral_trim_strength": 1.0,
+    "vertical_steering_gain": 1.0,
+    "measured_steering_gain": 1.0,
+    "steering_tau_ms": 12.0,
+    "steering_spike_increment": 0.85,
+    "reward_current": 2.0,
+    "aversive_current": 2.0,
+    "reinforcement_steps": 4,
+    "gate_near_miss_aversive_floor_fraction": 0.25,
+    "gate_near_miss_distance_mm": 2.0,
+    "synapse_scale": 0.005
+  },
+  "evaluation": {
+    "plasticity": false,
+    "reward_current": 0.0,
+    "aversive_current": 0.0,
+    "reinforcement_steps": 4,
+    "course_seed": 0,
+    "gate_count": 6,
+    "spawn_x_mm": 8.91,
+    "spawn_z_mm": 11.302931914869099,
+    "initial_speed_mm_s": 400.0,
+    "initial_vz_mm_s": 0.0,
+    "physics_steps": 10,
+    "physics_substep_stride": 3,
+    "max_control_steps": 128,
+    "neural_telemetry_stride": 5,
+    "playback_fps": 60.0,
+    "reward_from_gate": 1,
+    "body_version": "v7",
+    "environment_version": "v7",
+    "vision_mode": "direct-ray",
+    "rays_per_ommatidium": 13,
+    "photoreceptor_current_gain": 2.0,
+    "haltere_kind": "male-cns-haltere-timing-afferents-inferred-v1",
+    "haltere_gain": 0.05,
+    "haltere_transduction": "interaction-load-v2",
+    "neutral_trim_strength": 1.0,
+    "steering_tau_ms": 12.0,
+    "steering_spike_increment": 0.85
+  },
+  "reference_result": {
+    "episodes": 6,
+    "final_global_weight_version": 6,
+    "aggregate_neural_step": 484,
+    "changed_edges_exact": 2163179,
+    "initial_frozen": {
+      "passed_gates": 1,
+      "terminal_reason": "gate",
+      "control_steps": 120
+    },
+    "final_frozen": {
+      "passed_gates": 1,
+      "terminal_reason": "gate",
+      "control_steps": 120
+    }
+  }
+}

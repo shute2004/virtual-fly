@@ -1,0 +1,1079 @@
+{
+  "schema_version": 1,
+  "kind": "virtual-fly-canonical-experiment-v1",
+  "created_at_utc": "2026-09-19T01:04:15.306968+00:00",
+  "purpose": "Small fully traceable current-semantics reference experiment; not a performance or generalization claim.",
+  "historical_separation": {
+    "fresh_current_semantics": true,
+    "reproduces_v240_v960_v966": false,
+    "statement": "v240/v960/v966 and v1704 are historical lineages and are not inputs to this experiment."
+  },
+  "code": {
+    "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+    "dirty": false,
+    "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "dependencies": {
+    "lock": {
+      "files": {
+        "uv.lock": "fe8a3d699c9784a4d7815a4026e0266462eeb175abaeeaeb7ac6fe39472a4373",
+        "Cargo.lock": "49218bde5b461b9adb6276c973f04cab515adcb155b912630e8162b5765d65d3"
+      },
+      "composite_sha256": "141aa30e61c78e5ba641bd1d2a52c006322b4a9b38e8a2296c4bbe2d8303e045"
+    },
+    "versions": {
+      "python": "3.13.7 (main, Aug 14 2025, 11:12:11) [Clang 17.0.0 (clang-1700.0.13.3)]",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01) (Homebrew)",
+      "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05) (Homebrew)",
+      "uv": "uv 0.12.16 (Homebrew 2026-09-17 aarch64-apple-darwin)",
+      "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+      "packages": {
+        "virtual-fly-tools": "0.1.0",
+        "flygym": "2.1.0",
+        "mujoco": "3.9.0",
+        "numpy": "2.5.3",
+        "scipy": "1.18.1",
+        "pyarrow": "25.0.1",
+        "pandas": "3.0.5"
+      }
+    }
+  },
+  "source_data": {
+    "male_cns": {
+      "dataset": "male-cns:v1.0",
+      "source_base_url": "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome",
+      "source_sha256": {
+        "annotations": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
+        "neurotransmitters": "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621",
+        "weights": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
+      },
+      "fresh_download": true
+    },
+    "flybody_wingbeat": {
+      "fresh_download": true,
+      "figshare_article": 25309105,
+      "figshare_version": 4,
+      "output_sha256": "f97b975ef1b5adbe42c208ea9665f3c37fa432914f56f3943f1697cdb090d1ce"
+    }
+  },
+  "semantics": {
+    "snapshot": "male-cns-v1-class-dan-v1",
+    "neural_runtime": "signed-activity-local-dynamics-v1",
+    "plasticity": "local-three-factor-dopamine-eligibility-v1",
+    "population_checkpoint": "global-weights-only-v1",
+    "checkpoint_neural_step": "aggregate-slot-neural-step-count-v1"
+  },
+  "snapshot": {
+    "dataset": "male-cns:v1.0",
+    "format_version": 1,
+    "runtime_semantics": "male-cns-v1-class-dan-v1",
+    "modulator_role_definition": "consensus_nt=dopamine AND released annotation class=DAN",
+    "generator_provenance": {
+      "generator": "scripts/data/prepare_malecns.py",
+      "generator_git": {
+        "dirty": false,
+        "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811"
+      }
+    },
+    "manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d",
+    "snapshot_sha256": "749faa40bb0e6dcb41ff2f1a424b706997ee127adcfdd1804efe925ad3165aa0"
+  },
+  "artifact_index": {
+    "snapshot_manifest": {
+      "path": "artifacts/canonical-malecns-v1.0/manifest.json",
+      "sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d",
+      "size_bytes": 2155,
+      "dataset": "male-cns:v1.0",
+      "runtime_semantics": "male-cns-v1-class-dan-v1",
+      "generator_provenance": {
+        "generator": "scripts/data/prepare_malecns.py",
+        "generator_git": {
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811"
+        }
+      }
+    },
+    "embodiment_groups": {
+      "path": "artifacts/canonical-malecns-v1.0/embodiment-groups-v0.json",
+      "sha256": "6eadc642eb996a0a91aa8f35c633605b8f835f4bc88fc9c382d98eee01b2bd28",
+      "size_bytes": 1315489,
+      "schema_version": 2,
+      "artifact_provenance": {
+        "generator": "scripts/data/make_embodiment_groups.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshot_manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d"
+      },
+      "provenance": {
+        "flight_thrust": "DNg02 population; legacy diagnostic only. Target motor output reads individual released wing motor-neuron body IDs and never feeds this population average into behavior.",
+        "reward_dan": "PAM01 dopaminergic type (PAM-gamma5 reward-associated MB compartment). The group identifies neurons to receive experimental current; no +1 reward or signed valence enters the neural runtime.",
+        "aversive_dan": "PPL1 punishment DAN ensemble (PPL101/PPL103/PPL106). The group identifies released neurons to receive experimental current; no -1 punishment or signed valence enters the neural runtime.",
+        "reinforcement_references": [
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC10945696/",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC7443709/",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC7618526/"
+        ],
+        "vertical_motion": "legacy T4/T5 diagnostic groups; not used by current R1-R6 Flyppy sensory input"
+      }
+    },
+    "retina_map": {
+      "path": "artifacts/canonical-malecns-v1.0/retinotopic-vision-v1.json",
+      "sha256": "7b259d75ca9012337ccab373d8ff5427b628ffa95817d2c2225a4dea3c2b7c58",
+      "size_bytes": 1128687,
+      "schema_version": 3,
+      "dataset": "male-cns:v1.0",
+      "artifact_provenance": {
+        "generator": "scripts/data/prepare_retinotopic_vision.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshot_manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d"
+      },
+      "provenance": {
+        "photoreceptor_identity": "observed: official MaleCNS type == R1-R6",
+        "optic_column_coordinates": "observed: official MaleCNS assignedOlHex coordinates on L1/L2/L3",
+        "eye_side": "observed: R1-R6 rootSide",
+        "column_assignment": "inferred from observed wiring: sum all released R1-R6 -> L1/L2/L3 contacts by assignedOlHex column and choose the unique maximum",
+        "tie_policy": "leave exact ties unmapped; never guess",
+        "incomplete_volume_policy": "do not synthesize missing R1-R6 cells or force six cells per column",
+        "no_visual_feature_extraction": true,
+        "no_spatial_averaging": true
+      }
+    },
+    "wing_motor_map": {
+      "path": "artifacts/canonical-malecns-v1.0/wing-motor-neurons-v0.json",
+      "sha256": "e23a763a01415a2ac169adffc5053da7cfb31368d1cef4329ae78cfdf3ff5339",
+      "size_bytes": 33017,
+      "schema_version": 2,
+      "dataset": "male-cns:v1.0",
+      "artifact_provenance": {
+        "generator": "scripts/data/prepare_wing_motor_map.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshot_manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d"
+      },
+      "provenance": {
+        "neuron_identity": "observed: MaleCNS v1.0 annotations/body IDs",
+        "muscle_target": "literature: MANC/light-level wing motor-neuron identification",
+        "important_boundary": "A muscle identity does not define a torque. Muscle activation dynamics, attachment/moment arms, and force generation require separate physiological models and must not be replaced by an external action decoder.",
+        "references": [
+          "https://elifesciences.org/articles/96084",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC10312520/",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC10312524/",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC12637562/"
+        ]
+      }
+    },
+    "body_motor_map": {
+      "path": "artifacts/canonical-malecns-v1.0/body-motor-neurons-v0.json",
+      "sha256": "aa8891a67217effaf4b549ca27205483be2d29f5181f5e3a147752ceff0f30eb",
+      "size_bytes": 300235,
+      "schema_version": 1,
+      "dataset": "male-cns:v1.0",
+      "artifact_provenance": {
+        "generator": "scripts/data/prepare_body_motor_map.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshot_manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d"
+      },
+      "provenance": {
+        "neuron_identity": "observed: MaleCNS v1.0 released type/subclass/side annotations",
+        "leg_mapping": "exact released MaleCNS type allow-list; names match the public MaleCNS locomotor extraction and MANC motor-neuron nomenclature",
+        "leg_function": "literature: identified MANC leg MN muscle classes plus FlyBody joint coordinate definitions",
+        "haltere_function": "literature: hDVM is the asynchronous haltere power muscle; steering MN mechanical transfer remains unresolved",
+        "unknown_policy": "unresolved identities are preserved but never converted into a body command",
+        "references": [
+          "https://elifesciences.org/articles/96084",
+          "https://elifesciences.org/articles/106446",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC10312520/",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC11338719/",
+          "https://github.com/DenisSergeevitch/desktop-fly/blob/master/etl_malecns.py"
+        ]
+      }
+    },
+    "haltere_full_map": {
+      "path": "artifacts/canonical-malecns-v1.0/haltere-campaniform-sensory-v1.json",
+      "sha256": "fae705bd644feed3aebfe4e9134d0d05c3abe9b50e250d078af5b187d3ea1b22",
+      "size_bytes": 35212,
+      "schema_version": 1,
+      "kind": "male-cns-haltere-campaniform-afferents",
+      "dataset": "male-cns:v1.0",
+      "provenance": {
+        "generator": "scripts/data/prepare_haltere_sensory_map.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "annotations_sha256": "e1d43d1b1ae8e3036dad4b2314571ff833780351afe07213caca7098998cb92d"
+      }
+    },
+    "haltere_timing_map": {
+      "path": "artifacts/canonical-malecns-v1.0/haltere-timing-afferents-v1.json",
+      "sha256": "6b9d6ccca7b1aeaf56768ff6cc89e7ef3da5a1c0c8484c97a1f812b3c515d4d0",
+      "size_bytes": 32031,
+      "schema_version": 1,
+      "kind": "male-cns-haltere-timing-afferents-inferred-v1",
+      "dataset": "male-cns:v1.0",
+      "provenance": {
+        "generator": "scripts/data/prepare_haltere_timing_sensory_map.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshot_manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d",
+        "base_map_sha256": "fae705bd644feed3aebfe4e9134d0d05c3abe9b50e250d078af5b187d3ea1b22"
+      }
+    },
+    "viewer_graph": {
+      "path": "artifacts/embodiment/neural-viewer-graph-v1.json",
+      "sha256": "c3654fd6b0275fa96a14f746d8edd5d6b93982d0f6de23167ee07fc0419a19cd",
+      "size_bytes": 1179703,
+      "schema_version": 4,
+      "artifact_provenance": {
+        "generator": "scripts/data/prepare_neural_viewer_graph.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshot_manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d",
+        "groups_sha256": "6eadc642eb996a0a91aa8f35c633605b8f835f4bc88fc9c382d98eee01b2bd28",
+        "motor_map_sha256": "e23a763a01415a2ac169adffc5053da7cfb31368d1cef4329ae78cfdf3ff5339"
+      }
+    },
+    "neural_calibration": {
+      "path": "artifacts/embodiment/neural-runtime-calibration-v1.json",
+      "sha256": "abe71c984a3d94b9534a677fa8aee0fee180b8e0acd81728f0dce22fd4c9617d",
+      "size_bytes": 100749,
+      "schema_version": 2,
+      "artifact_provenance": {
+        "generator": "scripts/embodiment/calibrate_neural_runtime.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshot_manifest_sha256": "562cc95673595af1f8d1fa3d74cac973b55a515ed83d35bccb167045d9edfb4d",
+        "retinotopic_map_sha256": "7b259d75ca9012337ccab373d8ff5427b628ffa95817d2c2225a4dea3c2b7c58"
+      }
+    },
+    "measured_wingbeat": {
+      "path": "artifacts/flybody-data/wing_pattern_fmech.npy",
+      "sha256": "f97b975ef1b5adbe42c208ea9665f3c37fa432914f56f3943f1697cdb090d1ce",
+      "size_bytes": 6128
+    },
+    "neutral_trim_pattern": {
+      "path": "artifacts/derived/wing-pattern-neutral-trim-v1.npy",
+      "sha256": "c2a683380098de5b1ff70eae14cc40c8fcb388ffc55d29f1cb521c6c99f0ef68",
+      "size_bytes": 12128
+    },
+    "neutral_trim_metadata": {
+      "path": "artifacts/derived/wing-pattern-neutral-trim-v1.json",
+      "sha256": "36baf0bee066dc23815dde80b916fabbf822e790bdf3ce50aecea499b78491db",
+      "size_bytes": 1857,
+      "schema_version": 1,
+      "kind": "flybody-task-independent-neutral-wing-trim",
+      "runtime_semantics": "flybody-neutral-trim-v1",
+      "provenance": {
+        "generator": "scripts/data/prepare_flybody_neutral_trim.py",
+        "generator_git": {
+          "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+          "dirty": false,
+          "dirty_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      }
+    },
+    "plastic_fast_graph": {
+      "path": "artifacts/canonical-experiment-v1/inputs/plastic-fast-graph-v1.bin",
+      "sha256": "e74e475dae3256719cb006f66f69398319ad9099b292a1fd4ef808d092f5c6a8",
+      "size_bytes": 1659
+    },
+    "plastic_fast_graph_report": {
+      "path": "artifacts/canonical-experiment-v1/inputs/plastic-fast-graph-v1.md",
+      "sha256": "3654e8baea0c09521578cd8cadf0336e23530ebf8f77e1792fa5fbf380bf53b2",
+      "size_bytes": 2525
+    },
+    "initial_checkpoint_manifest": {
+      "path": "artifacts/canonical-experiment-v1/initial/checkpoint/manifest.json",
+      "sha256": "e9988d10b5fa61edacfeb6bab54c25cac75db852494bc67b05e82e8ba6f6b520",
+      "size_bytes": 540,
+      "schema_version": 3,
+      "dataset": "male-cns:v1.0"
+    },
+    "initial_weights": {
+      "path": "artifacts/canonical-experiment-v1/initial/checkpoint/weights.f32le",
+      "sha256": "4b158ecce6c851c9a321a5e64cafcc75362e398a485a080494771c1dc3e019ce",
+      "size_bytes": 102331752
+    },
+    "final_checkpoint_manifest": {
+      "path": "artifacts/canonical-experiment-v1/training/checkpoint/manifest.json",
+      "sha256": "299fc53ee528f753272187fa020b31f2a2bbf19dee9f01d0aa276acd5c51f96e",
+      "size_bytes": 542,
+      "schema_version": 3,
+      "dataset": "male-cns:v1.0"
+    },
+    "final_weights": {
+      "path": "artifacts/canonical-experiment-v1/training/checkpoint/weights.f32le",
+      "sha256": "e4384d5c0c77b788bfc918517ee289876c97e1472c23204965b0614b563bd706",
+      "size_bytes": 102331752
+    },
+    "training_summary": {
+      "path": "artifacts/canonical-experiment-v1/training/summary.json",
+      "sha256": "c5becfad6e287ba2e3c05919ef3e3a5c55b180810d6023aad4475697811f9511",
+      "size_bytes": 18735,
+      "schema_version": 13
+    },
+    "training_population_state": {
+      "path": "artifacts/canonical-experiment-v1/training/population-state.json",
+      "sha256": "25627d02162646fa6e564d34055eb9428cb4ce8ed63bf70438bbd2035889c7f9",
+      "size_bytes": 733,
+      "schema_version": 2
+    },
+    "training_curriculum_state": {
+      "path": "artifacts/canonical-experiment-v1/training/curriculum-state.json",
+      "sha256": "1fe47cf4fafee72f2be8f154721cfa3fa9e300484fa0b027f1ee24bbfd667669",
+      "size_bytes": 2568,
+      "schema_version": 4
+    },
+    "training_commit_log": {
+      "path": "artifacts/canonical-experiment-v1/training/commit-log.jsonl",
+      "sha256": "64f8e57d07376186127672122d865ff4d579e96ea021cfecddeeb1a6edecdf43",
+      "size_bytes": 4640
+    },
+    "training_trajectory": {
+      "path": "artifacts/canonical-experiment-v1/training/trajectory.jsonl",
+      "sha256": "59631a184fd6106977eeafb845945ffd0a55c046d8b1f643835858737b97b6bd",
+      "size_bytes": 110184
+    },
+    "training_provenance": {
+      "path": "artifacts/canonical-experiment-v1/training/provenance/run-000000-gv000000-20260919T005621Z.json",
+      "sha256": "fe9f16aad932b7002ae6290e21bfe5a09532bf2a9e988582c98ced7d0c460f82",
+      "size_bytes": 5370,
+      "schema_version": 1
+    },
+    "initial_evaluation": {
+      "path": "artifacts/canonical-experiment-v1/evaluation/initial/playback.json",
+      "sha256": "4c43964b5da16b0cdc22db5e1ef876bef635546c11a701eef909ac908d496233",
+      "size_bytes": 936133,
+      "schema_version": 1,
+      "kind": "flyppy-offline-preview-playback"
+    },
+    "final_evaluation": {
+      "path": "artifacts/canonical-experiment-v1/evaluation/final/playback.json",
+      "sha256": "14d85b1c4e781e941a389886c9477ab12eec39fc51966ea1515bb5f689779cf6",
+      "size_bytes": 932967,
+      "schema_version": 1,
+      "kind": "flyppy-offline-preview-playback"
+    },
+    "weight_delta": {
+      "path": "artifacts/canonical-experiment-v1/weight-delta.json",
+      "sha256": "aee145836b72bd70dd3bd986d840dd7d84d10efae580e0906a5394e8325b83f4",
+      "size_bytes": 646
+    },
+    "checkpoint_validation": {
+      "path": "artifacts/canonical-experiment-v1/checkpoint-validation.json",
+      "sha256": "4c17102f762bf49583658c6a81ca7eab87d6fb1fc27cf030d54ebfaa55e8bd81",
+      "size_bytes": 286
+    },
+    "report_markdown": {
+      "path": "artifacts/canonical-experiment-v1/report/latest.md",
+      "sha256": "a00460e18bed9afca8978b646d41a0049e3088e1d15b4aadab52bbcb17a07487",
+      "size_bytes": 3684
+    },
+    "population_report": {
+      "path": "artifacts/canonical-experiment-v1/report/population.md",
+      "sha256": "cee85a0fc7aedbd464ce9815060867158364e3131d6e29345c12ff0dfae9290e",
+      "size_bytes": 1693
+    },
+    "history_csv": {
+      "path": "artifacts/canonical-experiment-v1/report/history.csv",
+      "sha256": "f8cdb9bda54257d184e58923f18eda05939f6cdabe46a780671e8656bffe4b52",
+      "size_bytes": 1939
+    }
+  },
+  "derived_generation": {
+    "git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+    "dirty": false,
+    "commands": [
+      "scripts/data/prepare_malecns.py --download --raw-dir artifacts/raw/male-cns-v1.0 --output artifacts/canonical-malecns-v1.0",
+      "scripts/dev/prepare_flyppy_population_inputs.py --snapshot artifacts/canonical-malecns-v1.0",
+      "scripts/data/prepare_haltere_timing_sensory_map.py --snapshot artifacts/canonical-malecns-v1.0 --base-map artifacts/canonical-malecns-v1.0/haltere-campaniform-sensory-v1.json --output artifacts/canonical-malecns-v1.0/haltere-timing-afferents-v1.json",
+      "scripts/data/prepare_neural_viewer_graph.py --snapshot artifacts/canonical-malecns-v1.0 ...",
+      "scripts/data/prepare_flybody_neutral_trim.py --output-pattern artifacts/derived/wing-pattern-neutral-trim-v1.npy ...",
+      "scripts/embodiment/calibrate_neural_runtime.py --snapshot artifacts/canonical-malecns-v1.0 --mapping artifacts/canonical-malecns-v1.0/retinotopic-vision-v1.json ...",
+      "scripts/data/prepare_plastic_fast_graph.py --snapshot artifacts/canonical-malecns-v1.0 ..."
+    ]
+  },
+  "structural_counts": {
+    "neurons": 166700,
+    "edges": 25582938,
+    "released_synapse_count_sum": 124177617,
+    "class_dan_modulators": 338,
+    "retina_annotated_r1_r6": 3377,
+    "retina_mapped_r1_r6": 3334,
+    "retina_columns": 824,
+    "haltere_timing_afferents": 97,
+    "wing_inventory": 67,
+    "wing_training_boundary": 60,
+    "body_inventory": 641,
+    "body_grounded": 208,
+    "physical_motor_ids": 268,
+    "plastic_fast_graph_edges": 3683915,
+    "plastic_fast_graph_posts": 13929
+  },
+  "training": {
+    "command": [
+      ".venv/bin/python",
+      "scripts/embodiment/train_flyppy_population_packed.py",
+      "--episodes",
+      "6",
+      "--population",
+      "2",
+      "--snapshot",
+      "artifacts/canonical-malecns-v1.0",
+      "--groups",
+      "artifacts/canonical-malecns-v1.0/embodiment-groups-v0.json",
+      "--retinotopic-map",
+      "artifacts/canonical-malecns-v1.0/retinotopic-vision-v1.json",
+      "--haltere-sensory-map",
+      "artifacts/canonical-malecns-v1.0/haltere-timing-afferents-v1.json",
+      "--haltere-sensory-kind",
+      "male-cns-haltere-timing-afferents-inferred-v1",
+      "--haltere-current-gain",
+      "0.05",
+      "--haltere-transduction",
+      "interaction-load-v2",
+      "--wing-motor-map",
+      "artifacts/canonical-malecns-v1.0/wing-motor-neurons-v0.json",
+      "--body-motor-map",
+      "artifacts/canonical-malecns-v1.0/body-motor-neurons-v0.json",
+      "--viewer-graph",
+      "artifacts/embodiment/neural-viewer-graph-v1.json",
+      "--neutral-trim-pattern",
+      "artifacts/derived/wing-pattern-neutral-trim-v1.npy",
+      "--output-dir",
+      "artifacts/canonical-experiment-v1/training",
+      "--fresh",
+      "--environment-version",
+      "v7",
+      "--flight-body-version",
+      "v7",
+      "--fixed-course-seed",
+      "0",
+      "--max-control-steps",
+      "96",
+      "--checkpoint-every",
+      "2",
+      "--curriculum-mode",
+      "boundary-band",
+      "--boundary-batch-size",
+      "6",
+      "--launch-mode",
+      "async",
+      "--trajectory-stride",
+      "8"
+    ],
+    "environment": {
+      "VF_FLYPPY_VISION_MODE": "direct-ray",
+      "VF_FLYPPY_OMMATIDIA_RAYS": "13",
+      "VF_NEURAL_SYNAPSE_SCALE": "0.005"
+    },
+    "conditions": {
+      "body": {
+        "version": "v7",
+        "vertical_steering_gain": 1.0,
+        "measured_steering_gain": 1.0,
+        "neutral_trim_strength": 1.0,
+        "steering_tau_ms": 12.0,
+        "steering_spike_increment": 0.85,
+        "runtime": "packed-process"
+      },
+      "environment": {
+        "version": "v7",
+        "gate_count": 6
+      },
+      "vision": {
+        "mode": "direct-ray",
+        "rays_per_ommatidium": 13,
+        "photoreceptor_current_gain": 2.0
+      },
+      "haltere": {
+        "enabled": true,
+        "map_kind": "male-cns-haltere-timing-afferents-inferred-v1",
+        "current_gain": 0.05,
+        "transduction": "interaction-load-v2"
+      },
+      "reinforcement": {
+        "reward_current": 2.0,
+        "aversive_current": 2.0,
+        "reinforcement_steps": 4,
+        "gate_near_miss_aversive_floor_fraction": 0.25,
+        "gate_near_miss_distance_mm": 2.0,
+        "path": "gate pass -> reward_dan current; collision -> aversive_dan current"
+      },
+      "rng": {
+        "seed": 0,
+        "fixed_course_seed": 0
+      },
+      "training": {
+        "population": 2,
+        "launch_mode": "async",
+        "curriculum_mode": "boundary-band",
+        "shared_weight_commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
+        "neural_synapse_scale": "0.005"
+      },
+      "compatibility_warnings": []
+    },
+    "episodes": 6,
+    "population": 2,
+    "launch_mode": "async",
+    "curriculum_mode": "boundary-band",
+    "boundary_batch_size": 6,
+    "max_control_steps": 96,
+    "trial_termination": [
+      "collision",
+      "course finished",
+      "max_control_steps=96"
+    ],
+    "pam_after_gate_pass_ends_episode": false,
+    "shared_weight_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
+    "checkpoint_contract": "global-weights-only-v1",
+    "aggregate_neural_step_semantics": "aggregate-slot-neural-step-count-v1",
+    "episode_results": [
+      {
+        "episode": 0,
+        "slot": 0,
+        "source_weight_version": 0,
+        "commit_from_version": 0,
+        "commit_weight_version": 1,
+        "version_staleness": 0,
+        "control_steps": 63,
+        "passed_gates": 1,
+        "collision": true,
+        "collision_reason": "gate",
+        "finished": false,
+        "max_x_mm": 26.074388065297477,
+        "min_z_mm": 10.836509990370725,
+        "max_z_mm": 11.295741845156705,
+        "final_vx_mm_s": 228.3621508933495,
+        "spawn_x_mm": 13.835,
+        "spawn_z_mm": 11.302931914869099,
+        "initial_speed_mm_s": 450.0,
+        "initial_vz_mm_s": 0.0,
+        "environment_version": "v7",
+        "motor_boundary": "whole-body",
+        "curriculum_mode": "boundary-band",
+        "boundary_ease_level": 0.5,
+        "boundary_attempt_index": 0,
+        "boundary_batch_number": 0,
+        "frontier_role": "focus",
+        "frontier_target_gate": 1,
+        "course_start_gate_index": 0,
+        "gate_height_role": null,
+        "gate_height_center_z_mm": null,
+        "gate_height_attempt_index": null,
+        "gate_height_batch_number": null,
+        "gate_height_learning": null,
+        "launch_round": 0,
+        "reward_events": 1,
+        "aversive_events": 1
+      },
+      {
+        "episode": 1,
+        "slot": 1,
+        "source_weight_version": 0,
+        "commit_from_version": 1,
+        "commit_weight_version": 2,
+        "version_staleness": 1,
+        "control_steps": 63,
+        "passed_gates": 1,
+        "collision": true,
+        "collision_reason": "gate",
+        "finished": false,
+        "max_x_mm": 26.074388065297477,
+        "min_z_mm": 10.836509990370725,
+        "max_z_mm": 11.295741845156705,
+        "final_vx_mm_s": 228.3621508933495,
+        "spawn_x_mm": 13.835,
+        "spawn_z_mm": 11.302931914869099,
+        "initial_speed_mm_s": 450.0,
+        "initial_vz_mm_s": 0.0,
+        "environment_version": "v7",
+        "motor_boundary": "whole-body",
+        "curriculum_mode": "boundary-band",
+        "boundary_ease_level": 1.0,
+        "boundary_attempt_index": 1,
+        "boundary_batch_number": 0,
+        "frontier_role": "focus",
+        "frontier_target_gate": 1,
+        "course_start_gate_index": 0,
+        "gate_height_role": null,
+        "gate_height_center_z_mm": null,
+        "gate_height_attempt_index": null,
+        "gate_height_batch_number": null,
+        "gate_height_learning": null,
+        "launch_round": 0,
+        "reward_events": 1,
+        "aversive_events": 1
+      },
+      {
+        "episode": 2,
+        "slot": 0,
+        "source_weight_version": 2,
+        "commit_from_version": 2,
+        "commit_weight_version": 3,
+        "version_staleness": 0,
+        "control_steps": 96,
+        "passed_gates": 1,
+        "collision": false,
+        "collision_reason": null,
+        "finished": false,
+        "max_x_mm": 23.538689539479044,
+        "min_z_mm": 10.724905834518593,
+        "max_z_mm": 11.184412910297143,
+        "final_vx_mm_s": 230.10287794961891,
+        "spawn_x_mm": 8.724375,
+        "spawn_z_mm": 11.191556914869098,
+        "initial_speed_mm_s": 393.75,
+        "initial_vz_mm_s": 0.0,
+        "environment_version": "v7",
+        "motor_boundary": "whole-body",
+        "curriculum_mode": "boundary-band",
+        "boundary_ease_level": 0.25,
+        "boundary_attempt_index": 2,
+        "boundary_batch_number": 0,
+        "frontier_role": "evaluate",
+        "frontier_target_gate": 1,
+        "course_start_gate_index": null,
+        "gate_height_role": null,
+        "gate_height_center_z_mm": null,
+        "gate_height_attempt_index": null,
+        "gate_height_batch_number": null,
+        "gate_height_learning": null,
+        "launch_round": 1,
+        "reward_events": 1,
+        "aversive_events": 0
+      },
+      {
+        "episode": 3,
+        "slot": 1,
+        "source_weight_version": 2,
+        "commit_from_version": 3,
+        "commit_weight_version": 4,
+        "version_staleness": 1,
+        "control_steps": 96,
+        "passed_gates": 1,
+        "collision": false,
+        "collision_reason": null,
+        "finished": false,
+        "max_x_mm": 23.765746540375552,
+        "min_z_mm": 10.674925404109171,
+        "max_z_mm": 11.221532838921075,
+        "final_vx_mm_s": 228.40318831556067,
+        "spawn_x_mm": 8.83575,
+        "spawn_z_mm": 11.2286819148691,
+        "initial_speed_mm_s": 400.0,
+        "initial_vz_mm_s": 0.0,
+        "environment_version": "v7",
+        "motor_boundary": "whole-body",
+        "curriculum_mode": "boundary-band",
+        "boundary_ease_level": 0.5,
+        "boundary_attempt_index": 3,
+        "boundary_batch_number": 0,
+        "frontier_role": "evaluate",
+        "frontier_target_gate": 1,
+        "course_start_gate_index": null,
+        "gate_height_role": null,
+        "gate_height_center_z_mm": null,
+        "gate_height_attempt_index": null,
+        "gate_height_batch_number": null,
+        "gate_height_learning": null,
+        "launch_round": 1,
+        "reward_events": 1,
+        "aversive_events": 0
+      },
+      {
+        "episode": 4,
+        "slot": 0,
+        "source_weight_version": 4,
+        "commit_from_version": 4,
+        "commit_weight_version": 5,
+        "version_staleness": 0,
+        "control_steps": 63,
+        "passed_gates": 1,
+        "collision": true,
+        "collision_reason": "gate",
+        "finished": false,
+        "max_x_mm": 26.074388065297477,
+        "min_z_mm": 10.836509990370725,
+        "max_z_mm": 11.295741845156705,
+        "final_vx_mm_s": 228.3621508933495,
+        "spawn_x_mm": 13.835,
+        "spawn_z_mm": 11.302931914869099,
+        "initial_speed_mm_s": 450.0,
+        "initial_vz_mm_s": 0.0,
+        "environment_version": "v7",
+        "motor_boundary": "whole-body",
+        "curriculum_mode": "boundary-band",
+        "boundary_ease_level": 0.75,
+        "boundary_attempt_index": 4,
+        "boundary_batch_number": 0,
+        "frontier_role": "focus",
+        "frontier_target_gate": 1,
+        "course_start_gate_index": 0,
+        "gate_height_role": null,
+        "gate_height_center_z_mm": null,
+        "gate_height_attempt_index": null,
+        "gate_height_batch_number": null,
+        "gate_height_learning": null,
+        "launch_round": 2,
+        "reward_events": 1,
+        "aversive_events": 1
+      },
+      {
+        "episode": 5,
+        "slot": 1,
+        "source_weight_version": 4,
+        "commit_from_version": 5,
+        "commit_weight_version": 6,
+        "version_staleness": 1,
+        "control_steps": 63,
+        "passed_gates": 1,
+        "collision": true,
+        "collision_reason": "gate",
+        "finished": false,
+        "max_x_mm": 26.074388065297477,
+        "min_z_mm": 10.836509990370725,
+        "max_z_mm": 11.295741845156705,
+        "final_vx_mm_s": 228.3621508933495,
+        "spawn_x_mm": 13.835,
+        "spawn_z_mm": 11.302931914869099,
+        "initial_speed_mm_s": 450.0,
+        "initial_vz_mm_s": 0.0,
+        "environment_version": "v7",
+        "motor_boundary": "whole-body",
+        "curriculum_mode": "boundary-band",
+        "boundary_ease_level": 0.0,
+        "boundary_attempt_index": 5,
+        "boundary_batch_number": 0,
+        "frontier_role": "focus",
+        "frontier_target_gate": 1,
+        "course_start_gate_index": 0,
+        "gate_height_role": null,
+        "gate_height_center_z_mm": null,
+        "gate_height_attempt_index": null,
+        "gate_height_batch_number": null,
+        "gate_height_learning": null,
+        "launch_round": 2,
+        "reward_events": 1,
+        "aversive_events": 1
+      }
+    ],
+    "curriculum_final": {
+      "schema_version": 4,
+      "spawn_x_mm": 8.613,
+      "spawn_z_mm": 11.154431914869098,
+      "initial_speed_mm_s": 387.5,
+      "successful_first_gates": 2,
+      "consecutive_failures": 0,
+      "curriculum_episodes": 6,
+      "target_x_mm": 0.0,
+      "target_z_mm": 8.91,
+      "target_speed_mm_s": 300.0,
+      "curriculum_complete": false,
+      "curriculum_mode": "boundary-band",
+      "environment_version": "v7",
+      "flight_body_version": "v7",
+      "motor_boundary": "whole-body",
+      "boundary_band": {
+        "schema_version": 1,
+        "initial_hard": {
+          "x_mm": 8.613,
+          "z_mm": 11.154431914869098,
+          "speed_mm_s": 387.5
+        },
+        "initial_easy": {
+          "x_mm": 9.0585,
+          "z_mm": 11.302931914869099,
+          "speed_mm_s": 412.5
+        },
+        "recovery_hard": {
+          "x_mm": 9.0585,
+          "z_mm": 11.302931914869099,
+          "speed_mm_s": 412.5
+        },
+        "recovery_easy": {
+          "x_mm": 9.504000000000001,
+          "z_mm": 11.451431914869099,
+          "speed_mm_s": 437.5
+        },
+        "hard": {
+          "x_mm": 8.613,
+          "z_mm": 11.154431914869098,
+          "speed_mm_s": 387.5
+        },
+        "easy": {
+          "x_mm": 9.0585,
+          "z_mm": 11.302931914869099,
+          "speed_mm_s": 412.5
+        },
+        "batch_number": 1,
+        "attempts_in_batch": 0,
+        "successes_in_batch": 0,
+        "completed_attempt_indices": [],
+        "group_attempts": {},
+        "group_successes": {},
+        "last_batch_success_rate": 1.0,
+        "last_batch_raw_success_rate": 1.0,
+        "last_batch_group_success_rates": {
+          "0": 1.0,
+          "1": 1.0
+        },
+        "last_batch_aggregation": "equal_group_mean",
+        "last_adjustment": "frontier_advanced",
+        "harder_shifts": 0,
+        "easier_shifts": 0,
+        "frontier_gate_count": 6,
+        "frontier_mastered_gates": 1,
+        "frontier_target_gates": 2,
+        "gate_pass_counts_in_batch": {},
+        "group_gate_pass_counts": {},
+        "last_batch_gate_pass_rates": {
+          "1": 1.0,
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "6": 0.0
+        },
+        "last_batch_raw_gate_pass_rates": {
+          "1": 1.0,
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "6": 0.0
+        },
+        "frontier_advances": 1,
+        "frontier_focus_target_gates": 2,
+        "frontier_focus_level": 0.0,
+        "frontier_focus_attempts_in_batch": 0,
+        "frontier_focus_successes_in_batch": 0,
+        "frontier_evaluation_attempts_in_batch": 0,
+        "frontier_evaluation_successes_in_batch": 0,
+        "last_frontier_focus_success_rate": 1.0,
+        "last_frontier_focus_level": 0.0
+      },
+      "boundary_ease_level": null,
+      "boundary_batch_number": 1,
+      "gate_frontier_mastered_gates": 1,
+      "gate_frontier_target_gates": 2
+    }
+  },
+  "reinforcement": {
+    "reward_group": {
+      "name": "reward_dan",
+      "description": "PAM01 group from embodiment-groups-v0.json",
+      "body_ids": [
+        53285,
+        62731,
+        63391,
+        74856,
+        80744,
+        83277,
+        88477,
+        90867,
+        93704,
+        99089,
+        100258,
+        113067,
+        114216,
+        114700,
+        129563,
+        138629,
+        141615,
+        144315,
+        145094,
+        145148,
+        146603,
+        150177,
+        153931,
+        155916,
+        156028,
+        156046,
+        159062,
+        159158,
+        164086,
+        165365,
+        167009,
+        169278,
+        181924,
+        185518,
+        197691,
+        198758,
+        205884,
+        212085,
+        252045,
+        325731,
+        506819,
+        523638,
+        533294,
+        543677
+      ],
+      "count": 44
+    },
+    "aversive_group": {
+      "name": "aversive_dan",
+      "description": "PPL1 ensemble from embodiment-groups-v0.json",
+      "body_ids": [
+        11327,
+        11752,
+        11900,
+        14182,
+        529512,
+        529516
+      ],
+      "count": 6
+    },
+    "reward_current": 2.0,
+    "aversive_current_max": 2.0,
+    "reinforcement_steps": 4,
+    "gate_collision_grading": {
+      "floor_fraction": 0.25,
+      "floor_current": 0.5,
+      "full_distance_mm": 2.0,
+      "formula": "I=0.5+(2.0-0.5)*min(1, miss_distance_mm/2.0)"
+    },
+    "non_gate_collision_current": 2.0,
+    "weight_update_path": "DAN current -> local modulation x local eligibility x learning rate; no scalar reward/loss enters weight update"
+  },
+  "weight_change": {
+    "edge_count": 25582938,
+    "changed_exact": 2163179,
+    "strengthened": 961611,
+    "weakened": 1201568,
+    "max_abs_delta": 0.0018288874998688698,
+    "mean_abs_delta": 1.8252000867360986e-07,
+    "rms_delta": 4.531023536048233e-06,
+    "l1_abs_delta": 4.669398065656424,
+    "delta_sum": 0.18848771695047617,
+    "threshold_counts": {
+      "0.0": 2163179,
+      "1e-07": 1461896,
+      "1e-06": 536060,
+      "1e-05": 66777,
+      "0.0001": 6338,
+      "0.001": 38,
+      "0.01": 0
+    },
+    "abs_delta_quantiles_nonzero": {
+      "0.5": 2.5890767574310303e-07,
+      "0.9": 2.584420144557953e-06,
+      "0.99": 3.364909440279045e-05,
+      "0.999": 0.00022726252675060038
+    }
+  },
+  "checkpoint_validation": {
+    "initial": {
+      "loaded_step": 0,
+      "global_weight_version": 0,
+      "path": "artifacts/canonical-experiment-v1/initial/checkpoint"
+    },
+    "final": {
+      "loaded_step": 484,
+      "global_weight_version": 6,
+      "path": "artifacts/canonical-experiment-v1/training/checkpoint"
+    }
+  },
+  "frozen_evaluation": {
+    "conditions": {
+      "snapshot": "artifacts/canonical-malecns-v1.0",
+      "viewer_graph": "artifacts/embodiment/neural-viewer-graph-v1.json",
+      "calibration": "artifacts/embodiment/neural-runtime-calibration-v1.json",
+      "haltere_map": "artifacts/canonical-malecns-v1.0/haltere-timing-afferents-v1.json",
+      "haltere_kind": "male-cns-haltere-timing-afferents-inferred-v1",
+      "haltere_gain": 0.05,
+      "haltere_transduction": "interaction-load-v2",
+      "body_version": "v7",
+      "environment_version": "v7",
+      "neutral_trim_pattern": "artifacts/derived/wing-pattern-neutral-trim-v1.npy",
+      "course_seed": 0,
+      "gate_count": 6,
+      "spawn_x_mm": 8.91,
+      "spawn_z_mm": 11.302931914869099,
+      "initial_speed_mm_s": 400.0,
+      "initial_vz_mm_s": 0.0,
+      "physics_steps": 10,
+      "max_control_steps": 128,
+      "vision_mode": "direct-ray",
+      "rays_per_ommatidium": 13,
+      "photoreceptor_current_gain": 2.0,
+      "plasticity": false,
+      "neuromodulatory_stimulation": false,
+      "reward_current": 0.0,
+      "aversive_current": 0.0,
+      "reinforcement_steps": 4,
+      "meaning": "Frozen stored-weight comparison. DAN groups are not stimulated because both current amplitudes are zero; collision/pass detection remains active."
+    },
+    "initial": {
+      "source": "fresh MaleCNS snapshot/global v0",
+      "result": {
+        "passed_gates": 1,
+        "terminal_reason": "gate",
+        "control_steps": 120,
+        "global_weight_version": 0,
+        "checkpoint_neural_step": 0
+      },
+      "final_frame_position_xyz": [
+        25.936972311713518,
+        0.03557250622662093,
+        10.513396163168686
+      ]
+    },
+    "final": {
+      "source": "canonical final checkpoint/global v6",
+      "result": {
+        "passed_gates": 1,
+        "terminal_reason": "gate",
+        "control_steps": 120,
+        "global_weight_version": 6,
+        "checkpoint_neural_step": 484
+      },
+      "final_frame_position_xyz": [
+        26.052986125834188,
+        0.058679625222039414,
+        10.411480983905488
+      ]
+    },
+    "behavioral_outcome_changed": false
+  },
+  "result_boundary": {
+    "supported": [
+      "Current clean production path runs end-to-end from fresh upstream sources.",
+      "Six training episodes produced committed nonzero weight changes.",
+      "Initial and final checkpoints can be loaded under the weights-only checkpoint contract.",
+      "Frozen initial and final evaluations can be reproduced under the recorded condition."
+    ],
+    "not_supported": [
+      "Behavioral improvement: initial and final frozen evaluations had the same gate-pass/collision outcome.",
+      "Held-out generalization.",
+      "Stable long-term learning.",
+      "Reproduction of historical v240/v960/v966 results."
+    ]
+  }
+}
