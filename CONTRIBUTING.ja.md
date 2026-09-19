@@ -1,10 +1,10 @@
-# virtual-flyへのContributing
+# virtual-flyへの貢献
 
 [English](CONTRIBUTING.md) · [日本語](CONTRIBUTING.ja.md) · [简体中文](CONTRIBUTING.zh-CN.md)
 
-`virtual-fly`は研究softwareです。実測生物学、文献由来、推定、工学的仮定、calibrationの区別を壊さない変更を歓迎します。
+`virtual-fly`は研究用ソフトウェアです。実測された生物学的事実、文献から採用した値、推定、工学的な仮定、較正値の区別を保つ変更を歓迎します。
 
-科学・runtime変更の前に以下を読んでください。
+神経モデルや実行系に関わる変更を行う前に、次の文書を読んでください。
 
 - [`README.ja.md`](README.ja.md)
 - [`AGENTS.md`](AGENTS.md)
@@ -12,115 +12,117 @@
 - [`docs/results.ja.md`](docs/results.ja.md)
 - [`docs/requirements.md`](docs/requirements.md)
 
-## Branch方針
+## ブランチ方針
 
-`main`はstable / publication branchです。`dev/flyppy-v3`等のdevelopment branchを使って構いませんが、公開milestoneはdefault branchを古いまま放置せず`main`へ統合します。
+`main`は安定版・公開用のブランチです。日常の開発には`dev/flyppy-v3`などの開発用ブランチを使って構いませんが、公開する節目では既定ブランチを古い状態のまま放置せず、検証済みの変更を`main`へ反映します。
 
-統合条件:
+統合する前に、少なくとも次を確認します。
 
-- 関連testが通る
-- provenance / semantic contractがdocumented
-- blocking regressionを隠していない
-- 一時generated artifactをsource controlへ混ぜていない
-- publication claimがそのlineageで実際に得たevidenceと一致している
+- 関連する試験が通っている
+- 来歴と、互換性に関わる意味上の仕様が文書化されている
+- 重大な既知の不具合を隠していない
+- 一時的な生成物をソース管理に混ぜていない
+- 公開時の主張が、その系統で実際に得られた証拠の範囲を越えていない
 
-## Scientific invariant
+## 科学上の不変条件
 
-明示的なproject-level設計変更なしに以下を導入しません。
+プロジェクト全体の設計を明示的に変更しない限り、次の仕組みを導入しません。
 
-- nervous-system learnerとしてのbackpropagation / gradient descent
-- Q-learning / policy gradient / actor-critic / 外部learned policy
-- 手書きFlyppy攻略policy
-- scalar rewardからの直接weight update
-- 既知の局所感覚回路を、最終出力だけ似せる外部feature extractor/classifierで置換すること
+- 神経系の学習器としての誤差逆伝播や勾配降下
+- Q学習、方策勾配、Actor-Critic、外部で学習した方策
+- Flyppyを攻略するための手書き行動規則
+- 単一の数値報酬から重みを直接更新する仕組み
+- 既知の局所感覚回路を、最終出力だけ似せる外部の特徴抽出器や分類器で置き換えること
 
-canonical architectureでの学習は次の経路です。
+基準となる構成では、学習は次の流れで生じます。
 
 ```text
-sensory stimulation
-    → neural dynamics
-    → behavior
-    → neuromodulatory stimulation
-    → local plasticity
-    → changed nervous system
+感覚刺激
+    → 神経活動
+    → 行動
+    → 神経修飾系への刺激
+    → 局所可塑性
+    → 変化した神経系
 ```
 
-## Provenance label
+## 来歴の区分
 
-可能な限り以下を区別します。
+値や接続、設定には、可能な限り次の区分を付けます。
 
-- `observed`
-- `literature`
-- `inferred`
-- `assumed`
-- `calibrated`
+- `observed` — 実測または上流データに直接存在するもの
+- `literature` — 文献から採用したもの
+- `inferred` — 実測情報から推定したもの
+- `assumed` — 未知部分を埋めるために仮定したもの
+- `calibrated` — 数値的・実験的に較正したもの
 
-推定・calibrationされたboundaryを直接観測された生物学的事実のように記述しません。
+推定値や較正値を、直接観測された生物学的事実のように記述しないでください。
 
-## Historical / canonical result
+## 過去の結果と基準結果
 
-v240/v960/v966/v1704等のhistorical artifactやdiagnosticはprovenanceのため保持します。current canonical resultとして書き換えません。
+v240 / v960 / v966 / v1704などの過去の実験生成物や診断結果は、研究の来歴として保持します。ただし、それらを現在の基準結果として読み替えません。
 
-公開result claimは [`docs/results.ja.md`](docs/results.ja.md) と [`canonical/canonical-v1/`](canonical/canonical-v1/) に従います。
+公開時に結果を主張する場合は、[`docs/results.ja.md`](docs/results.ja.md) と [`canonical/canonical-v1/`](canonical/canonical-v1/) を基準にしてください。
 
-## 変更単位
+## 変更の単位
 
-1変更1目的を優先します。例:
+1つの変更は、可能な限り1つの検証可能な目的に絞ってください。例:
 
-- MaleCNS data semantics
-- neural state stepping
-- plasticity
-- checkpoint format
-- sensory transduction
-- motor/peripheral mapping
-- body physics
-- reproducibility/reporting
+- MaleCNSデータの意味づけ
+- 神経状態の時間発展
+- 可塑性則
+- チェックポイント形式
+- 感覚変換
+- 運動ニューロンから末梢への対応
+- 身体物理
+- 再現性やレポート生成
 
-神経dynamics、plasticity、neuromodulation、sensory transduction、CNS→body mapping、reinforcement刺激対象、checkpoint semanticsを変更する場合は関連文書も同じ変更で更新します。
+神経ダイナミクス、可塑性、神経修飾、感覚変換、CNSから身体への対応、報酬・嫌悪刺激の対象、チェックポイントの意味を変更する場合は、関連文書も同じ変更で更新してください。
 
-## Testing
+## 試験
 
-新しいcomputational core変更には必要最小限の組み合わせで以下を追加します。
+計算の中核を変更する場合は、必要に応じて次を追加・更新してください。
 
-- unit test
-- deterministic/reference test
-- checkpoint round-trip
-- semantic contract test
-- 必要なbackend parity check
+- 単体試験
+- 決定論的な参照試験
+- チェックポイントの保存・再読み込み試験
+- 意味上の仕様を確認する試験
+- 必要な場合の実行方式間の一致確認
 
-高速化のために科学意味論を黙って変えてはいけません。
+高速化のために、科学上の意味を黙って変えてはいけません。
 
-## Data / generated artifact
+## データと生成物
 
-大容量外部datasetや生成artifactをGitへcommitしません。
+大容量の外部データや生成物はGitへ直接登録しません。
 
-Git外に置くものの例:
+Gitの外に置くものの例:
 
-- raw MaleCNS download
-- large normalized snapshot
-- checkpoint
-- trajectory
-- rendered MP4
-- build cache / profiling trace
+- MaleCNSの生データ
+- 大容量の正規化済みスナップショット
+- チェックポイント
+- 軌跡データ
+- 描画済みMP4
+- ビルドキャッシュや性能計測の詳細記録
 
-代わりにsmall manifest、hash、config、reportを追跡します。
+代わりに、小さな来歴記録、ハッシュ値、設定、要約レポートを追跡します。
 
-## Documentation language
+## 文書の言語
 
-公開向けdocumentationは英語defaultです。主要な公開入口には日本語・簡体字中国語版が望ましいです。
+公開向け文書は英語を既定とし、主要な入口には日本語版と簡体字中国語版も用意します。
 
-内部research/development noteは、元contextを保つため日本語のままで構いません。historical recordを見た目の統一だけのため一括翻訳しません。
+翻訳版は英語の単語を機械的に残すのではなく、それぞれの言語として自然に読める文章にしてください。コード上の識別子、ファイル名、MaleCNS / FlyBody / MuJoCoなどの固有名詞は必要に応じて原表記を使います。
 
-## Pull request / commit
+内部の研究・開発記録は、当時の文脈を保つため日本語のままで構いません。見た目を統一するためだけに過去資料を一括翻訳しないでください。
 
-科学的意味を持つ変更では次を記載します。
+## Pull Requestとコミット
+
+科学的な意味を持つ変更では、少なくとも次を記録してください。
 
 - 何を変えたか
 - なぜ変えたか
-- observed/literature/inferred/assumed/calibratedのどれか
-- どの過去experimentと互換性がなくなるか
-- どうtestしたか
+- `observed` / `literature` / `inferred` / `assumed` / `calibrated`のどれに当たるか
+- どの過去実験と互換性がなくなるか
+- どのように検証したか
 
-## License
+## ライセンス
 
-contributionした独自成果物はrepositoryの [MIT License](LICENSE) で配布されることに同意するものとします。第三者code/data/assetは、利用条件が許可し必要なattribution/noticeを含められる場合のみ追加してください。
+貢献した独自成果物は、このリポジトリの [MIT License](LICENSE) のもとで配布されることに同意するものとします。第三者のコード、データ、素材を追加する場合は、その利用条件が再配布を許可しており、必要な帰属表示や注意書きを併記できることを確認してください。

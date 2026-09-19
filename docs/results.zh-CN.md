@@ -1,109 +1,109 @@
-# 结果与 provenance 边界
+# 结果与来源记录的区分
 
 [English](results.md) · [日本語](results.ja.md) · [简体中文](results.zh-CN.md)
 
-本文规定哪些结果可以称为“当前 canonical result”，哪些结果只作为 historical development evidence 保留。
+本文明确区分：哪些结果可以作为当前的基准结果，哪些结果只作为历史开发记录保留。
 
-## 1. Canonical experiment v1
+## 1. 基准实验（canonical v1）
 
-Canonical v1 是对外公开时的基准实验。其科学执行部分固定在 clean Git commit：
+canonical v1 是对外发布时的基准实验。科学计算部分固定在以下 Git 提交，并且执行时工作树没有未提交修改：
 
 ```text
 7fa464aad7269d34f46f1171080b51e095d1d811
 ```
 
-简要结果见 [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md)，完整 provenance 见 [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json)。
+简要结果见 [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md)，完整来源记录见 [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json)。
 
-### 条件
+### 实验条件
 
-- fresh 获取 official MaleCNS v1.0 source；
-- fresh 构建 current-semantics MaleCNS snapshot；
-- 166,700 neurons / 25,582,938 directed edges；
-- class-DAN semantics：公开 `class=DAN` annotation + dopamine consensus；
-- body v7 / environment v7；
-- direct-ray vision，13 rays/ommatidium；
-- 97-neuron haltere timing subset，gain 0.05，`interaction-load-v2`；
-- population 2，async shared weights；
-- boundary-band curriculum；
-- 6 training episodes；
-- global-weights-only checkpoint semantics。
+- 从官方来源重新获取 MaleCNS v1.0 数据
+- 按当前规则重新生成 MaleCNS 快照
+- 166,700 个神经元 / 25,582,938 条有向边
+- DAN 定义：公开注释 `class=DAN` 与多巴胺判定同时成立
+- 身体 v7 / 环境 v7
+- `direct-ray` 视觉，每个小眼 13 条射线
+- 平衡棒输入：97 个神经元的时序子集，增益 0.05，`interaction-load-v2`
+- 同时运行 2 个个体，异步共享权重
+- 使用 `boundary-band` 调整经验条件
+- 学习 6 个回合
+- 检查点只把共享权重视为跨回合持久状态
 
-### Canonical 中实际观测到的结果
+### 实际观测结果
 
-- global weight version：v0 → v6；
-- aggregate neural step：484；
-- 数值精确发生变化的存储 edge：**2,163,179 / 25,582,938**；
-- `|Δw| > 1e-7`：1,461,896 edges；
-- `|Δw| > 1e-6`：536,060 edges；
-- strengthened：961,611 edges；
-- weakened：1,201,568 edges；
-- maximum `|Δw|`：0.0018288875。
+- 共享权重版本：v0 → v6
+- 神经更新总步数：484
+- 保存权重实际发生变化的边：**2,163,179 / 25,582,938**
+- `|Δw| > 1e-7`：1,461,896 条边
+- `|Δw| > 1e-6`：536,060 条边
+- 权重增强的边：961,611 条
+- 权重减弱的边：1,201,568 条
+- 最大 `|Δw|`：0.0018288875
 
-Frozen evaluation 关闭 plasticity 和任务事件触发的 DAN current。initial v0 与 final v6 都通过 1 个 gate，然后在 control step 120 撞到下一个 gate。
+固定评估关闭可塑性和任务事件触发的 DAN 刺激。初始状态 v0 与最终状态 v6 都通过了 1 道门，并在控制步 120 撞上下一道门。
 
-**解释：** canonical v1 证明了一个 provenance 可追踪的 closed-loop run，其中当前局部可塑性实现改变了存储的 MaleCNS 权重；但这个短实验**没有显示类别意义上的行为改善**，也没有证明泛化或长期学习稳定性。
+**解释：** canonical v1 以完整可追踪来源的闭环运行证明了：当前局部可塑性实现确实会改变 MaleCNS 中保存的权重。但这个较短的实验**没有观察到明确的行为改善**，也没有证明泛化能力或长期学习稳定性。
 
-## 2. End-to-end 重现验证
+## 2. 完整复现验证
 
-2026-09-19，我们从 clean `7fa464a` isolated checkout 开始，完整执行了 `canonical/canonical-v1/reproduce.sh`。
+2026 年 9 月 19 日，我们使用 `canonical/canonical-v1/reproduce.sh`，从无修改的 `7fa464a` 创建独立工作树，并从头到尾执行了完整复现流程。
 
-已验证：
+已经验证：
 
-- fresh MaleCNS source download；
-- fresh snapshot 构建；
-- fresh derived artifact 构建；
-- 所有记录的 static artifact hash 均 byte-for-byte 一致；
-- neural calibration 从 stable scales 0.004–0.007 中选择 0.005；
-- canonical 6 episode training 完成；
-- global v0 → v6；
-- 精确改变 2,163,179 个 edge，与 reference 一致；
-- initial/final checkpoint 均能在新的 bridge process 中重新加载；
-- frozen initial/final evaluation 均与 reference outcome 一致；
-- 最终 pinned scientific worktree 保持 clean。
+- 从官方来源重新获取 MaleCNS 数据
+- 重新生成快照
+- 重新生成派生产物
+- 所有记录的静态产物哈希值都逐字节一致
+- 神经系统校准在稳定区间 0.004～0.007 中选择 0.005
+- 完成 6 个回合的基准学习
+- 共享权重 v0 → v6
+- 恰好 2,163,179 条边的权重发生变化，与基准记录一致
+- 初始和最终检查点都能在新的神经桥接进程中重新载入
+- 初始和最终固定评估都与基准记录一致
+- 结束时，固定的科学计算工作树仍然没有未提交修改
 
-大型 verification bundle 只作为临时数据存在。验证后，仅保留轻量 manifest/report 在 Git repository 外。当前 reproduction script 默认把大型 verification run 写到 repository 外。
+复现过程中生成的大型数据包只作为临时产物存在。验证完成后，仅在仓库之外保留体积较小的来源记录和报告。当前复现脚本也会默认把大型输出写到仓库之外。
 
-## 3. Historical development results
+## 3. 历史开发结果
 
-v240、v960、v966、v1704 以及相关 posting/diagnostic run 作为 **historical result** 保留。
+v240、v960、v966、v1704 以及相关的公开展示和诊断运行结果，都作为**历史结果**保留。
 
-这些结果对于理解开发过程有科学价值，但不能与 canonical v1 互换。[`reproducibility-fixes-2026-09-19.md`](reproducibility-fixes-2026-09-19.md) 的 provenance audit 记录了重要 lineage 差异，包括旧 dopamine-source semantics、pre-commit provenance、mixed v966 lineage，以及与当前 frozen canonical comparison 不同的 evaluation 条件。
+这些资料对于理解开发过程仍然有价值，但不能与 canonical v1 视为同一实验。[`reproducibility-fixes-2026-09-19.md`](reproducibility-fixes-2026-09-19.md) 记录了其中的重要差异，包括早期的多巴胺来源定义、尚未固定到明确提交时的来源问题、v966 中不同开发阶段条件的混合，以及与当前固定评估不同的评估条件。
 
-不得把 historical behavior 描述成由 current class-DAN canonical semantics 生成的结果。
+不得把历史行为结果描述成由当前 class-DAN 定义和 canonical v1 条件产生的结果。
 
-## 4. Historical Before/After media
+## 4. 历史开发系的 Before/After 动画
 
-用于公开展示的 historical comparison：
+公开展示用的对比动画对应以下历史状态：
 
-- **before:** global weight version v240；
-- **after:** global weight version v966；
-- body/environment：v7/v7；
-- gate 2 center：13.703125 mm；
-- evaluation plasticity：off；
-- before outcome：1 gate；
-- after outcome：2 gates。
+- **before：** 共享权重 v240
+- **after：** 共享权重 v966
+- 身体 / 环境：v7 / v7
+- 第 2 道门中心高度：13.703125 mm
+- 评估期间可塑性：关闭
+- before 结果：通过 1 道门
+- after 结果：通过 2 道门
 
-这份 media 适合作为 historical learned-state comparison 的可视化，但不是 canonical behavioral result。
+这段动画适合用来直观比较历史开发过程中两个已学习状态，但它不是 canonical v1 的行为结果。
 
-Git repository 只追踪一张小型 representative image 和 release-asset manifest。完整 MP4 与 raw playback JSON 留在 Git 之外，并应在 GitHub Release 中明确标记为 historical。见 [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json)。
+README 中的 GIF 由公开展示用原始视频 `before-after-neural.mp4` 以 1.5 倍速转换得到。原始视频、GIF 和相关原始回放记录的来源与哈希值见 [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json)。大型原始视频和回放记录不会直接提交到 Git，而计划在 GitHub 发布版本中明确标注为历史资料后发布。
 
-## 5. README、Release、论文与公开帖文中的 claim 规则
+## 5. README、发布版本、论文和公开帖子中的表述范围
 
-Canonical v1 支持以下表述：
+canonical v1 支持以下表述：
 
-- 使用公开 MaleCNS connectome 作为初始神经结构；
-- closed-loop 视觉/机械感觉输入进入 neural runtime；
-- individual released motor-neuron output 通过 peripheral model 驱动物理身体；
-- 任务结果刺激选定的真实 DAN population，而不是直接提供 scalar weight-update target；
-- 当前局部可塑性实现能够改变存储的 CNS 权重；
-- canonical data/provenance path 可以 end-to-end 重现。
+- 使用公开 MaleCNS 连接组作为初始神经结构
+- 闭环的视觉输入和机械感觉输入会进入神经系统
+- 公开的单个运动神经元输出会通过外周模型驱动物理身体
+- 任务结果不会作为“正确权重”直接提供，而是转换为对选定真实 DAN 神经元群的刺激
+- 当前局部可塑性实现能够改变保存的 CNS 权重
+- canonical v1 从数据获取到评估的完整流程可以按一套明确步骤复现
 
-Canonical v1 **不支持**以下表述：
+canonical v1 **不支持**以下表述：
 
-- “canonical v1 学会了解决 Flyppy”；
-- “canonical v1 改善了行为”；
-- “当前 simulator 已完整复制真实果蝇”；
-- “historical v966 behavior 已在 current canonical semantics 下重现”；
-- “当前模型已经证明一般性学习能力或长期稳定性”。
+- “canonical v1 学会了解决 Flyppy”
+- “canonical v1 改善了行为”
+- “当前模拟器已经完整复制了真实果蝇”
+- “历史开发中的 v966 行为已经在当前 canonical v1 相同条件和定义下得到复现”
+- “当前模型已经证明一般性的学习能力或长期稳定性”
 
-展示 historical media 时，应明确标记 historical，并链接到本文或 canonical reference report。
+展示历史动画或历史结果时，应明确说明其属于早期开发资料，并链接到本文或 canonical v1 的结果摘要。

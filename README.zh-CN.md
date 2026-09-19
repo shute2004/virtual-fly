@@ -2,109 +2,111 @@
 
 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 
-`virtual-fly` 是一个研究项目：以公开的成年雄性黑腹果蝇（*Drosophila melanogaster*）MaleCNS 连接组作为初始状态，让神经活动、神经调制和局部突触可塑性随时间演化，并与 FlyBody / MuJoCo 身体和物理环境形成闭环。
+`virtual-fly` 是一个研究项目：以成年雄性果蝇公开的 MaleCNS 连接组作为初始状态，让神经活动、神经调制和局部突触可塑性随时间演化，并与 FlyBody / MuJoCo 身体及物理环境形成闭环。
 
-它**不是**“用果蝇连接组训练一个人工神经网络”。当前 production path 不使用反向传播、梯度下降、Q-learning、policy gradient、外部神经网络控制器，也不包含手写的障碍物攻略逻辑。与学习相关的权重变化来自神经 runtime 内部的局部活动、eligibility 和多巴胺能调制。
+它并不是“把果蝇连接组当作人工神经网络的线路来训练”。当前实现不使用反向传播、梯度下降、Q 学习、策略梯度、外部神经网络控制器，也不使用为了躲避障碍物而手写的行为规则。与学习相关的权重变化由局部神经活动、资格迹和多巴胺能神经调制共同产生，并发生在模拟神经系统内部。
 
-> **项目状态：** canonical experiment v1 以及 end-to-end reproducer 已完成。canonical run 证明了当前代码下完整可追踪的执行链，并确认局部可塑性能够改变存储的 MaleCNS 权重；但这个短 canonical run **没有显示出类别意义上的行为改善**。
+> **当前状态：** 基准实验 canonical v1 及其完整复现脚本已经完成。canonical v1 证明了从当前代码到实验结果的来源链可以完整追踪，也确认局部可塑性确实会改变 MaleCNS 中保存的权重。但在这个较短的实验中，**没有观察到明确的行为改善**。
 
-## Historical visualization
+## 历史开发系的对比动画
 
-![Historical v240 to v966 Before/After visualization](docs/assets/historical-v240-v966-before-after.gif)
+![历史开发系 v240 到 v966 的 Before/After 对比](docs/assets/historical-v240-v966-before-after.gif)
 
-这个动画由发布用母版 `before-after-neural.mp4` 生成，并为了 README 浏览采用 **1.5 倍速**。它同时展示 historical `v240 → v966` Before/After 以及身体 + 神经 viewer，因此放在页面上方作为项目最直观的视觉入口。但它**不是 canonical experiment 的证据**：v240/v960/v966/v1704 属于较早 lineage，其 provenance 不同，部分语义也不同。asset 的 provenance 与 hash 记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json)。
+这段动画由公开展示用的原始视频 `before-after-neural.mp4` 转制而来。为了便于在 README 中观看，播放速度提高到了 **1.5 倍**。它同时展示了 `v240 → v966` 的 Before/After、身体运动以及神经活动可视化，因此被放在页面靠前的位置，作为理解项目的直观入口。
 
-## Canonical result
+但它**不是 canonical v1 的实验依据**。v240 / v960 / v966 / v1704 属于早期开发系，与当前基准实验的来源记录不同，部分运行定义也不同。原始视频、转换后的 GIF 及其哈希值记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) 中。
 
-对外公开时的基准结果位于 [`canonical/canonical-v1/`](canonical/canonical-v1/README.md)，并刻意与早期开发 lineage 分离。
+## 基准实验（canonical v1）
 
-| 项目 | Canonical v1 |
+对外发布时的基准结果位于 [`canonical/canonical-v1/`](canonical/canonical-v1/README.md)。它与早期开发结果有意分开保存。
+
+| 项目 | canonical v1 |
 |---|---|
-| 科学执行代码 | `7fa464aad7269d34f46f1171080b51e095d1d811`（clean） |
-| MaleCNS snapshot | 166,700 neurons / 25,582,938 directed edges |
-| DAN semantics | 公开 `class=DAN` annotation + dopamine consensus；338 modulators |
-| Body / environment | v7 / v7 |
-| Vision | direct-ray，13 rays/ommatidium |
-| Haltere input | 97-neuron timing subset，gain `0.05`，`interaction-load-v2` |
-| Training | 6 episodes，population 2，async shared weights，boundary-band |
-| Global weight version | v0 → v6 |
-| Aggregate neural step | 484 |
-| 数值发生精确变化的存储 edge | 2,163,179 |
-| Frozen initial evaluation | 通过 1 个 gate，随后在 control step 120 撞到下一个 gate |
-| Frozen final evaluation | 通过 1 个 gate，随后在 control step 120 撞到下一个 gate |
+| 科学计算所用代码 | `7fa464aad7269d34f46f1171080b51e095d1d811`（工作树无修改） |
+| MaleCNS 快照 | 166,700 个神经元 / 25,582,938 条有向边 |
+| DAN 定义 | 公开注释 `class=DAN` 与多巴胺判定同时成立，共 338 个 |
+| 身体 / 环境 | v7 / v7 |
+| 视觉 | `direct-ray`，每个小眼 13 条射线 |
+| 平衡棒输入 | 97 个神经元的时序子集，增益 `0.05`，`interaction-load-v2` |
+| 学习条件 | 6 个回合，同时运行 2 个个体，异步共享权重，`boundary-band` |
+| 共享权重版本 | v0 → v6 |
+| 神经更新总步数 | 484 |
+| 保存权重实际发生变化的边 | 2,163,179 |
+| 初始状态固定评估 | 通过 1 个门后，在控制步 120 撞上下一道门 |
+| 最终状态固定评估 | 通过 1 个门后，在控制步 120 撞上下一道门 |
 
-Frozen evaluation 同时关闭 plasticity 和任务事件触发的 DAN stimulation（`reward_current=0`, `aversive_current=0`）。因此 canonical v1 证明的是：**在当前局部可塑性语义下，存储权重发生了变化**；它并不证明行为改善、泛化或长期学习稳定性。
+固定评估同时关闭可塑性和任务事件触发的 DAN 刺激（`reward_current=0`, `aversive_current=0`）。因此，canonical v1 能够说明的是：**在当前局部可塑性规则下，保存的权重确实发生了变化**。它并不能证明行为改善、泛化能力或长期学习稳定性。
 
-2026-09-19，我们从 clean `7fa464a` 重新执行了完整 end-to-end reproducer。所有由 source 派生的静态 artifact hash 都与 reference 一致；训练到达 global v6；恰好 2,163,179 个存储 edge 发生变化；initial/final checkpoint 均可重新加载；两次 frozen evaluation 的结果也与 reference 一致。
+2026 年 9 月 19 日，我们从无修改的 `7fa464a` 开始重新执行了完整复现流程。由源数据生成的静态产物哈希值全部与记录的基准值一致；学习顺利进行到共享权重 v6；发生变化的边数同样是 2,163,179；初始和最终检查点都能重新载入；两次固定评估的结果也与基准记录一致。
 
 详细资料：
 
-- [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — canonical 结果简报
-- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完整 provenance
-- [`docs/results.zh-CN.md`](docs/results.zh-CN.md) — canonical 与 historical result 的边界
-- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — provenance / semantics 审计与修复
+- [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — 基准实验结果摘要
+- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完整来源记录
+- [`docs/results.zh-CN.md`](docs/results.zh-CN.md) — 基准结果与历史开发结果的区分
+- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — 来源记录与运行定义的审计、修复说明
 
-## 当前实际实现的内容
+## 当前已经实现的内容
 
-当前 production path：
+当前执行路径如下：
 
 ```text
-Flyppy physical world
+Flyppy 物理环境
         ↓
-FlyBody compound-eye geometry + local direct rays
+FlyBody 复眼几何 + 局部 direct-ray
         ↓
-released MaleCNS R1-R6 body-ID currents
+向公开 MaleCNS 中对应的 R1-R6 body ID 注入电流
         ↓
-whole-MaleCNS neural dynamics
+整个 MaleCNS 的神经活动
         ↓
-local eligibility + class-DAN-mediated plasticity
+局部资格迹 + class-DAN 神经调制与可塑性
         ↓
-individual released motor-neuron spikes
+公开运动神经元逐个产生的放电
         ↓
-whole-body peripheral muscle state
+全身外周肌肉状态
         ↓
-FlyBody / MuJoCo physical actuation
+FlyBody / MuJoCo 物理驱动
         ↓
-Flyppy physical world
+Flyppy 物理环境
 ```
 
-通过 gate 或发生 collision 等任务事件不会直接写入权重。事件只会转换为对选定真实 DAN 群体的电流刺激，之后的突触变化由 neural runtime 内的局部规则计算。
+通过门或发生碰撞等任务事件不会直接改写权重。事件会被转换为对选定真实 DAN 神经元群的电流刺激，之后的突触变化由神经系统内部的局部规则计算。
 
-当前的重要边界：
+当前几个重要边界如下：
 
-- MaleCNS source snapshot 是 immutable 的；
-- 视觉输入保留局部 retinotopic R1-R6 identity，不在 CNS 外加入 obstacle classifier；
-- 运动输出维持 individual released motor-neuron ID，不使用 population-average action decoder；
-- viewer 仅用于 observer，不向 training 反馈状态；
-- population training 共享一个 global weight state，但 episode-local 的 membrane/spike/refractory/trace/modulation/eligibility 会在 episode 之间 reset；
-- 当前 population checkpoint 持久化 global weights，并不是完整持续保存的生物个体状态。
+- MaleCNS 的原始快照只读，不在学习过程中改写。
+- 视觉输入不使用外部障碍物分类器，并保留 R1-R6 的局部视网膜位置关系。
+- 运动输出不使用“先对神经元群求平均再选择动作”的解码器，而是保留公开运动神经元各自的`body ID`。
+- 可视化界面只负责观察，不会把状态反馈给学习过程。
+- 并行学习只有一份共享权重；膜电位、放电状态、不应期、活动历史、神经调制和资格迹等短期状态会在每个回合重新初始化。
+- 当前并行学习的检查点只把共享权重视为跨回合保存的状态，并不是一个虚拟个体全部状态的持久化快照。
 
-实现细节见 [`docs/architecture.zh-CN.md`](docs/architecture.zh-CN.md) 与 [`docs/code-structure.md`](docs/code-structure.md)。
+实现细节见 [`docs/architecture.zh-CN.md`](docs/architecture.zh-CN.md) 和 [`docs/code-structure.md`](docs/code-structure.md)。
 
-## 本项目没有声称什么
+## 本项目没有宣称的内容
 
-`virtual-fly` 是一个具有生物学依据的计算重建项目，并不声称当前模拟器已经完整复制了真实果蝇。
+`virtual-fly` 试图依据生物学资料在计算机中重建果蝇，但并不宣称当前模拟器已经完整复制了真实果蝇。
 
-尤其是 canonical v1 **没有**证明：
+尤其是，canonical v1 **没有**证明以下内容：
 
-- 6 个 episode 后出现类别意义上的行为改善；
-- 任务泛化；
-- 长期学习稳定性；
-- 每一个神经元、突触、感觉器官和飞行肌肉都具有完整的生物物理保真度；
-- historical v240/v960/v966/v1704 与当前 canonical semantics 等价。
+- 6 个回合之后出现明确的行为改善
+- 对未见条件具有泛化能力
+- 长期学习过程稳定
+- 所有神经元、突触、感觉器官和飞行肌肉都得到完整的生物物理重建
+- 历史开发结果 v240 / v960 / v966 / v1704 与当前 canonical v1 是在相同条件和相同运行定义下得到的
 
-项目会尽可能区分 upstream 观测数据、文献来源、推断、工程假设与 calibration。
+我们会尽可能区分：上游数据中直接观测到的值、文献采用值、推断值、工程假设和校准值。
 
-## Installation
+## 安装
 
 ### 环境要求
 
 - Python `>=3.12,<3.15`
 - [`uv`](https://docs.astral.sh/uv/)
-- Rust toolchain / Cargo
-- 可运行 MuJoCo 的本地环境
+- Rust 开发环境 / Cargo
+- 能够运行 MuJoCo 的本地环境
 
-当前 canonical reference 在 macOS / Apple Metal GPU 上生成。source-derived static artifact 使用 hash 进行验证，但不保证不同硬件上的 async GPU/MuJoCo trajectory bit-identical。
+当前基准结果在 macOS / Apple Metal GPU 上生成。由源数据确定性生成的静态产物会通过哈希值核对，但我们不保证包含异步执行的 GPU / MuJoCo 轨迹在不同硬件之间逐位完全一致。
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
@@ -112,61 +114,61 @@ cd virtual-fly
 uv sync --frozen
 ```
 
-大型 upstream dataset 与生成的 experiment artifact 不存入 Git。
+大型外部数据和实验生成物不会直接提交到 Git。
 
-## 重现 Canonical v1
+## 复现 canonical v1
 
-canonical reproducer 会自动执行：fresh official source 获取、snapshot/derived artifact 重建、6 episode canonical training、initial/final checkpoint 验证、frozen evaluation 和 provenance manifest 生成。
+复现脚本会一次完成：从官方来源重新获取 MaleCNS 数据、重新生成快照和派生产物、进行 6 个回合的基准学习、验证初始和最终检查点、执行固定评估并生成来源记录。
 
 ```bash
 bash canonical/canonical-v1/reproduce.sh
 ```
 
-大型输出 bundle 默认写到 repository 之外：
+大型输出默认保存在仓库之外：
 
 ```text
 ${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/
 ```
 
-可通过 `VF_CANONICAL_OUTPUT_ROOT=/path/to/output` 指定其他路径。科学计算部分始终在固定到 clean `7fa464a` 的 isolated worktree 中执行。
+可通过 `VF_CANONICAL_OUTPUT_ROOT=/path/to/output` 指定其他保存位置。科学计算部分始终在由无修改的 `7fa464a` 创建的独立工作树中执行。
 
-## 当前 development training
+## 当前开发用学习
 
-通用 production entry point：
+通常使用以下入口：
 
 ```bash
 bash scripts/dev/train_flyppy_population.sh
 ```
 
-`scripts/dev/train_flyppy_v3_population.sh` 保留为 compatibility wrapper。development run 与持续更新的 report 不会自动成为 canonical result。
+`scripts/dev/train_flyppy_v3_population.sh` 仅作为兼容旧调用方式的包装脚本保留。开发过程中的运行结果和持续更新的报告不会自动成为基准结果。
 
-## Repository 结构
+## 仓库结构
 
 ```text
-canonical/      canonical experiment package 与 reference provenance
-crates/         Rust neural runtime / runner
-docs/           architecture、科学契约、reproducibility 与历史资料
-reports/        小型 diagnostics 与 historical development report
-scripts/        data preparation、analysis、compatibility CLI、launcher
-src/            当前 Python package (`virtual_fly`)
-tests/          semantics / scheduling / runtime / reproducibility tests
-visualization/  observer-only neural viewer
-artifacts/      本地大型 data/checkpoint/video；不进入 Git
-release/        release asset manifest；大型文件本体不进入 Git
+canonical/      基准实验包与来源记录
+crates/         Rust 神经运行系统与执行程序
+docs/           架构、科学约束、复现说明和历史资料
+reports/        小型诊断结果与历史开发报告
+scripts/        数据准备、分析、兼容命令和启动脚本
+src/            当前 Python 包（`virtual_fly`）
+tests/          运行定义、调度、运行系统和复现性测试
+visualization/  只用于观察的神经活动可视化
+artifacts/      本地大型数据、检查点和视频，不纳入 Git
+release/        发布文件的来源记录，大型文件本体不纳入 Git
 ```
 
-文档入口见 [`docs/README.zh-CN.md`](docs/README.zh-CN.md)。
+文档导航见 [`docs/README.zh-CN.md`](docs/README.zh-CN.md)。
 
-## 结果、provenance 与大型数据
+## 结果、来源记录与大型数据
 
-historical development result 作为开发来历保留，但不会被追溯性地重新标记为 canonical。边界写在 [`docs/results.zh-CN.md`](docs/results.zh-CN.md)。
+历史开发结果具有研究追踪价值，因此会被保留，但不会被重新解释为当前的基准结果。具体区分见 [`docs/results.zh-CN.md`](docs/results.zh-CN.md)。
 
-MaleCNS raw、snapshot、checkpoint、trajectory、rendered video、build cache 等大型文件不进入 Git，只追踪小型 manifest、hash 和 report。
+MaleCNS 生数据、快照、检查点、轨迹数据、渲染视频、构建缓存等大型文件不会提交到 Git；仓库只追踪体积较小的来源记录、哈希值、配置和报告。
 
-## Citation
+## 引用
 
-引用 metadata 位于 [`CITATION.cff`](CITATION.cff)。用于长期归档的 GitHub Release 应从 publication branch 的 tag 创建并与 Zenodo 集成。详见 [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md)。
+引用信息见 [`CITATION.cff`](CITATION.cff)。用于长期存档的 GitHub 发布版本将从公开分支上的标签创建，并计划与 Zenodo 联动。详细流程见 [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md)。
 
-## License
+## 许可证
 
-`virtual-fly` 自有 source code 与 documentation 使用 [MIT License](LICENSE)。upstream dataset、software、model asset，以及包含第三方 material 的 generated media 仍遵循各自的使用条款。详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+`virtual-fly` 自有的源代码和文档采用 [MIT License](LICENSE)。外部数据、外部软件、外部模型资源以及包含第三方材料的生成内容，仍分别受其原始许可条款约束。详情见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

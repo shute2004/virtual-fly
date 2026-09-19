@@ -1,158 +1,158 @@
-# Embodiment v0
+# 身体・環境接続 v0
 
-## 1. 現在の範囲
+## 1. この段階で扱う範囲
 
-このsliceでは、外部policyを導入せず、MaleCNS神経ランタイムをFlyBodyとFlyppy環境へ接続する。
+この段階では、外部の行動方策を導入せず、MaleCNSの神経実行系をFlyBodyとFlyppy環境へ接続する。
 
-実装済み:
+実装済みの要素:
 
-- FlyGym 2.1.0 / FlyBodyによる身体・MuJoCo物理。
-- FlyGym 2.1.0のFlyBody変換で省略されている左右wing fluid geometryの復元。
-- 元FlyBody飛翔タスクに合わせたwing actuator gain、wing stiffness / damping、50 µs physics timestep、空気密度・粘性の単位補正。
-- FlyBodyの左右wing DoF駆動。
-- FlyBody公式飛翔条件に基づく47.5度body pitchと、episode開始時だけ与える一回限りの前進初速度。
-- JSONL stdin/stdoutで常駐するRust MaleCNS bridge。
-- body IDを指定した個々のMaleCNSニューロンへの直接外部電流刺激。
-- MaleCNS注釈からのbilateral DNg02 / PAM08 / PPL1抽出。
-- MaleCNS `assignedOlHex1` / `assignedOlHex2` に基づくretinotopic optic-column座標。
-- 各annotated R1-R6について、座標付きL1/L2/L3への全released contactをcolumn単位で合算し、最大contact columnをそのretinotopic位置として推定するprojection。
-- R1-R6自身の `rootSide` による左右眼判定。
-- FlyBody眼カメラの局所受光量を、対応するreleased R1-R6だけへ電流として与える感覚境界。
-- DNg02左右集団活動から左右wing-beat amplitudeへのmotor adapter。
-- 上下ゲート、床、天井、明示的MuJoCo contact pairを持つFlyppy world。
-- ゲート通過時のPAM08候補刺激、衝突時のPPL1候補刺激。
-- 上記を一本化した閉ループ局所可塑性学習runner。
-- 全CNS動的・可塑性状態のcheckpoint保存と復元。
-- 任意の3Dライブ表示とepisodeごとのMP4保存。
-- 任意の低頻度シナプス変化snapshot。
+- FlyGym 2.1.0 / FlyBodyによる身体モデルとMuJoCo物理。
+- FlyGym 2.1.0のFlyBody変換時に省略される、左右翼の流体力学用形状の復元。
+- 元のFlyBody飛翔課題に合わせた翼駆動利得、翼の剛性・減衰、50 µsの物理時間刻み、空気密度・粘性の単位補正。
+- FlyBody左右翼の自由度の駆動。
+- FlyBody公式飛翔条件に基づく47.5度の胴体ピッチ角と、エピソード開始時に一度だけ与える前進初速度。
+- JSONLの標準入出力で常駐するRust製MaleCNSブリッジ。
+- `body ID`を指定して、個々のMaleCNSニューロンへ外部電流を直接与える機構。
+- MaleCNS注釈から左右のDNg02 / PAM08 / PPL1を抽出する処理。
+- MaleCNSの`assignedOlHex1` / `assignedOlHex2`に基づく視葉カラムの網膜上位置座標。
+- 注釈済みR1-R6ごとに、座標を持つL1/L2/L3への全公開接触をカラム単位で合算し、接触数が最大のカラムをそのR1-R6の網膜上位置として推定する処理。
+- R1-R6自身の`rootSide`による左右眼判定。
+- FlyBody眼カメラの局所受光量を、対応する公開R1-R6だけへ電流として与える感覚境界。
+- DNg02左右集団の活動から、左右の羽ばたき振幅へ変換する運動変換器。
+- 上下ゲート、床、天井、明示的なMuJoCo接触対を持つFlyppy環境。
+- ゲート通過時のPAM08候補群への刺激と、衝突時のPPL1候補群への刺激。
+- 上記を一本化した、閉ループ局所可塑性学習の実行系。
+- 全CNSの動的状態・可塑性状態のチェックポイント保存と復元。
+- 任意の3Dライブ表示と、エピソードごとのMP4保存。
+- 任意の低頻度シナプス変化スナップショット。
 
-過去の試作 `visual_motion_encoder.py` は、外部でT4/T5相当の運動特徴を計算していたため、現在のFlyppy学習経路では使用しない。
+過去の試作`visual_motion_encoder.py`は、CNS外部でT4/T5相当の運動特徴を計算していたため、現在のFlyppy学習経路では使用しない。
 
-## 2. 情報経路
+## 2. 情報の流れ
 
 ```text
-Flyppy物理環境
-  -> FlyBody raw eye cameras
-  -> MaleCNS retinotopic columnごとの局所受光
-  -> そのcolumnへ投射すると推定されたreleased R1-R6への局所電流
-  -> whole MaleCNS + local plasticity
-  -> bilateral DNg02
-  -> wing-beat amplitude adapter
+Flyppyの物理環境
+  -> FlyBodyの生の眼カメラ
+  -> MaleCNSの網膜対応カラムごとの局所受光
+  -> そのカラムへ投射すると推定された公開R1-R6への局所電流
+  -> MaleCNS全体 + 局所可塑性
+  -> 左右DNg02
+  -> 羽ばたき振幅への変換
   -> FlyBody / MuJoCo
   -> 位置・衝突・ゲート通過
-  -> PAM08またはPPL1刺激
-  -> local plasticity
+  -> PAM08またはPPL1への刺激
+  -> 局所可塑性
 ```
 
-ゲーム側は障害物座標や「上へ行け」「下へ行け」という命令をCNSへ渡さない。環境がsynaptic weightを直接変更することもない。
+ゲーム側は、障害物座標や「上へ行け」「下へ行け」といった命令をCNSへ渡さない。環境がシナプス重みを直接変更することもない。
 
-重要なのは、CNSへ入る前に外部コードが運動方向・edge・障害物・gap位置を計算しないことである。視覚上の意味情報はMaleCNS内部の実接続と神経状態の時間発展から生じさせる。
+重要なのは、CNSへ入る前に外部コードが運動方向、輪郭、障害物、開口部の位置などを意味情報として計算しないことである。視覚上の意味は、MaleCNS内部の実接続と神経状態の時間発展から生じさせる。
 
 ## 3. 視覚入力
 
-### 3.1 実測情報とretinotopic projection
+### 3.1 実測情報と網膜上位置の推定
 
-MaleCNS公式annotationにはoptic-lobeのhex column座標 `assignedOlHex1` / `assignedOlHex2` が含まれる。
+MaleCNS公式注釈には、視葉の六角格子カラム座標`assignedOlHex1` / `assignedOlHex2`が含まれている。
 
-R1-R6の個々の光学位置は直接与えられていないため、`scripts/data/prepare_retinotopic_vision.py` はreleased wiringから位置を推定する。official `type == "R1-R6"` の各photoreceptorについて、座標付きL1/L2/L3への全synaptic contactをcolumnごとに合算し、合計contact数が最大のcolumnをそのR1-R6のretinotopic位置として採用する。左右眼はtarget neuronのsideではなく、そのR1-R6自身の `rootSide` を使用する。
+R1-R6それぞれの光学的な位置は直接与えられていないため、`scripts/data/prepare_retinotopic_vision.py`では公開配線から位置を推定する。公式注釈で`type == "R1-R6"`となっている各光受容細胞について、座標付きL1/L2/L3への全シナプス接触をカラムごとに合算し、接触数の合計が最大のカラムを、そのR1-R6の網膜上位置として採用する。左右眼の判定には、接続先ニューロン側ではなくR1-R6自身の`rootSide`を使う。
 
 ```text
-one released R1-R6
-  -> all observed contacts to coordinate-bearing L1/L2/L3
-  -> sum contacts by assignedOlHex column
-  -> unique maximum-contact column
+1つの公開R1-R6
+  -> 座標を持つL1/L2/L3への全観測接触
+  -> assignedOlHexカラムごとに接触数を合算
+  -> 接触数が一意に最大のカラムを選択
 ```
 
-これはR1-R6のbody ID順やommatidium配列順を空間位置として扱うものではない。複数columnへの弱い副次接続を捨てて神経グラフを変更するものでもなく、あくまで外界からどの局所光をそのR1-R6へ与えるかを決めるsensory-coordinate inferenceである。MaleCNS neural graphにはreleased edgeをそのまま保持する。
+これは、R1-R6のbody ID順や個眼の配列順を空間位置として扱うものではない。複数カラムへの弱い副次接続を捨てて神経グラフ自体を変更するものでもない。あくまで「外界のどの局所光を、そのR1-R6への入力として使うか」を決める感覚座標の推定である。MaleCNSの神経グラフには、公開されている接続辺をそのまま保持する。
 
-最大contact数が完全同率のcolumnが複数あるR1-R6は、任意にtie-breakせずretinal mapから未割当のまま残す。projection confidenceとして `dominant column contacts / all coordinate-bearing L1/L2/L3 contacts` を記録するが、これは「正しい位置である確率」の実測値ではない。
+接触数が完全に同率で最大となるカラムが複数あるR1-R6は、任意に一つを選ばず、網膜対応表では未割り当てのまま残す。推定の確からしさの補助指標として`dominant column contacts / all coordinate-bearing L1/L2/L3 contacts`を記録するが、これは「その位置が正しい確率」を実測した値ではない。
 
-また、visual-system connectomeの一次資料ではlaminaが撮像体積に完全には含まれず、reconstructed R1-R6数が本来の総数を過小評価すると明記されている。そのため各columnを人工的に6細胞へ補完したり、存在しないR1-R6を生成したりしない。released MaleCNSに存在する細胞だけを使う。
+また、視覚系コネクトームの一次資料では、laminaが撮像体積に完全には含まれず、再構築されたR1-R6数が本来の総数を過小評価すると明記されている。そのため、各カラムを人工的に6細胞へ補完したり、存在しないR1-R6を生成したりしない。公開MaleCNSに存在する細胞だけを使う。
 
-解決結果は:
+推定結果は次へ保存する。
 
 ```text
 artifacts/malecns-v1.0/retinotopic-vision-v1.json
 ```
 
-へ保存する。十分なcolumn数を解決できない場合は、適当な順序対応や全体平均へfallbackせず実行を失敗させる。
+十分な数のカラムを解決できない場合は、適当な順序対応や全体平均へ逃げず、実行を失敗させる。
 
-### 3.2 感覚変換境界
+### 3.2 感覚変換の境界
 
-`scripts/embodiment/malecns_retina.py` は各眼についてMaleCNS hex latticeをFlyBodyのraw eye cameraへ展開し、それぞれのcolumn位置の局所受光値だけを読む。
+`scripts/embodiment/malecns_retina.py`は各眼について、MaleCNSの六角格子をFlyBodyの生の眼カメラへ対応付け、それぞれのカラム位置の局所受光値だけを読む。
 
-その局所値を、当該columnへ割り当てられたreleased R1-R6への外部電流へ変換する。
+その局所値を、当該カラムへ割り当てられた公開R1-R6への外部電流へ変換する。
 
 ```text
-one inferred retinotopic column
-  -> one local eye-camera sample
-  -> local photoreceptor transduction scale
-  -> corresponding released R1-R6 currents
+1つの推定網膜カラム
+  -> 眼カメラ上の1つの局所受光値
+  -> 局所光受容変換の倍率
+  -> 対応する公開R1-R6への電流
 ```
 
-column間の平均、pooling、Reichardt-like motion detector、edge detector、object detectorは使用しない。T4/T5を含む下流視覚ニューロンの応答はMaleCNS自身に計算させる。
+カラム間の平均、情報のまとめ上げ、Reichardt型の運動検出器、輪郭検出器、物体検出器は使用しない。T4/T5を含む下流視覚ニューロンの応答は、MaleCNS自身に計算させる。
 
-### 3.3 provenance
+### 3.3 来歴の区分
 
-- `observed`: MaleCNS body ID、official `type == R1-R6`、R1-R6自身の `rootSide`、released synapse counts、L1/L2/L3の `assignedOlHex1` / `assignedOlHex2`。
-- `inferred`: 各R1-R6のretinotopic columnを、座標付きL1/L2/L3への総released contactが最大のcolumnとして選ぶ規則。
-- `literature`: neural superpositionと、MaleCNS/visual-system connectomeでlamina・R1-R6が不完全に含まれるというデータ制約。
-- `calibrated`: MaleCNS hex latticeからFlyBody eye-camera平面への幾何投影。
-- `calibrated`: 局所受光値からR1-R6へ注入するcurrentのscale。
+- `observed`: MaleCNSの`body ID`、公式`type == R1-R6`、R1-R6自身の`rootSide`、公開シナプス数、L1/L2/L3の`assignedOlHex1` / `assignedOlHex2`。
+- `inferred`: 各R1-R6の網膜上カラムを、座標付きL1/L2/L3への総公開接触数が最大のカラムとして選ぶ規則。
+- `literature`: 神経重複と、MaleCNS / 視覚系コネクトームでlamina・R1-R6が不完全に含まれるというデータ制約。
+- `calibrated`: MaleCNS六角格子からFlyBody眼カメラ平面への幾何学的な対応付け。
+- `calibrated`: 局所受光値からR1-R6へ注入する電流の倍率。
 
-後二者は今後より生理学的な光学系・phototransductionモデルへ置換可能だが、置換時も局所性とretinotopyを壊さない。
+後二者は、将来より生理学的な光学系・光受容変換モデルへ置き換えられる。ただし、置換する場合も局所性と網膜上の位置関係を壊してはいけない。
 
 ## 4. 運動出力と飛翔物理
 
-DNg02は最初の粗い飛翔出力として使用する。DNg02集団活動はwing stroke amplitude / thrust regulationと関連するため、左右DNg02活動を左右wing-beat amplitudeへ写す。
+DNg02は、最初の粗い飛翔出力として使う。DNg02集団活動は翼のストローク振幅や推力調整と関連するため、左右DNg02の活動を左右の羽ばたき振幅へ対応付ける。
 
-現在のanalytic wing beatは、完全なmotor-neuron -> flight-muscleモデルではない。下位の飛翔運動生成機構を暫定的にまとめたadapterである。adapterはFlyppyの障害物位置や報酬状態を見ない。
+現在の解析的な羽ばたき生成は、完全な「運動ニューロン → 飛翔筋」モデルではない。より下流の飛翔運動生成機構を暫定的にまとめた変換層である。この変換層はFlyppyの障害物位置や報酬状態を参照しない。
 
-FlyGym 2.1.0の実験的FlyBody統合では、元FlyBody XMLにある `wing_left_fluid` / `wing_right_fluid` geometryが変換時に省略されている。そのままでは元FlyBody飛翔タスクと同じ空力条件にならないため、`scripts/embodiment/flybody_flight_physics.py` で以下を復元する。
-
-```text
-physics timestep     5e-5 s
-body pitch           47.5 deg
-wing position gain   source 18 -> FlyGym mm系 1800
-wing stiffness       source 0.01 -> 1.0
-wing damping         source 0.007769230 -> 0.776923
-fluid coefficients   [1.0, 0.5, 1.5, 1.7, 1.0]
-air density          source 0.00128 -> FlyGym mm系 1.28e-6
-air viscosity        source 0.000185 -> FlyGym mm系 1.85e-5
-```
-
-元FlyBodyはcm、FlyGym版はmmを使うため、長さはx10、torque-like量はx100、densityはx1e-3、viscosityはx1e-1として変換する。
-
-Flyppyではepisode開始時にのみ +X 方向の初速度を与える。既定値は `300 mm/s` で、元FlyBody vision-flight taskが使う20–40 cm/sの中央である。これは継続的な外部policyではなく飛翔開始条件であり、その後の並進速度を外部から維持・補正しない。
+FlyGym 2.1.0の実験的なFlyBody統合では、元のFlyBody XMLにある`wing_left_fluid` / `wing_right_fluid`形状が変換時に省略されている。そのままでは元FlyBody飛翔課題と同じ空力条件にならないため、`scripts/embodiment/flybody_flight_physics.py`で次を復元する。
 
 ```text
-episode reset
-  -> 47.5 deg flight pose
-  -> vx = 300 mm/s を一度だけ設定
-  -> 以後はMuJoCo物理 + CNS由来wing controlのみ
+物理時間刻み       5e-5 s
+胴体ピッチ角       47.5 deg
+翼位置利得         元18 -> FlyGym mm系1800
+翼剛性             元0.01 -> 1.0
+翼減衰             元0.007769230 -> 0.776923
+流体係数           [1.0, 0.5, 1.5, 1.7, 1.0]
+空気密度           元0.00128 -> FlyGym mm系1.28e-6
+空気粘性           元0.000185 -> FlyGym mm系1.85e-5
 ```
 
-`flybody_flight_envelope.py` は同一初速度でwing fluidあり/なしの対照を取り、初速だけで前進したケースを空力成立と誤認しないようにする。
+元のFlyBodyはcm、FlyGym版はmmを使うため、長さは10倍、トルク次元の量は100倍、密度は1e-3倍、粘性は1e-1倍として変換する。
 
-## 5. 学習とcheckpoint
-
-実行中、同一のMaleCNS runtimeをepisode間で維持するため、可塑的シナプスと神経活動状態は前episodeの経験を保持する。
-
-結果イベントは以下の神経刺激へ変換する。
+Flyppyでは、エピソード開始時にだけ+X方向の初速度を与える。既定値は`300 mm/s`で、元FlyBody視覚飛翔課題が使う20〜40 cm/sの中間である。これは継続的な外部方策ではなく、飛翔開始条件である。その後の並進速度を外部から維持・補正することはない。
 
 ```text
-gate pass -> PAM08候補群を刺激
-gate collision -> 穴からの垂直距離に応じてPPL1候補群への刺激強度を連続変化
-floor / ceiling / side collision -> PPL1候補群へ最大刺激
+エピソード初期化
+  -> 47.5 degの飛翔姿勢
+  -> vx = 300 mm/sを一度だけ設定
+  -> 以後はMuJoCo物理 + CNS由来の翼制御のみ
 ```
 
-現行のpopulation学習では、ゲート衝突時のPPL刺激は穴の縁までの垂直距離0 mmで最大値の25%、2 mm以上で最大値へ線形増加する。これは実験者が与える結果刺激の強度だけを変え、CNSのaction selectionやmotor commandを外部から指定しない。
+`flybody_flight_envelope.py`では、同一初速度で翼の流体力学を有効・無効にした対照を取り、初速度だけで前進した場合を空力飛翔の成立と誤認しないようにする。
 
-boundary-band curriculumは特定の「第2ゲート」等をハードコードせず、各batchで「少なくともk枚通過した率」を全kについて集計する。安定閾値を満たす最大kをfrontierとして保持し、次の学習対象を自動的にk+1枚へ進めるため、任意のgate countに同じロジックを適用できる。
+## 5. 学習とチェックポイント
 
-外部optimizer、backpropagation、Q-learning、policy gradient、scalar rewardによるweight直接更新は使わない。
+この段階の実装では、同一のMaleCNS実行系をエピソード間で維持し、可塑的シナプスと神経活動状態に前エピソードの経験を残す。
 
-checkpointは既定で以下へ保存する。
+結果イベントは次の神経刺激へ変換する。
+
+```text
+ゲート通過 -> PAM08候補群を刺激
+ゲート衝突 -> 開口部からの垂直距離に応じてPPL1候補群への刺激強度を連続変化
+床 / 天井 / 側面への衝突 -> PPL1候補群へ最大刺激
+```
+
+この文書が対象とする並列学習では、ゲート衝突時のPPL刺激は、開口部の縁までの垂直距離が0 mmなら最大値の25%、2 mm以上なら最大値となるよう線形に増加する。これは実験者が与える結果刺激の強さだけを変えるもので、CNSの行動選択や運動指令を外部から指定するものではない。
+
+`boundary-band`による経験条件調整は、特定の「第2ゲート」などを直接書き込まず、各まとまりで「少なくともk枚通過した割合」をすべてのkについて集計する。安定閾値を満たす最大のkを到達境界として保持し、次の学習対象を自動的にk+1枚へ進めるため、任意のゲート数に同じ仕組みを使える。
+
+外部の最適化器、誤差逆伝播、Q学習、方策勾配、単一の数値報酬による重みの直接更新は使わない。
+
+チェックポイントは既定で次へ保存する。
 
 ```text
 artifacts/experiments/flyppy-v0/checkpoint/
@@ -166,33 +166,33 @@ artifacts/experiments/flyppy-v0/checkpoint/
 └── eligibility.f32le
 ```
 
-保存対象は膜電位、現在のspike状態、refractory counter、activity trace、neuromodulation状態、全synaptic weight、全eligibility traceである。
+保存対象は、膜電位、現在の発火状態、不応期カウンター、活動履歴、神経修飾状態、全シナプス重み、全適格度である。
 
-connectome topology、neurotransmitter annotation、数値モデルparameter、PAM/PPL1等のmodulator roleは同じsnapshot/configurationから再構成する。FlyBody・コース状態はepisode境界でリセットするためcheckpointには含めない。
+コネクトームの構造、神経伝達物質注釈、数値モデルのパラメータ、PAM / PPL1などの神経修飾役割は、同じスナップショットと設定から再構成する。FlyBodyとコースの状態はエピソード境界で初期化するため、この段階のチェックポイントには含めない。
 
-## 6. 実行
+## 6. 実行方法
 
-接続・物理確認:
+接続と物理の確認:
 
 ```bash
 bash scripts/dev/embodiment.sh
 ```
 
-この確認には、MaleCNS retinotopic R1-R6 mapの解決、raw eyeからの局所photoreceptor current、復元したflight fluid geometry・空気parameter・wing gain/stiffness/damping、free-flight motor effect、flight envelopeを含む。
+この確認には、MaleCNSの網膜対応R1-R6表の生成、生の眼カメラからの局所光受容電流、復元した翼の流体力学形状・空気パラメータ・翼の利得/剛性/減衰、自由飛翔時の運動効果、飛翔範囲の確認を含む。
 
-通常のヘッドレス学習:
+通常の画面表示なし学習:
 
 ```bash
 bash scripts/dev/train_flyppy.sh
 ```
 
-長く回す例:
+長時間実行する例:
 
 ```bash
 bash scripts/dev/train_flyppy.sh --episodes 100
 ```
 
-既存checkpointから継続する場合:
+既存チェックポイントから継続する場合:
 
 ```bash
 bash scripts/dev/train_flyppy.sh \
@@ -200,28 +200,28 @@ bash scripts/dev/train_flyppy.sh \
   --episodes 100
 ```
 
-感覚境界の設計を変更したcheckpointを混在させないこと。旧T4/T5外部encoderで生成したcheckpointは、retinotopic R1-R6版の学習継続用として扱わない。
+感覚境界の設計が異なるチェックポイントを混在させないこと。旧T4/T5外部変換器で生成したチェックポイントは、網膜対応R1-R6版の継続学習には使わない。
 
-### 6.1 Flyppy v4 course
+### 6.1 Flyppy v4コース
 
-Flyppy v3は比較再現用として変更せず保持する。v4は表示・試行時の読みやすさを改善するための別environment versionで、MaleCNS、FlyBody物理スケール、感覚変換、CNS→運動ニューロン→筋境界、可塑性則、reinforcement DANを変更しない。
+Flyppy v3は比較再現用として変更せず保持する。v4は表示・試行時の読みやすさを改善する別の環境版であり、MaleCNS、FlyBodyの物理スケール、感覚変換、CNS→運動ニューロン→筋の境界、可塑性則、神経修飾DANは変更しない。
 
-v4の変更はtask geometryだけである。
+v4で変えるのは課題の幾何だけである。
 
-- corridor高: 6.0 body lengths → 8.5 body lengths。
-- floorはz=0のまま、ceilingだけを25.245 mmまで上げる。
-- gate gap: 2.5 body lengthsのまま。
-- gate centerのz分布はv3と同一に保つ。既存の上下方向の学習条件を変えない。
-- first gate: 4.0 body lengths → 5.5 body lengths。spawnから最初の障害物までの飛行区間を長くする。
-- gate spacing、gate thickness、lateral widthはv3のまま。
+- 通路高: 6.0体長 → 8.5体長。
+- 床はz=0のまま、天井だけ25.245 mmまで上げる。
+- ゲート開口高: 2.5体長のまま。
+- ゲート中心のz分布はv3と同じに保ち、既存の上下方向の学習条件を変えない。
+- 最初のゲート位置: 4.0体長 → 5.5体長。開始位置から最初の障害物までの飛行区間を長くする。
+- ゲート間隔、ゲート厚、横幅はv3のまま。
 
-FlyBody v3 scaleでは、corridorは0〜25.245 mm、first gateは16.335 mm、gapは7.425 mmである。
+FlyBody v3の縮尺では、通路は0〜25.245 mm、最初のゲートは16.335 mm、開口高は7.425 mmである。
 
-### 6.2 Flyppy v7 course
+### 6.2 Flyppy v7コース
 
-v7はv6のx-zゲート配置、隣接ゲート到達可能性制約、frontier curriculumをそのまま保持し、3D物理空間のy方向だけを修正する。v6までは`lateral_half_width_mm=8.91`をゲート・天井の有限な奥行きとして使っていた一方、側面境界が存在しなかったため、FlyBodyが`|y| > 8.91 mm`へ移動するとゲートの端を回り込めた。
+v7はv6のx-zゲート配置、隣接ゲート到達可能性の制約、到達境界に応じた経験条件調整をそのまま保ち、3次元物理空間のy方向だけを修正する。v6までは`lateral_half_width_mm=8.91`をゲート・天井の有限な奥行きとして使う一方、側面境界が存在しなかったため、FlyBodyが`|y| > 8.91 mm`へ移動するとゲートの端を回り込めた。
 
-v7では内面を`y=±8.91 mm`とする物理側壁を追加する。これにより課題は引き続きx-z平面上のゲート通過であり、y方向への移動で壁そのものを迂回する経路は成立しない。旧v6は過去実験再現用として開いたy境界のまま保持する。
+v7では、内面を`y=±8.91 mm`とする物理側壁を追加する。これにより課題は引き続きx-z平面上のゲート通過であり、y方向へ移動して壁そのものを迂回する経路は成立しない。旧v6は過去実験の再現用として、側面が開いたまま保持する。
 
 ## 7. 可視化
 
@@ -237,20 +237,20 @@ bash scripts/dev/train_flyppy.sh --render
 bash scripts/dev/train_flyppy.sh --record-video artifacts/experiments/flyppy-v0/video
 ```
 
-シナプス変化snapshot:
+シナプス変化のスナップショット:
 
 ```bash
 bash scripts/dev/train_flyppy.sh --synapse-trace
 ```
 
-表示やログのためにretinal current等を集計することはあるが、その集計値をCNS入力へ戻してはいけない。
+表示やログのために網膜電流などを集計することはあるが、その集計値をCNS入力へ戻してはいけない。
 
-## 8. 次の改善点
+## 8. 今後の改善点
 
-- MaleCNS optic-column座標とFlyBody眼カメラの光学的対応を、実際のommatidial optical axisに基づいて校正する。
-- R1-R6のphototransductionを、単純current scaleから文献ベースの局所生理モデルへ置換する。
-- flight motor neuron / flight muscle単位の詳細neuromuscular model。
-- checkpointのsnapshot/configuration/sensory-interface fingerprint固定と世代管理。
-- 視覚・運動・可塑性parameterの生理学的校正。
-- 学習前後比較、対照群、複数seedでの統計評価。
-- MaleCNSの実3D neuron morphology / synapse coordinatesを使った解剖学的ビューア。
+- MaleCNS視葉カラム座標とFlyBody眼カメラの光学的対応を、実際の個眼光軸に基づいて較正する。
+- R1-R6の光受容変換を、単純な電流倍率から文献に基づく局所生理モデルへ置き換える。
+- 飛翔運動ニューロン・飛翔筋単位のより詳細な神経筋モデル。
+- チェックポイントに、使用スナップショット・設定・感覚境界を識別する指紋情報を固定し、世代管理する。
+- 視覚、運動、可塑性パラメータの生理学的較正。
+- 学習前後の比較、対照群、複数乱数種による統計評価。
+- MaleCNSの実3Dニューロン形態・シナプス座標を使った解剖学的可視化。

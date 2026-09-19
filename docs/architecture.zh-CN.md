@@ -1,194 +1,194 @@
-# 当前 architecture
+# 当前系统结构
 
 [English](architecture.md) · [日本語](architecture.ja.md) · [简体中文](architecture.zh-CN.md)
 
-本文描述当前 production / canonical path **实际实现的 architecture**。它不是 roadmap，也不会把当前语义追溯性地套用到 historical artifact 上。
+本文说明当前常规执行路径和 canonical v1 **实际使用的系统结构**。它不是未来规划文档，也不会把现在的定义追溯性地套用到历史实验产物上。
 
-## 1. System boundary
+## 1. 整体职责划分
 
-`virtual-fly` 将职责分为四部分：
+`virtual-fly` 主要分为四部分：
 
-1. **神经系统** — MaleCNS dynamics、modulation、eligibility、局部可塑性；
-2. **感觉/外周 embodiment** — 局部物理感受转换与 motor neuron→muscle state；
-3. **身体与环境** — FlyBody / MuJoCo 与 Flyppy geometry；
-4. **实验 orchestration** — reset、curriculum 条件、persistence、provenance、report。
+1. **神经系统** — MaleCNS 神经活动、神经调制、资格迹和局部可塑性
+2. **感觉与外周系统** — 把局部物理刺激转换成神经输入，并把运动神经元活动转换成肌肉状态
+3. **身体与环境** — FlyBody / MuJoCo 以及 Flyppy 物理空间
+4. **实验控制** — 初始化、经验条件调整、状态保存、来源记录和报告生成
 
-实验层可以判断物理任务事件何时发生，以及该事件刺激哪个神经群体，但不会计算 target action 或“正确的” synaptic weight。
+实验控制层可以判断物理任务事件何时发生，以及事件应该刺激哪一组神经元，但不会计算“应该采取什么动作”，也不会计算“正确的突触权重”。
 
 ```text
-physical scene
+物理环境
     ↓
-local sensory transduction
+局部感觉转换
     ↓
-MaleCNS neural runtime
+MaleCNS 神经运行系统
     ↓
-individual motor-neuron activity
+单个运动神经元活动
     ↓
-peripheral muscle state
+外周肌肉状态
     ↓
 FlyBody / MuJoCo
     ↓
-physical scene
+物理环境
 ```
 
-## 2. Canonical closed loop
+## 2. canonical v1 的闭环
 
-当前 canonical Flyppy path：
+canonical v1 使用的 Flyppy 闭环如下：
 
 ```text
-Flyppy v7 physical environment
+Flyppy v7 物理环境
         ↓
-FlyBody compound-eye geometry
+FlyBody 复眼几何
         ↓
-local direct-ray sampling (K=13)
+局部 direct-ray 采样（K=13）
         ↓
-released MaleCNS R1-R6 body-ID currents
+向公开 MaleCNS 中对应的 R1-R6 body ID 注入电流
         ↓
-whole-MaleCNS signed neural dynamics
+整个 MaleCNS 的带符号神经活动
         ↓
-local eligibility + dopaminergic modulation
+局部资格迹 + 多巴胺能神经调制
         ↓
-individual released motor-neuron spikes
+公开运动神经元逐个产生放电
         ↓
 WholeBodyPeriphery
         ↓
-FlyBody v7 physical actuation
+FlyBody v7 物理驱动
         ↓
-MuJoCo state transition
+MuJoCo 状态更新
         ↓
-Flyppy event detection
-        ├─ gate passage → selected reward-associated DAN current
-        └─ collision    → selected aversive-associated DAN current
+Flyppy 事件判定
+        ├─ 通过门 → 刺激选定的奖赏相关 DAN 神经元群
+        └─ 碰撞   → 刺激选定的厌恶相关 DAN 神经元群
 ```
 
-这条路径中不存在外部神经网络或 action policy。
+这条路径中没有外部神经网络，也没有额外的动作策略。
 
-## 3. MaleCNS source 与 mutable state
+## 3. MaleCNS 原始数据与可变状态
 
-公开 MaleCNS data 被视为初始结构 snapshot，而不是可写的 training file。
+公开的 MaleCNS 数据被视为神经系统的初始结构快照，而不是在学习过程中直接改写的文件。
 
 ```text
-immutable source snapshot
+只读的原始快照
         +
-mutable functional weight state
+可变的功能性权重
         +
-short-term neural/plasticity state
+短期神经与可塑性状态
         =
-current simulated nervous system
+当前模拟神经系统
 ```
 
-Canonical v1 使用：
+canonical v1 使用的 MaleCNS 规模为：
 
-- 166,700 neurons；
-- 25,582,938 directed connection edges；
-- released neurotransmitter / annotation information；
-- class-DAN = dopamine consensus 且公开 annotation 为 `class=DAN`。
+- 166,700 个神经元
+- 25,582,938 条有向连接边
+- 公开的神经递质信息与注释
+- class-DAN：多巴胺判定与公开注释 `class=DAN` 同时成立
 
-学习过程不会原地修改 source file。
+学习过程中不会修改原始数据文件本身。
 
-## 4. Neural runtime
+## 4. 神经运行系统
 
-大型 neural runtime 由 `crates/` 下的 Rust 实现。Python 负责 orchestration 与身体集成，Rust process 负责 whole-CNS state evolution。
+大规模神经计算由 `crates/` 下的 Rust 实现负责。Python 负责实验控制和身体集成，Rust 进程负责推进整个 MaleCNS 的时间演化。
 
-当前 activity semantics 区分 silent、depolarizing activity event 和 hyperpolarizing activity deviation，避免把抑制/graded pathway 压缩成单一 unsigned spike bit。
+当前的神经活动表示会区分：无活动、去极化方向的活动事件、超极化方向的活动偏移。这样可以避免把抑制性或连续变化的信号压缩成单一的 0/1 放电位。
 
-主要职责：
+主要职责包括：
 
-- sparse MaleCNS graph storage；
-- state propagation；
-- modulation state；
-- eligibility dynamics；
-- local weight update；
-- shared-weight population transaction；
-- checkpoint load/save。
+- 保存稀疏的 MaleCNS 图
+- 推进神经状态传播
+- 更新神经调制状态
+- 推进资格迹
+- 计算局部权重更新
+- 处理共享权重的并行学习更新
+- 读写检查点
 
-GPU 是计算 backend，不是独立的 learned controller。
+GPU 只用于加速计算，并不是另一个学习出来的控制器。
 
 ## 5. 局部可塑性
 
-production plasticity 使用局部规则。概念上，edge update 依赖局部 eligibility 与 postsynaptic neuromodulation：
+当前可塑性规则只依赖各突触附近的信息。概念上，每条边的更新取决于局部资格迹以及突触后神经元所处的神经调制状态。
 
 ```text
-pre/post activity history
+突触前后的活动历史
         ↓
-eligibility
+资格迹
         +
-local dopaminergic modulation
+局部多巴胺能神经调制
         ↓
-local bounded synaptic update
+有范围限制的局部权重更新
 ```
 
-环境不会把 `reward = +1/-1`、Q-value、target action 或 policy loss 传给 weight optimizer。
+环境不会把 `reward = +1/-1`、Q 值、目标动作或策略损失直接交给某个权重优化器。
 
-PlasticFastGraph 的作用是减少需要扫描/更新的 edge，而不是替换为另一种 learning rule。
+PlasticFastGraph 只是为了减少需要扫描和更新的边，提高可塑性计算速度，并没有把局部可塑性替换成另一套学习规则。
 
-## 6. Neuromodulatory event
+## 6. 神经调制事件
 
-任务事件会被转换为神经刺激。
+任务中的事件会先被转换成神经刺激，而不是作为数值奖励直接写入权重。
 
-Canonical class-DAN semantics 使用公开的真实 DAN body ID。reward-associated / aversive-associated subset 是**实验刺激条件**，并不声称相应 label 中每个 neuron 在所有自然情境下都表达统一 scalar reward。
+canonical v1 的 class-DAN 定义使用公开 MaleCNS 中真实存在的 DAN `body ID`。奖赏相关和厌恶相关的子集是**实验中的刺激条件**，并不意味着其中每个神经元在所有自然情境下都表示同一个标量“奖励值”。
 
 ```text
-gate passage
+通过门
     ↓
-current into selected reward-associated DAN subset
+刺激选定的奖赏相关 DAN 神经元群
 
-collision
+碰撞
     ↓
-current into selected aversive-associated DAN subset
+刺激选定的厌恶相关 DAN 神经元群
 ```
 
-Canonical frozen evaluation 将两种 task-triggered DAN current 都设为 0。
+canonical v1 的固定评估会把这两种由任务事件触发的 DAN 刺激都设为 0。
 
-## 7. Vision boundary
+## 7. 视觉输入边界
 
-production vision 不在 CNS 外部进行 obstacle classification。
+当前视觉输入不会在 CNS 外部先判断“哪里是障碍物”。
 
 ```text
-MuJoCo / FlyBody eye geometry
+MuJoCo / FlyBody 眼部几何
         ↓
-per-ommatidium local direct rays
+每个小眼的局部 direct-ray
         ↓
-local photoreceptor transduction/adaptation
+局部光感受转换与适应
         ↓
-corresponding released R1-R6 body IDs
+对应的公开 R1-R6 body ID
         ↓
-MaleCNS visual circuitry
+MaleCNS 视觉回路
 ```
 
-空间 identity 一直保留到 CNS。不会在外部完成 edge detection、object recognition、motion label 或 global spatial pooling 后把“答案”注入 CNS。
+刺激来自哪个空间位置的信息会一直保留到 CNS。系统不会先在外部完成边缘检测、物体识别、运动方向分类或全局空间平均，再把计算后的“答案”注入神经系统。
 
-## 8. Haltere boundary
+## 8. 平衡棒输入边界
 
-haltere path 从物理身体提取局部 mechanical signal，并映射到 MaleCNS sensory afferent。
+平衡棒输入从 FlyBody / MuJoCo 中的身体运动计算局部机械刺激，并映射到 MaleCNS 的感觉传入神经元。
 
-Canonical v1 使用推断的 97-neuron timing subset（left 46 / right 51）、current gain 0.05、`interaction-load-v2`。
+canonical v1 使用推断得到的 97 个神经元时序子集（左 46 / 右 51）、电流增益 0.05 和 `interaction-load-v2`。
 
-这是明确的 `inferred` sensory boundary，不能描述为完整 haltere physiology 的直接观测。
+这一映射明确标记为 `inferred`，也就是“推断得到”。它不能被描述成对完整平衡棒生理机制的直接观测。
 
-## 9. Motor boundary
+## 9. 运动输出边界
 
-production behavior 不再由 DNg02 population-average decoder 生成。
+当前行为并不是由 DNg02 神经元群的平均活动经过一个动作解码器产生的。
 
 ```text
-released motor-neuron body ID activity
+公开运动神经元逐个 body ID 的活动
         ↓
 WholeBodyPeriphery
         ↓
-individual motor-unit / muscle activation state
+单个运动单位与肌肉的活动状态
         ↓
-versioned FlyBody adapter
+按版本管理的 FlyBody 适配器
         ↓
-physical force/torque in MuJoCo
+MuJoCo 中的物理力与力矩
 ```
 
-peripheral/body seam 含有工程近似，但不会读取障碍物位置、reward state 或 desired action。
+外周系统和身体连接中仍有工程近似，但这些近似不会读取障碍物位置、奖赏状态或“希望采取的动作”。
 
-旧 DNg02 aggregate 路径只作为 legacy / diagnostic 保留。
+旧的 DNg02 群体平均路径只为历史方式复现和诊断保留。
 
-## 10. Body version lineage
+## 10. 身体模型版本关系
 
-body version 编号是 historical label，不是简单的线性继承：
+身体模型的版本号并不是简单的线性继承关系。
 
 ```text
 v3
@@ -197,100 +197,100 @@ v3
    ├─ v6
    └─ v7
 
-v8 = v6 measured steering + v7 neutral trim
+v8 = v6 的实测 b2/hg3 操舵 + v7 的 neutral trim
 ```
 
-因此，**v7 不是“v6 再加一些改良”**。Canonical v1 使用 v7，是因为它被固定为 canonical condition，而不是因为它包含 v5/v6 的全部 mechanics。
+因此，**v7 不是“在 v6 上继续改进得到的版本”**。canonical v1 使用 v7，是因为实验条件明确固定为 v7，而不是因为 v7 包含 v5 和 v6 的全部机制。
 
-## 11. Environment v7
+## 11. 环境 v7
 
-Flyppy environment version 同样是明确的实验条件。v7 加入物理 side wall，防止 3D body 从 gate 侧面绕行后仍被计为通过。
+Flyppy 的环境版本同样是明确的实验条件。v7 在横向加入了物理侧墙，防止三维身体从门的侧面绕过去后仍被判定为通过。
 
-gate pass 判定不把 thorax 中心当作零尺寸点，而会在 wall plane 周围考虑 full-body geometry。
+通过判定也不只把胸部中心当成一个没有大小的点；在穿过墙面附近时，会考虑身体整体的碰撞几何。
 
-## 12. Population training
+## 12. 并行学习
 
-production population trainer 共享一个 global weight state。
+当前并行学习中，多个执行槽共享同一份全局权重。
 
-每个 slot：
+每个执行槽按以下方式工作：
 
-1. 从特定 global weight version 开始 episode；
-2. 累积 episode-local plasticity operation；
-3. 在 `async` 模式下独立结束；
-4. 将 transaction rebase 到最新 global weights；
-5. commit 并生成下一个 global weight version。
+1. 从某一版本的共享权重开始一个回合
+2. 累积该回合中产生的局部可塑性更新
+3. 在 `async` 模式下独立结束
+4. 结束时，把该回合的更新重新对应到最新共享权重上
+5. 提交更新，生成下一版本的共享权重
 
-这**不是 weight averaging**。
+这**不是把多个个体的权重取平均**。
 
-由于 completion order 可能变化，async shared-weight training 不被声明为与 serial single-fly training bitwise 等价。source weight version 与 staleness 会记录在 provenance 中。
+由于各执行槽的结束顺序可能受实际运行时间影响，我们不声称异步共享权重学习与串行单个体学习逐位完全一致。每个回合从哪个权重版本开始、提交时全局权重已经前进了多少版本，都会记录在来源信息中。
 
-## 13. Curriculum boundary
+## 13. 经验条件调整
 
-curriculum code 选择 reset / experience condition，但不会选择 motor action。
+经验条件调整模块可以选择回合的起始条件和难度，但不会替神经系统选择动作。
 
-boundary-band curriculum 将 focus/easier experience 与 full-course evaluation logic 分离。curriculum success 是 experiment scheduling state，不是 scalar synaptic reward API。
+`boundary-band` 会把用于学习的边界附近经验，与用于判断能力的全程评估分开。这里的成功率只用于决定下一批应提供什么经验条件，不会作为数值奖励直接传给突触。
 
-## 14. Checkpoint boundary
+## 14. 检查点
 
-当前 population persistence semantics 为 `global-weights-only-v1`。
+当前并行学习跨回合保存状态的定义是 `global-weights-only-v1`。
 
-跨 episode 保留 learned global weights；membrane、spike、refractory、activity trace、modulation、eligibility 等 episode-local state 会 reset。
+学习后的共享权重会保留到下一回合，但膜电位、放电状态、不应期、活动历史、神经调制和资格迹等短期状态会重新初始化。
 
-因此，当前 population checkpoint **不能**描述为完整持久化的生物个体状态。
+因此，当前并行学习的检查点**不能被描述成完整保存了一个虚拟生物个体的全部持续状态**。
 
-磁盘上的 checkpoint container 仍有兼容性数组，但公开语义遵循 weights-only contract，而不是 raw file layout。
+出于兼容性考虑，磁盘上的检查点格式中仍可能包含额外数组。但对外解释时，应以“只有共享权重被视为跨回合持久状态”这一规则为准，而不是根据底层文件里实际存在多少数组来推断含义。
 
-## 15. Frozen evaluation
+## 15. 固定评估
 
-可公开的 weight comparison 至少需要区分：
+用于公开比较学习前后权重状态的评估，至少要明确区分：
 
-- plasticity OFF；
-- task-triggered DAN stimulation OFF；
-- initial / final stored weight state；
-- 相同的 body/environment/sensory condition。
+- 关闭可塑性
+- 关闭任务事件触发的 DAN 刺激
+- 分开初始与最终保存权重
+- 保持身体、环境和感觉条件一致
 
-Canonical v1 满足这些条件。部分旧 fixed evaluation 并未关闭 event-triggered DAN current，这也是它们保留为 historical 而不是 canonical evidence 的原因之一。
+canonical v1 满足这些要求。部分较早的固定评估并没有关闭评估期间的事件触发 DAN 刺激，因此这些结果继续作为历史资料保存，而不作为 canonical v1 的证据。
 
-## 16. Observer / viewer boundary
+## 16. 可视化边界
 
-3D body viewer 与 neural viewer 都是 observer-only。
+3D 身体显示和神经活动显示都只用于观察。
 
-没有 viewer 时，production training 不需要持续生成 viewer snapshot。viewer attach/detach 不得改变 neural、physical、plasticity 或 curriculum state。
+没有打开可视化界面时，学习进程不需要持续生成显示专用状态。连接或断开可视化界面都不应改变神经状态、身体状态、可塑性状态或经验条件状态。
 
-## 17. 当前 code ownership
+## 17. 当前代码职责
 
 ```text
-src/virtual_fly/embodiment/   body factory、versioned body seam、retina、haltere、periphery
-src/virtual_fly/runtime/      neural bridge、body worker、packed process、telemetry
-src/virtual_fly/training/     config、curriculum、population scheduling、checkpoint semantics
-src/virtual_fly/playback/     frozen playback/evaluation orchestration
-src/virtual_fly/reporting/    stable report/history output
+src/virtual_fly/embodiment/   身体构建、各版本身体连接、视网膜、平衡棒、外周系统
+src/virtual_fly/runtime/      神经桥接、身体工作进程、多实例执行、观察用信息
+src/virtual_fly/training/     配置、经验条件、并行学习、检查点
+src/virtual_fly/playback/     固定条件下的回放与评估
+src/virtual_fly/reporting/    稳定格式的报告与历史记录输出
 src/virtual_fly/reproducibility.py
-                              provenance/hash/semantic validation
-src/virtual_fly/semantics.py  compatibility-sensitive semantic identifiers
-crates/                       Rust neural runtime / CLI runner
-scripts/                      launcher、data preparation、analysis、legacy diagnostic
+                              来源、哈希以及兼容性相关定义的验证
+src/virtual_fly/semantics.py  影响兼容性的定义标识符
+crates/                       Rust 神经运行系统与命令执行部分
+scripts/                      启动、数据准备、分析和历史诊断工具
 ```
 
-开发者 module map 见 [`code-structure.md`](code-structure.md)。
+面向开发者的模块关系图见 [`code-structure.md`](code-structure.md)。
 
-## 18. Historical code / artifact
+## 18. 历史代码与实验产物
 
-historical script、report、artifact 具有 provenance 价值，但它们的存在并不意味着属于 current production path。
+历史脚本、报告和实验产物具有来源追踪价值，但它们的存在并不意味着它们仍属于当前常规执行路径。
 
-新的 production code 应依赖 `src/virtual_fly/`，而不是 historical script module compatibility shim。
+新的实现原则上应使用 `src/virtual_fly/` 下的代码，而不是直接依赖为了兼容旧脚本名称而保留的包装层。
 
-historical experiment result 保留原始 semantics/provenance label。见 [`results.zh-CN.md`](results.zh-CN.md)。
+历史实验结果会保留当时的实验条件和来源记录。详见 [`results.zh-CN.md`](results.zh-CN.md)。
 
-## 19. 当前不能视为 canonical biology 已实现的内容
+## 19. 当前还不能称为已经完成的生物学重建
 
-不应从当前 architecture 推断出：
+不能从当前结构推断出以下内容已经实现：
 
-- 每个 neuron / synapse 都具有完整 conductance-level biophysics；
-- 完整 receptor-specific neurotransmitter dynamics；
-- canonical v1 中已经验证 structural synapse formation/pruning；
-- 完整 peripheral sensory physiology；
-- 完整 flight-muscle mechanics；
-- training episode 之间保留完整 persistent neural state。
+- 所有神经元和突触都具有完整的电导水平生物物理模型
+- 神经递质动力学已经完整细分到每一种受体
+- canonical v1 已经验证了新的突触形成和突触修剪
+- 完整的外周感觉生理
+- 完整的飞行肌肉力学
+- 在学习回合之间持续保存完整神经状态
 
-这些是明确的 model boundary，而不是隐藏组件。
+这些并不是隐藏在系统中的额外组件，而是当前模型明确尚未覆盖的边界。

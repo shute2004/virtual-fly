@@ -1,105 +1,105 @@
-# 学習プロセスとライブ可視化の分離
+# 学習処理とライブ可視化の分離
 
 ## 1. 方針
 
-Flyppy学習プロセスは描画を所有しない。
+Flyppyの学習処理は、描画そのものを担当しない。
 
-通常の学習ではFlyBody/MuJoCoとMaleCNS runtimeを学習側で保持し、可視化は別プロセスのobserverとして任意に接続・切断する。observerが存在しない間、viewer用snapshot取得・追加neural read・telemetry JSON更新は行わない。
+通常の学習では、FlyBody / MuJoCoとMaleCNSの実行系を学習側で保持し、可視化は別プロセスとして必要な時だけ接続・切断する。可視化側が接続されていない間は、表示用スナップショットの取得、追加の神経状態読み出し、表示用JSONの更新を行わない。
 
 ```text
-Flyppy / FlyBody / MaleCNS training
+Flyppy / FlyBody / MaleCNSの学習処理
             ^
-            | local Unix stream while observer is open
+            | 可視化を開いている間だけローカルUnixストリームで接続
             |
-      detached viewer process
+      独立した可視化プロセス
             |
-            | on-demand telemetry while stream is connected
+            | 接続中だけ観察用状態を取得
             v
 artifacts/experiments/flyppy-v3/live/
             |
-            +--> detached MuJoCo body viewer
+            +--> 独立したMuJoCo身体表示
             |
-            +--> browser MaleCNS activity viewer
+            +--> ブラウザ上のMaleCNS活動表示
 ```
 
-viewerの起動・終了は学習状態、物理状態、神経状態、可塑性状態を変更してはならない。
+可視化の起動・終了によって、学習状態、物理状態、神経状態、可塑性状態が変化してはならない。
 
-## 2. 学習runtime
+## 2. 学習側の実行系
 
-productionのpopulation学習は `scripts/dev/train_flyppy_population.sh` から起動する。
+現在の並列学習は`scripts/dev/train_flyppy_population.sh`から起動する。
 
-shared MaleCNS runtimeと各slotのFlyBody/MuJoCo状態はviewerとは独立して動作する。viewerが起動していなくても学習は通常どおり進み、viewerを後から起動するために学習を再起動する必要はない。
+共有MaleCNS実行系と、各実行枠のFlyBody / MuJoCo状態は、可視化とは独立して動作する。可視化を起動していなくても学習は通常どおり進み、後から表示を始めるために学習を再起動する必要はない。
 
-full CNS checkpointはviewerとは無関係にproduction trainerのcheckpoint cadenceで保存される。
+CNSのチェックポイントも、可視化とは無関係に学習側の保存間隔に従って記録される。
 
-## 3. on-demand telemetry
+## 3. 必要時だけ公開する観察用状態
 
-`scripts/embodiment/live_telemetry.py` はviewerが存在する間だけ、小さなJSONファイルを一時ファイルからatomic replaceして公開する。
+`scripts/embodiment/live_telemetry.py`は、可視化側が接続されている間だけ小さなJSONファイルを更新する。一時ファイルへ書き込んでから原子的に置換するため、読み取り途中の不完全なファイルを見せない。
 
-- `status.json`: backend、episode、curriculum状態
-- `body.json`: MuJoCo `qpos` / `qvel`、gate/event、末梢運動状態
-- `neural.json`: 可視化対象MaleCNS body IDの活動、DAN event
+- `status.json`: 使用中の実行方式、エピソード、経験条件の状態
+- `body.json`: MuJoCoの`qpos` / `qvel`、ゲートや衝突イベント、末梢運動状態
+- `neural.json`: 表示対象となるMaleCNSの`body ID`の活動とDANイベント
 
-viewer serverはtraining側が所有するローカルUnix stream socketへ接続し、そのstream自体をviewer leaseとして扱う。接続中だけ `publisher.requested()` がtrueになり、viewer用neural read・body snapshot・telemetry publishが有効になる。viewer終了または異常終了でstreamが切断されれば自動的にfalseへ戻る。
+可視化サーバーは、学習側が所有するローカルUnixストリームソケットへ接続する。この接続自体を「現在、可視化が必要である」という印として扱い、接続中だけ`publisher.requested()`が真になる。その間だけ、表示用の神経状態読み出し、身体スナップショット取得、JSON更新を有効にする。可視化側が終了または異常終了して接続が切れれば、自動的に無効へ戻る。
 
-control socketのidentityはexperiment path文字列そのものではなく、存在するexperiment directoryのfilesystem identityから導出する。同じ物理directoryを `Desktop` / `desktop` のような異なるcase spellingやsymlink経由で参照しても、同じviewer endpointへ到達する。viewer側は接続失敗時にidentityを再計算するため、viewer先行起動後にexperiment directoryが作成・再作成された場合にも追従できる。
+制御ソケットの識別子は、実験ディレクトリの文字列そのものではなく、実際に存在するディレクトリのファイルシステム上の同一性から作る。同じ物理ディレクトリを`Desktop` / `desktop`のような大文字小文字の表記違いや、シンボリックリンク経由で参照しても同じ接続先になる。可視化側は接続に失敗した場合に識別子を再計算するため、先に可視化を起動し、後から実験ディレクトリが作成・再作成された場合にも追従できる。
 
-viewer不在時は、学習側はviewer用JSONを書き続けず、body snapshot IPCも追加のviewer-neuron readも実行しない。
+可視化が存在しない間は、学習側は表示用JSONを書き続けず、身体スナップショット用のプロセス間通信も、表示対象ニューロンの追加読み出しも行わない。
 
-`--telemetry` / `VF_POPULATION_TELEMETRY=1` は常時telemetryを強制する診断用overrideであり、通常のviewer利用には不要。
+`--telemetry` / `VF_POPULATION_TELEMETRY=1`は、観察用状態の出力を常時強制する診断用指定であり、通常の可視化には不要である。
 
-## 4. 身体viewer
+## 4. 身体の可視化
 
-`scripts/embodiment/live_body_viewer.py` は独立したFlyBody/MuJoCoモデルを持つ。
+`scripts/embodiment/live_body_viewer.py`は、学習側とは別にFlyBody / MuJoCoモデルを持つ。
 
-training側からviewer要求中だけ公開される `qpos` / `qvel` を読み、自分の `MjData` へコピーして `mj_forward` するだけであり、training physicsをstepしない。
+学習側から公開された`qpos` / `qvel`を読み、自分の`MjData`へコピーして`mj_forward`を実行するだけである。可視化側が学習中の物理計算を進めることはない。
 
-新しいrunで `body.json` が消えた場合は前runのposeを保持せず、`fly.png` を削除して待機状態へ戻る。これにより古いposeの再描画をlive frameと誤認しない。
+新しい実行で`body.json`が消えた場合は、前の実行の姿勢を表示し続けない。`fly.png`を削除して待機状態へ戻し、古い姿勢の再描画を現在の映像と誤認しないようにする。
 
-macOSではMuJoCo viewerの都合でviewer processだけを `mjpython` から起動する。training process自体は通常のPythonでheadless実行する。
+macOSではMuJoCoの表示機構の都合により、可視化プロセスだけを`mjpython`から起動する。学習処理そのものは通常のPythonで、画面表示なしに実行する。
 
-## 5. MaleCNS 3D viewer
+## 5. MaleCNSの3D可視化
 
-`visualization/live-neural-viewer.html` はThree.jsで表示する。
+`visualization/live-neural-viewer.html`はThree.jsを使って表示する。
 
-静的表示グラフは `scripts/data/prepare_neural_viewer_graph.py` がreleased MaleCNS connectomeから生成する。全約2,560万edgeをブラウザへ送らず、embodiment boundary neuronと強いreleased connectionを含むbounded subgraphを使う。既定budgetは最大2,500 node / 6,000 edgeである。
+静的な表示グラフは`scripts/data/prepare_neural_viewer_graph.py`が公開MaleCNSコネクトームから生成する。全約2,560万辺をそのままブラウザへ送るのではなく、身体との境界に関わるニューロンと強い公開接続を含む、上限付きの部分グラフを使う。既定の上限は2,500ノード / 6,000辺である。
 
-viewerはtrainingから受け取った `depolarizing_body_ids` を使って発火を表示する。表示上は瞬間的なon/offだけでなく短い残光を与え、telemetry sample間でも活動の時間方向を追いやすくする。
+神経表示では、学習側から受け取った`depolarizing_body_ids`を使って活動を示す。瞬間的な点灯だけでは時間方向の変化を追いにくいため、表示上は短い残光を付ける。これは表示上の処理であり、神経状態そのものには影響しない。
 
-connectionの基礎明度はviewer graphに含まれるreleased `synapse_count` を対数正規化して表現する。presynaptic neuronが発火したconnectionではedgeが一時的に明るくなり、pre→post方向へviewer上の伝播パルスを流す。これは可視化表現であり、個々のsynaptic currentを追加計測しているわけではない。
+接続の基本的な明るさは、表示グラフに含まれる公開`synapse_count`を対数正規化して表現する。発火前ニューロンが活動した接続は一時的に明るくし、発火前から発火後方向へ表示上の伝播パルスを流す。これは可視化表現であり、個々のシナプス電流を追加計測しているわけではない。
 
-PAM reward / PPL aversive eventではdopamine neuron群の残光をevent色で強調する。
+PAM系の報酬イベントやPPL系の嫌悪イベントが起きた場合は、対応するドーパミン作動性ニューロン群の残光をイベント用の色で強調する。
 
-現在の3D node位置は、side / superclass / nerve等から分類したbrain・optic lobe・VNC領域と決定論的jitterによる模式配置である。MaleCNSの実際の3D morphologyまたはsynapse座標を表すものではない。公式の形態座標を取り込んだ場合のみ解剖学配置へ置換する。
+現在の3Dノード位置は、左右、上位分類、神経束などから脳・視葉・腹神経索の領域を分け、決定論的な微小ずらしを加えた模式配置である。MaleCNSの実際の3D形態やシナプス座標を表しているわけではない。公式の形態座標を取り込んだ場合にのみ、解剖学的位置へ置き換える。
 
-## 6. viewer health
+## 6. 可視化系の状態確認
 
-`scripts/embodiment/live_viewer_server.py` は `/api/viewer-health` を提供する。
+`scripts/embodiment/live_viewer_server.py`は`/api/viewer-health`を提供する。
 
 ここでは少なくとも次を確認できる。
 
-- viewerとtrainerのtelemetry stream接続状態
-- 期待するcontrol socket path
+- 可視化側と学習側の観察用ストリーム接続状態
+- 想定される制御ソケットの場所
 - `status.json`
 - `body.json`
 - `neural.json`
 - `fly.png`
 - `camera.json`
 
-body rendererが終了した場合、`scripts/dev/view_flyppy.sh` はHTTP serverだけを残して成功状態にせず、body renderer logを表示してviewer全体を失敗扱いにする。
+身体描画側が終了した場合、`scripts/dev/view_flyppy.sh`はHTTPサーバーだけを残して成功扱いにしない。身体描画側のログを表示し、可視化全体を失敗として扱う。
 
-## 7. 起動
+## 7. 起動方法
 
-学習は通常どおり起動する。viewer用フラグは不要。
+学習は通常どおり起動する。可視化専用の指定は不要である。
 
 ```bash
 bash scripts/dev/train_flyppy_population.sh
 ```
 
-学習開始後、見たくなった時だけ別ターミナルでobserverを起動する。
+学習開始後、観察したくなった時だけ別ターミナルで可視化を起動する。
 
 ```bash
 bash scripts/dev/view_flyppy_v3.sh
 ```
 
-observerを途中で閉じてもtrainingは継続する。後で再度observerを起動すれば、その時点の学習状態から再び観測できる。
+可視化を途中で閉じても学習は継続する。後で再度起動すれば、その時点の学習状態から再び観察できる。

@@ -2,9 +2,9 @@
 
 [English](CONTRIBUTING.md) · [日本語](CONTRIBUTING.ja.md) · [简体中文](CONTRIBUTING.zh-CN.md)
 
-`virtual-fly` 是研究软件。欢迎能够保持“实测生物学 / 文献来源 / 推断 / 工程假设 / calibration”之间边界的贡献。
+`virtual-fly` 是研究软件。我们欢迎能够保持以下边界清晰的贡献：直接观测到的生物学事实、文献采用值、推断、工程假设和校准值。
 
-进行科学或 runtime 修改前，请先阅读：
+如果要修改神经模型或运行系统，请先阅读：
 
 - [`README.zh-CN.md`](README.zh-CN.md)
 - [`AGENTS.md`](AGENTS.md)
@@ -12,115 +12,117 @@
 - [`docs/results.zh-CN.md`](docs/results.zh-CN.md)
 - [`docs/requirements.md`](docs/requirements.md)
 
-## Branch 方针
+## 分支方针
 
-`main` 是 stable / publication branch。可以使用 `dev/flyppy-v3` 等 development branch，但公开 milestone 应集成回 `main`，不要让 default branch 长期停留在旧状态。
+`main` 是稳定版和公开发布用分支。日常开发可以使用 `dev/flyppy-v3` 等开发分支，但在准备公开里程碑时，应把已经验证的修改合并回 `main`，不要让默认分支长期停留在旧状态。
 
-适合合并的条件：
+合并前至少确认：
 
-- 相关 tests 通过；
-- provenance / semantic contract 已记录；
-- 没有隐藏 blocking regression；
-- 临时 generated artifact 没有混入 source control；
-- publication claim 与该 lineage 实际产生的 evidence 一致。
+- 相关测试通过
+- 来源记录以及影响兼容性的运行定义已经写入文档
+- 没有隐藏已知的严重问题
+- 临时生成物没有混入源代码管理
+- 对外表述没有超过该开发系实际提供的证据范围
 
-## Scientific invariant
+## 科学上的不变条件
 
-除非进行明确的 project-level 设计变更，否则不要引入：
+除非明确进行项目级设计变更，否则不要引入以下机制：
 
-- 作为 nervous-system learner 的 backpropagation / gradient descent；
-- Q-learning / policy gradient / actor-critic / 外部 learned policy；
-- 手写 Flyppy obstacle policy；
-- scalar reward 直接更新 weight；
-- 用只保留最终答案的外部 feature extractor/classifier 替换已知局部感觉回路。
+- 把反向传播或梯度下降作为神经系统内部的学习方法
+- Q 学习、策略梯度、Actor-Critic 或外部训练出的行为策略
+- 为了攻略 Flyppy 而手写的动作规则
+- 由单一数值奖励直接修改突触权重
+- 用只模仿最终输出的外部特征提取器或分类器，替代已有生物学依据的局部感觉回路
 
-canonical architecture 中的学习路径是：
+基准架构中的学习过程是：
 
 ```text
-sensory stimulation
-    → neural dynamics
-    → behavior
-    → neuromodulatory stimulation
-    → local plasticity
-    → changed nervous system
+感觉刺激
+    → 神经活动
+    → 行为
+    → 神经调制系统受到刺激
+    → 局部可塑性
+    → 神经系统发生变化
 ```
 
-## Provenance label
+## 来源类别
 
-应尽可能区分：
+应尽可能给数值、连接和设置标明以下类别：
 
-- `observed`
-- `literature`
-- `inferred`
-- `assumed`
-- `calibrated`
+- `observed` — 直接测量到或上游数据中明确存在
+- `literature` — 从文献采用
+- `inferred` — 根据观测数据推断
+- `assumed` — 为填补未知部分而作出的假设
+- `calibrated` — 通过数值或实验过程校准
 
-不要把 inferred/calibrated boundary 描述成直接观测到的生物学事实。
+不要把推断值或校准值写成已经被直接观测到的生物学事实。
 
-## Historical / canonical result
+## 历史结果与基准结果
 
-v240/v960/v966/v1704 等 historical artifact 与 diagnostic 为了 provenance 被保留。不要把它们重新标记成 current canonical result。
+v240 / v960 / v966 / v1704 等历史实验产物和诊断结果会继续保留，用于追踪研究过程，但不能重新标记为当前的基准结果。
 
-公开结果 claim 应遵循 [`docs/results.zh-CN.md`](docs/results.zh-CN.md) 与 [`canonical/canonical-v1/`](canonical/canonical-v1/)。
+对外发布实验结果时，请以 [`docs/results.zh-CN.md`](docs/results.zh-CN.md) 和 [`canonical/canonical-v1/`](canonical/canonical-v1/) 为准。
 
-## 修改范围
+## 修改应尽量单一
 
-尽量让一个 change 只有一个可验证目的，例如：
+一次修改尽量只解决一个可验证的问题，例如：
 
-- MaleCNS data semantics
-- neural state stepping
-- plasticity
-- checkpoint format
-- sensory transduction
-- motor/peripheral mapping
-- body physics
-- reproducibility/reporting
+- MaleCNS 数据的含义与定义
+- 神经状态的时间推进
+- 可塑性规则
+- 检查点格式
+- 感觉信号转换
+- 运动神经元到外周系统的映射
+- 身体物理
+- 复现性与报告生成
 
-修改 neural dynamics、plasticity、neuromodulation、sensory transduction、CNS→body mapping、reinforcement stimulation target 或 checkpoint semantics 时，应在同一个 change 中更新相关文档。
+如果修改神经动力学、可塑性、神经调制、感觉转换、CNS 到身体的映射、奖赏或厌恶刺激对象，或检查点所代表的状态含义，请在同一次修改中更新相关文档。
 
-## Testing
+## 测试
 
-新的 computational core change 应按需要加入最小组合：
+修改计算核心时，应根据需要加入或更新：
 
-- unit test
-- deterministic/reference test
-- checkpoint round-trip
-- semantic contract test
-- 必要的 backend parity check
+- 单元测试
+- 确定性的参考测试
+- 检查点保存与重新载入测试
+- 运行定义与兼容性测试
+- 必要时不同执行方式之间的一致性检查
 
-不能为了性能优化而静默改变科学语义。
+不能为了提高速度而悄悄改变科学含义。
 
-## Data / generated artifact
+## 数据与生成物
 
-不要把大型外部 dataset 或生成 artifact commit 到 Git。
+不要把大型外部数据或生成物直接提交到 Git。
 
-应放在 Git 外的例子：
+通常应放在 Git 之外的内容包括：
 
-- raw MaleCNS download
-- large normalized snapshot
-- checkpoint
-- trajectory
-- rendered MP4
-- build cache / profiling trace
+- MaleCNS 生数据
+- 大型规范化快照
+- 检查点
+- 轨迹数据
+- 渲染后的 MP4
+- 构建缓存和详细性能分析记录
 
-改为追踪小型 manifest、hash、config 和 report。
+仓库应追踪体积较小的来源记录、哈希值、配置和摘要报告。
 
-## Documentation language
+## 文档语言
 
-对外公开 documentation 以英文为 default。主要公开入口最好同时提供日文和简体中文版本。
+对外文档以英文为默认版本，主要入口同时提供日文和简体中文版本。
 
-内部 research/development note 可以保留日文，以维持原始 context。不要仅为了表面统一而批量翻译 historical record。
+翻译版应写成各自语言中自然的文章，而不是机械保留英文词汇。代码标识符、文件名，以及 MaleCNS / FlyBody / MuJoCo 等专有名称可以保留原文。
 
-## Pull request / commit
+内部研究和开发记录可以保留原来的日文，以免破坏当时的语境。不要仅为了形式统一而批量翻译历史资料。
 
-有科学含义的修改应说明：
+## Pull Request 与提交记录
 
-- 改了什么；
-- 为什么修改；
-- 属于 observed/literature/inferred/assumed/calibrated 中的哪一种；
-- 哪些历史 experiment 会变得不兼容；
-- 如何测试。
+如果修改具有科学含义，请至少说明：
 
-## License
+- 修改了什么
+- 为什么修改
+- 属于 `observed` / `literature` / `inferred` / `assumed` / `calibrated` 中的哪一类
+- 与哪些历史实验不再兼容
+- 如何验证修改
 
-贡献到本 repository 的原创内容可按照 repository 的 [MIT License](LICENSE) 分发。只有在第三方 code/data/asset 的条款允许，并且能够保留必要 attribution/notice 时，才应提交这些内容。
+## 许可证
+
+向本仓库贡献的原创内容将按仓库的 [MIT License](LICENSE) 分发。添加第三方代码、数据或素材前，请确认其许可条款允许相应使用和再发布，并保留所需的署名和说明。

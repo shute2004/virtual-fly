@@ -2,109 +2,111 @@
 
 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 
-`virtual-fly` は、成体オスのショウジョウバエ（*Drosophila melanogaster*）の公開MaleCNSコネクトームを初期状態として、神経活動・神経修飾・局所シナプス可塑性を時間発展させ、FlyBody / MuJoCoの身体と物理環境へ閉ループ接続する研究プロジェクトです。
+`virtual-fly` は、成体オスのショウジョウバエの公開MaleCNSコネクトームを初期状態として、神経活動・神経修飾・局所シナプス可塑性を時間発展させ、FlyBody / MuJoCoの身体と物理環境に閉ループ接続する研究プロジェクトです。
 
-これは「ハエのコネクトームを使って人工ニューラルネットワークを学習する」プロジェクトではありません。現行production pathでは、誤差逆伝播、勾配降下、Q-learning、policy gradient、外部ニューラルネットワークcontroller、障害物攻略ロジックを使用しません。学習に相当するweight変化は、局所神経活動、eligibility、ドーパミン作動性神経修飾によって神経runtime内部で生じます。
+これは「ショウジョウバエのコネクトームを配線として人工ニューラルネットワークを学習させる」プロジェクトではありません。現在の実装では、誤差逆伝播、勾配降下、Q学習、方策勾配、外部ニューラルネットワークによる制御器、障害物を攻略するための手書き規則を使っていません。学習に伴う重みの変化は、局所的な神経活動、適格度、ドーパミン作動性の神経修飾から、神経系の内部で生じます。
 
-> **現在の状態:** canonical experiment v1とend-to-end再現スクリプトは完成済みです。canonical runでは、現行コードの完全な来歴を持つ実行経路と、局所可塑性によるMaleCNS保存weightの変化を確認しました。一方、この短いcanonical runでは**カテゴリカルな行動改善は確認されませんでした**。
+> **現在の状態:** 基準実験であるcanonical v1と、その一連の再現スクリプトは完成しています。canonical v1では、現行コードから結果までの来歴を追跡できることと、局所可塑性によってMaleCNSの保存重みが実際に変化することを確認しました。一方、この短い実験では**明確な行動改善は確認されませんでした**。
 
-## Historical visualization
+## 過去系統の比較映像
 
-![Historical v240 to v966 Before/After visualization](docs/assets/historical-v240-v966-before-after.gif)
+![v240からv966までの過去系統のBefore/After比較](docs/assets/historical-v240-v966-before-after.gif)
 
-このアニメーションは公開用マスター`before-after-neural.mp4`から生成し、READMEでは見やすさのため**1.5倍速**にしています。historicalな`v240 → v966` Before/Afterと、身体＋神経viewerを同時に示すため、このプロジェクトを視覚的に理解する入口として上部に配置しています。ただし、これは**canonical experimentの証拠ではありません**。v240/v960/v966/v1704は現在のcanonicalとは来歴が異なり、一部は意味論も異なります。assetのprovenanceとhashは [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に記録しています。
+このアニメーションは公開用の元動画`before-after-neural.mp4`から作成し、READMEでは見やすさのため**1.5倍速**にしています。`v240 → v966`のBefore/Afterと、身体・神経活動の可視化を同時に確認できるため、このプロジェクトの内容を直感的に把握する入口として上部に置いています。
 
-## Canonical result
+ただし、これは**canonical v1の証拠ではありません**。v240 / v960 / v966 / v1704は過去の開発系統であり、現在の基準実験とは来歴が異なり、一部では実行時の意味づけも異なります。元動画と変換後GIFの来歴・ハッシュ値は [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に記録しています。
 
-公開時の基準結果は [`canonical/canonical-v1/`](canonical/canonical-v1/README.md) です。過去の開発系統とは意図的に分離されています。
+## 基準実験（canonical v1）
 
-| 項目 | Canonical v1 |
+公開時の基準結果は [`canonical/canonical-v1/`](canonical/canonical-v1/README.md) にまとめています。過去の開発系統とは意図的に分離しています。
+
+| 項目 | canonical v1 |
 |---|---|
-| 科学実行コード | `7fa464aad7269d34f46f1171080b51e095d1d811`（clean） |
-| MaleCNS snapshot | 166,700 neurons / 25,582,938 directed edges |
-| DAN semantics | 公開annotation `class=DAN` + dopamine consensus、338 modulators |
-| Body / environment | v7 / v7 |
-| Vision | direct-ray、13 rays/ommatidium |
-| Haltere input | 97-neuron timing subset、gain `0.05`、`interaction-load-v2` |
-| Training | 6 episodes、population 2、async shared weights、boundary-band |
-| Global weight version | v0 → v6 |
-| Aggregate neural step | 484 |
-| 厳密に値が変化した保存edge | 2,163,179 |
-| Frozen initial evaluation | 1 gate通過後、control step 120でgate collision |
-| Frozen final evaluation | 1 gate通過後、control step 120でgate collision |
+| 科学計算に使用したコード | `7fa464aad7269d34f46f1171080b51e095d1d811`（変更なしの状態） |
+| MaleCNSスナップショット | 166,700ニューロン / 25,582,938有向辺 |
+| DANの定義 | 公開注釈`class=DAN`とドーパミン判定の一致、338個 |
+| 身体 / 環境 | v7 / v7 |
+| 視覚 | `direct-ray`、個眼あたり13本 |
+| 平均棍入力 | 97ニューロンの時系列用部分集合、利得`0.05`、`interaction-load-v2` |
+| 学習条件 | 6エピソード、同時個体数2、非同期共有重み、`boundary-band` |
+| 共有重みの版 | v0 → v6 |
+| 神経更新ステップ総数 | 484 |
+| 保存重みが実際に変化した辺 | 2,163,179 |
+| 初期状態の固定評価 | 1枚通過後、制御ステップ120で次のゲートに衝突 |
+| 最終状態の固定評価 | 1枚通過後、制御ステップ120で次のゲートに衝突 |
 
-Frozen evaluationではplasticityと課題イベント由来のDAN刺激を両方停止しています（`reward_current=0`, `aversive_current=0`）。したがってcanonical v1が示しているのは、**現行の局所可塑性意味論で保存weightが変化したこと**であり、行動改善・一般化・長期学習安定性の実証ではありません。
+固定評価では、可塑性と課題イベントによるDAN刺激をどちらも停止しています（`reward_current=0`, `aversive_current=0`）。したがってcanonical v1が示しているのは、**現在の局所可塑性則のもとで保存重みが変化したこと**です。行動改善、一般化、長期的な学習安定性まで実証したものではありません。
 
-2026-09-19にcleanな`7fa464a`からend-to-end reproducerを再実行し、source-derived static artifactのhashがすべてreferenceと一致すること、global v6まで学習が完了すること、厳密に2,163,179 edgeが変化すること、initial/final checkpointが再ロードできること、frozen evaluation結果がreferenceと一致することを確認しています。
+2026年9月19日には、変更のない`7fa464a`から一連の再現処理を最初から実行しました。元データから生成される静的成果物のハッシュ値はすべて記録済みの基準値と一致し、学習は共有重みv6まで完了しました。保存重みが変化した辺の数も2,163,179で一致し、初期・最終チェックポイントの再読み込みと固定評価の結果も基準記録と一致しました。
 
 詳細:
 
-- [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — canonical結果の短い要約
-- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完全なprovenance
-- [`docs/results.ja.md`](docs/results.ja.md) — canonicalとhistorical resultの境界
-- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — provenance / semantics監査と修正
+- [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — 基準実験の結果要約
+- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完全な来歴記録
+- [`docs/results.ja.md`](docs/results.ja.md) — 基準結果と過去結果の区別
+- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — 来歴と実行上の意味づけに関する監査・修正記録
 
 ## 現在実装されているもの
 
-現行production pathは次です。
+現在の実行経路は次のとおりです。
 
 ```text
-Flyppy physical world
+Flyppyの物理環境
         ↓
-FlyBody compound-eye geometry + local direct rays
+FlyBodyの複眼幾何 + 局所direct-ray
         ↓
-released MaleCNS R1-R6 body-ID currents
+公開MaleCNSのR1-R6 body IDへの電流入力
         ↓
-whole-MaleCNS neural dynamics
+MaleCNS全体の神経活動
         ↓
-local eligibility + class-DAN-mediated plasticity
+局所適格度 + class-DANによる神経修飾と可塑性
         ↓
-individual released motor-neuron spikes
+公開運動ニューロンごとの発火
         ↓
-whole-body peripheral muscle state
+全身の末梢筋状態
         ↓
-FlyBody / MuJoCo physical actuation
+FlyBody / MuJoCoによる物理駆動
         ↓
-Flyppy physical world
+Flyppyの物理環境
 ```
 
-ゲート通過や衝突などの課題イベントが直接weightを書き換えることはありません。イベントは選択された実在DAN群への電流刺激へ変換され、その後のシナプス変化は神経runtime内の局所則で計算されます。
+ゲート通過や衝突などの課題イベントが、重みを直接書き換えることはありません。イベントは選択した実在DAN群への電流刺激へ変換され、その後のシナプス変化は神経系内部の局所則によって計算されます。
 
-現在の重要な境界:
+現在の重要な境界は次のとおりです。
 
-- MaleCNS source snapshotはimmutableです。
-- 視覚入力は外部obstacle classifierを使わず、局所retinotopic R1-R6 identityを維持します。
-- 運動出力はpopulation average action decoderではなく、個別released motor-neuron IDを維持します。
-- viewerはobserver-onlyで、trainingへ状態を返しません。
-- population trainingは1つのglobal weight stateを共有しますが、episode-localな膜電位・spike・refractory・trace・modulation・eligibilityはepisode間でresetされます。
-- 現在のpopulation checkpointはglobal weightsを保存し、完全な持続的生物個体状態を保存するものではありません。
+- MaleCNSの元スナップショットは読み取り専用です。
+- 視覚入力では外部の障害物分類器を使わず、R1-R6の局所的な網膜上の位置関係を維持します。
+- 運動出力では、集団平均から行動を選ぶ復号器を置かず、公開運動ニューロンごとのbody IDを維持します。
+- 可視化画面は観察専用で、学習側へ状態を返しません。
+- 並列学習では共有重みを1つ持ちますが、膜電位、発火状態、不応期、活動履歴、神経修飾、適格度などの短期状態はエピソードごとに初期化します。
+- 現在の並列学習用チェックポイントが保存するのは共有重みであり、仮想個体の全状態を持続的に保存するものではありません。
 
-実装詳細は [`docs/architecture.ja.md`](docs/architecture.ja.md) と [`docs/code-structure.md`](docs/code-structure.md) を参照してください。
+実装の詳細は [`docs/architecture.ja.md`](docs/architecture.ja.md) と [`docs/code-structure.md`](docs/code-structure.md) を参照してください。
 
 ## このプロジェクトが主張していないこと
 
-`virtual-fly` は生物学的根拠を持つ計算上の再構築であり、現時点で完全な生物学的ハエを再現したという主張ではありません。
+`virtual-fly` は、生物学的な根拠に基づいてショウジョウバエを計算機上で再構築しようとする研究です。現在のシミュレーターが、すでに現実のハエを完全に再現しているという主張ではありません。
 
-特にcanonical v1は以下を実証していません。
+特にcanonical v1では、次のことは実証していません。
 
-- 6 episode後のカテゴリカルな行動改善
-- 課題一般化
+- 6エピソード後の明確な行動改善
+- 未経験条件への一般化
 - 長期的な学習安定性
-- 全ニューロン、全シナプス、全感覚器、全飛翔筋の完全な生物物理忠実性
-- historical v240/v960/v966/v1704結果と現行canonical semanticsの同一性
+- 全ニューロン、全シナプス、全感覚器、全飛翔筋の完全な生物物理学的再現
+- 過去のv240 / v960 / v966 / v1704と、現在のcanonical v1が同じ条件・意味づけで得られたということ
 
-可能な限り、upstreamで観測された値、文献由来の値、推定、工学的仮定、calibrationを区別します。
+可能な限り、上流データで直接観測された値、文献から採用した値、推定値、工学的な仮定、較正値を区別して記録します。
 
-## Installation
+## 導入
 
-### 必要環境
+### 必要なもの
 
 - Python `>=3.12,<3.15`
 - [`uv`](https://docs.astral.sh/uv/)
-- Rust toolchain / Cargo
-- MuJoCoを実行できるローカル環境
+- Rustの開発環境 / Cargo
+- MuJoCoを実行できる環境
 
-現在のcanonical referenceはmacOS / Apple Metal GPU上で生成されています。source-derived static artifactはhashで照合しますが、async GPU/MuJoCo trajectoryが異なるhardware間でbit-identicalになることは保証していません。
+現在の基準結果はmacOS / Apple Metal GPU上で生成しています。元データから決定論的に生成される静的成果物はハッシュ値で照合しますが、非同期実行を含むGPU / MuJoCoの軌跡が異なるハードウェア間でビット単位に一致することは保証していません。
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
@@ -112,61 +114,61 @@ cd virtual-fly
 uv sync --frozen
 ```
 
-大容量upstream datasetや生成experiment artifactは意図的にGitへ含めません。
+大容量の外部データや実験生成物は、意図的にGitへ含めません。
 
-## Canonical v1を再現する
+## canonical v1を再現する
 
-canonical reproducerは、official sourceのfresh取得、snapshot/derived artifact再生成、6 episode canonical training、initial/final checkpoint検証、frozen evaluation、provenance manifest生成までを一括実行します。
+再現スクリプトは、公式配布元からのMaleCNSデータ新規取得、スナップショットと派生成果物の再生成、6エピソードの基準学習、初期・最終チェックポイントの検証、固定評価、来歴記録の生成までを一括で実行します。
 
 ```bash
 bash canonical/canonical-v1/reproduce.sh
 ```
 
-巨大output bundleは既定でrepository外へ出ます。
+大容量の出力一式は、既定ではリポジトリの外に保存されます。
 
 ```text
 ${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/
 ```
 
-別の保存先は`VF_CANONICAL_OUTPUT_ROOT=/path/to/output`で指定できます。科学実行部分は常にcleanな`7fa464a`へ固定したisolated worktreeで実行されます。
+保存先は`VF_CANONICAL_OUTPUT_ROOT=/path/to/output`で変更できます。科学計算部分は、常に変更のない`7fa464a`を切り出した独立作業ツリーで実行されます。
 
-## 現行development training
+## 現在の開発用学習
 
-現在の汎用production entry pointは次です。
+通常の実行入口は次です。
 
 ```bash
 bash scripts/dev/train_flyppy_population.sh
 ```
 
-`scripts/dev/train_flyppy_v3_population.sh`はcompatibility wrapperとして残っています。development runや継続更新reportは、自動的にcanonical resultになるわけではありません。
+`scripts/dev/train_flyppy_v3_population.sh`は互換性維持のための呼び出しスクリプトとして残しています。開発中の実行結果や随時更新されるレポートが、自動的に基準結果になるわけではありません。
 
-## Repository構成
+## リポジトリ構成
 
 ```text
-canonical/      canonical experiment packageとreference provenance
-crates/         Rust neural runtime / runner
-docs/           architecture、科学契約、再現性、履歴資料
-reports/        小容量の診断・historical development report
-scripts/        data preparation、analysis、compatibility CLI、launcher
-src/            現行Python package (`virtual_fly`)
-tests/          semantics / scheduling / runtime / reproducibility test
-visualization/  observer-only neural viewer
-artifacts/      ローカル大容量data/checkpoint/video。Git対象外
-release/        release asset manifest。大容量本体はGit対象外
+canonical/      基準実験パッケージと来歴記録
+crates/         Rust製の神経実行系と実行プログラム
+docs/           設計、科学上の約束事、再現性、履歴資料
+reports/        小容量の診断結果と過去の開発レポート
+scripts/        データ準備、解析、互換用コマンド、起動スクリプト
+src/            現行Pythonパッケージ（`virtual_fly`）
+tests/          意味づけ、実行順序、実行系、再現性の試験
+visualization/  観察専用の神経可視化
+artifacts/      ローカルの大容量データ、チェックポイント、動画。Git管理外
+release/        公開用ファイルの来歴記録。大容量ファイル本体はGit管理外
 ```
 
-ドキュメント案内は [`docs/README.ja.md`](docs/README.ja.md) を参照してください。
+文書全体の案内は [`docs/README.ja.md`](docs/README.ja.md) を参照してください。
 
-## 結果・provenance・大容量data
+## 結果・来歴・大容量データ
 
-historical development resultは来歴として有用なので残していますが、canonicalへ遡及的に読み替えません。境界は [`docs/results.ja.md`](docs/results.ja.md) に明記しています。
+過去の開発結果は研究の来歴として有用なため残していますが、現在の基準結果として読み替えることはしません。区別は [`docs/results.ja.md`](docs/results.ja.md) に明記しています。
 
-MaleCNS raw、snapshot、checkpoint、trajectory、rendered video、build cache等の巨大ファイルはGitから除外し、小さなmanifest・hash・reportを追跡します。
+MaleCNSの生データ、スナップショット、チェックポイント、軌跡データ、描画動画、ビルドキャッシュなどの大容量ファイルはGitから除外し、小さな来歴記録、ハッシュ値、設定、レポートだけを追跡します。
 
-## Citation
+## 引用方法
 
-引用情報は [`CITATION.cff`](CITATION.cff) にあります。アーカイブ用GitHub Releaseはpublication branch上のtagから作成し、Zenodoへ連携する設計です。詳細は [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md) を参照してください。
+引用情報は [`CITATION.cff`](CITATION.cff) に記載しています。長期保存用のGitHubリリースは公開用ブランチのタグから作成し、Zenodoと連携する設計です。手順は [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md) を参照してください。
 
-## License
+## ライセンス
 
-`virtual-fly`独自のsource codeとdocumentationは [MIT License](LICENSE) です。外部dataset、software、model asset、第三者materialを含むgenerated mediaはそれぞれの利用条件に従います。詳細は [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) を参照してください。
+`virtual-fly`独自のソースコードと文書は [MIT License](LICENSE) で公開します。外部データ、外部ソフトウェア、外部モデルの資産、第三者由来の素材を含む生成物には、それぞれの利用条件が適用されます。詳細は [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) を参照してください。

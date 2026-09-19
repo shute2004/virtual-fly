@@ -1,109 +1,109 @@
-# 結果とprovenanceの境界
+# 結果と来歴の区分
 
 [English](results.md) · [日本語](results.ja.md) · [简体中文](results.zh-CN.md)
 
-この文書では、どの結果を「現在のcanonical result」と呼んでよいか、どの結果をhistorical development evidenceとしてのみ保持するかを明確にします。
+この文書では、どの結果を現在の基準結果として扱うか、どの結果を過去の開発記録としてのみ保持するかを明確にします。
 
-## 1. Canonical experiment v1
+## 1. 基準実験（canonical v1）
 
-Canonical v1は公開時の基準experimentです。科学実行部分はcleanなGit commitに固定されています。
+canonical v1は、公開時の基準となる実験です。科学計算部分は、未コミット変更のない次のGitコミットに固定しています。
 
 ```text
 7fa464aad7269d34f46f1171080b51e095d1d811
 ```
 
-短い結果は [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md)、完全なprovenanceは [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json) にあります。
+結果の短い要約は [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md)、完全な来歴記録は [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json) にあります。
 
-### 条件
+### 実験条件
 
-- official MaleCNS v1.0 sourceをfresh取得
-- current-semantics MaleCNS snapshotをfresh生成
-- 166,700 neurons / 25,582,938 directed edges
-- class-DAN semantics: 公開`class=DAN` annotation + dopamine consensus
-- body v7 / environment v7
-- direct-ray vision、13 rays/ommatidium
-- 97-neuron haltere timing subset、gain 0.05、`interaction-load-v2`
-- population 2、async shared weights
-- boundary-band curriculum
-- 6 training episodes
-- global-weights-only checkpoint semantics
+- MaleCNS v1.0の公式配布データを新規取得
+- 現在の仕様に基づくMaleCNSスナップショットを新規生成
+- 166,700ニューロン / 25,582,938有向辺
+- DANの定義: 公開注釈`class=DAN`とドーパミン判定の一致
+- 身体v7 / 環境v7
+- `direct-ray`視覚、個眼あたり13本
+- 平均棍入力: 97ニューロンの時系列用部分集合、利得0.05、`interaction-load-v2`
+- 同時個体数2、非同期の共有重み
+- `boundary-band`による経験条件の調整
+- 学習6エピソード
+- チェックポイントは共有重みのみを保持
 
-### Canonicalで観測された結果
+### 観測された結果
 
-- global weight version: v0 → v6
-- aggregate neural step: 484
-- 厳密に値が変化した保存edge: **2,163,179 / 25,582,938**
-- `|Δw| > 1e-7`: 1,461,896 edges
-- `|Δw| > 1e-6`: 536,060 edges
-- strengthened: 961,611 edges
-- weakened: 1,201,568 edges
-- maximum `|Δw|`: 0.0018288875
+- 共有重みの版: v0 → v6
+- 神経更新ステップ総数: 484
+- 保存重みが実際に変化した辺: **2,163,179 / 25,582,938**
+- `|Δw| > 1e-7`: 1,461,896辺
+- `|Δw| > 1e-6`: 536,060辺
+- 強化された辺: 961,611
+- 弱化された辺: 1,201,568
+- 最大`|Δw|`: 0.0018288875
 
-Frozen evaluationではplasticityと課題イベント由来DAN currentを停止しています。initial v0とfinal v6はいずれも1 gate通過後、control step 120で次のgateに衝突しました。
+固定評価では、可塑性と課題イベントによるDAN刺激を停止しています。初期状態v0と最終状態v6はいずれも1枚のゲートを通過した後、制御ステップ120で次のゲートに衝突しました。
 
-**解釈:** canonical v1は、現行局所可塑性実装によって保存MaleCNS weightが変化した、来歴追跡可能なclosed-loop runを示します。一方、この短いcanonical experimentでは**カテゴリカルな行動改善は観測されていません**。一般化や長期学習安定性も実証していません。
+**解釈:** canonical v1では、現在の局所可塑性実装によってMaleCNSの保存重みが変化することを、来歴を追跡できる閉ループ実行として確認しました。一方、この短い実験では**明確な行動改善は観測されていません**。一般化や長期的な学習安定性も実証していません。
 
-## 2. End-to-end再現確認
+## 2. 一連の再現確認
 
-2026-09-19に`canonical/canonical-v1/reproduce.sh`を、cleanな`7fa464a` isolated checkoutから最初から最後まで実行しました。
+2026年9月19日に`canonical/canonical-v1/reproduce.sh`を使い、変更のない`7fa464a`を切り出した独立作業ツリーから、最初から最後まで再現処理を実行しました。
 
-確認済み:
+確認した内容:
 
-- fresh MaleCNS source download
-- fresh snapshot生成
-- fresh derived artifact生成
-- 記録されたstatic artifact hashが全件byte-for-byte一致
-- neural calibrationでstable scales 0.004–0.007から0.005を選択
-- canonical 6 episode training完了
-- global v0 → v6
-- 2,163,179 edgeが厳密に変化しreferenceと一致
-- initial/final checkpointを新しいbridge processで再ロード成功
-- frozen initial/final evaluationがreference outcomeと一致
-- 最終的にpinned scientific worktreeがclean
+- MaleCNSの公式配布データを新規取得
+- スナップショットを新規生成
+- 派生成果物を新規生成
+- 記録済みの静的成果物のハッシュ値がすべてバイト単位で一致
+- 神経系の較正では安定範囲0.004〜0.007から0.005を選択
+- 6エピソードの基準学習を完了
+- 共有重みv0 → v6
+- 2,163,179辺の重みが実際に変化し、基準記録と一致
+- 初期・最終チェックポイントを新しい神経ブリッジプロセスで再読み込み
+- 初期・最終の固定評価が基準記録と一致
+- 最後まで、固定した科学計算用作業ツリーに未コミット変更がないことを確認
 
-巨大な検証bundleは一時生成物として扱い、検証後は軽量manifest/reportのみrepository外に保持しました。現在のreproduction scriptは巨大な検証runを既定でrepository外へ出します。
+検証時に生成された大容量の一式は一時生成物として扱い、検証後は小さな来歴記録とレポートだけをリポジトリ外に保持しました。現在の再現スクリプトも、大容量の出力を既定でリポジトリ外へ保存します。
 
-## 3. Historical development results
+## 3. 過去の開発結果
 
-v240、v960、v966、v1704および関連posting/diagnostic runは、**historical result**として保持します。
+v240、v960、v966、v1704および関連する投稿用・診断用の実行結果は、**過去の結果**として保持します。
 
-これらは開発過程を理解するうえで科学的価値がありますが、canonical v1と同一視できません。[`reproducibility-fixes-2026-09-19.md`](reproducibility-fixes-2026-09-19.md) のprovenance auditには、旧dopamine-source semantics、pre-commit provenance、mixed v966 lineage、現在のfrozen canonical comparisonとは異なるevaluation条件などが記録されています。
+これらは開発過程を理解するうえで価値がありますが、canonical v1と同一視することはできません。[`reproducibility-fixes-2026-09-19.md`](reproducibility-fixes-2026-09-19.md) には、旧来のドーパミン源の定義、コミット固定前の来歴、複数系統の条件が混在したv966、現在の固定評価とは異なる評価条件などを記録しています。
 
-historical behaviorを、current class-DAN canonical semanticsで生成された結果のように記述してはいけません。
+過去の行動結果を、現在のclass-DAN定義とcanonical v1の条件で得られた結果のように記述しないでください。
 
-## 4. Historical Before/After media
+## 4. 過去系統のBefore/After映像
 
-公開用historical比較の条件は次です。
+公開用の比較映像は、次の過去系統を示します。
 
-- **before:** global weight version v240
-- **after:** global weight version v966
-- body/environment: v7/v7
-- gate 2 center: 13.703125 mm
-- evaluation plasticity: off
-- before outcome: 1 gate
-- after outcome: 2 gates
+- **before:** 共有重みv240
+- **after:** 共有重みv966
+- 身体 / 環境: v7 / v7
+- 第2ゲート中心高度: 13.703125 mm
+- 評価中の可塑性: 停止
+- beforeの結果: 1枚通過
+- afterの結果: 2枚通過
 
-このmediaはhistorical learned-state comparisonの可視化として有用ですが、canonical behavioral resultではありません。
+この映像は、過去の学習済み状態を視覚的に比較する資料として有用ですが、canonical v1の行動結果ではありません。
 
-Gitには小さいrepresentative imageとrelease-asset manifestのみを追跡します。完全なMP4とraw playback JSONはGit外に保持し、GitHub Releaseで明示的にhistoricalとラベル付けして配布します。 [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json) を参照してください。
+READMEに掲載しているGIFは、公開用の元動画`before-after-neural.mp4`から1.5倍速で生成したものです。元動画、GIF、関連する生の再生記録の来歴とハッシュ値は [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json) に記録しています。大容量の元動画や再生記録はGitへ直接登録せず、GitHubリリースで過去資料と明記して配布する方針です。
 
-## 5. README・Release・論文・投稿でのclaimルール
+## 5. README・公開リリース・論文・投稿で主張できる範囲
 
-Canonical v1で支持されるclaim:
+canonical v1によって支持される内容:
 
-- 公開MaleCNS connectomeを初期神経構造として使っている
-- closed-loopの視覚・機械感覚入力がneural runtimeへ入る
-- individual released motor-neuron outputがperipheral modelを介して身体を駆動する
-- 課題結果はscalar weight-update targetではなく、選択した実在DAN群への刺激になる
-- 現行局所可塑性実装によって保存CNS weightが変化する
-- canonical data/provenance pathをend-to-endで再現できる
+- 公開MaleCNSコネクトームを初期の神経構造として使用している
+- 閉ループの視覚入力・機械感覚入力が神経系に入る
+- 公開されている個々の運動ニューロンの出力が、末梢モデルを介して身体を駆動する
+- 課題の結果は、重み更新の正解値として直接与えられるのではなく、選択した実在DAN群への刺激へ変換される
+- 現在の局所可塑性実装によって、保存されているCNSの重みが変化する
+- canonical v1のデータ取得から評価までの経路を、一連の手順として再現できる
 
-Canonical v1では支持されないclaim:
+canonical v1によっては支持されない内容:
 
 - 「canonical v1がFlyppyを解けるように学習した」
 - 「canonical v1で行動が改善した」
-- 「現在のsimulatorは完全な現実のハエを再現している」
-- 「historical v966 behaviorがcurrent canonical semanticsで再現された」
-- 「現行modelが一般的な学習能力や長期安定性を実証した」
+- 「現在のシミュレーターは現実のハエを完全に再現している」
+- 「過去のv966の行動が、現在のcanonical v1と同じ条件・意味づけで再現された」
+- 「現在のモデルが一般的な学習能力や長期安定性を実証した」
 
-Historical mediaを示す場合はhistoricalと明示し、この文書またはcanonical reference reportへリンクしてください。
+過去系統の映像や結果を示す場合は、それが過去資料であることを明記し、この文書またはcanonical v1の結果要約へリンクしてください。
