@@ -33,7 +33,7 @@ Do not add large raw scientific artifacts to Git merely to make a release self-c
 
 ## 3. GitHub Release assets
 
-The GitHub source archive already contains the canonical package, so the canonical raw source/snapshot/checkpoints do not need to be duplicated as release attachments.
+The GitHub source archive already contains the canonical package, so canonical raw source/snapshots/checkpoints are not duplicated as GitHub Release attachments. Large checkpoint distribution is handled separately through Hugging Face as described below.
 
 For `v0.1.0`, attach the historical presentation media only if it remains useful for communicating the project:
 
@@ -59,9 +59,32 @@ Do not attach these simply for completeness:
 
 The canonical reproducer can reacquire and validate source data. Keeping these large files out of both Git and routine releases reduces duplication while preserving scientific provenance through hashes and manifests.
 
-If a future archival requirement needs a large immutable checkpoint/data bundle, publish it as a separately identified research-data record rather than silently embedding it in the software release.
+If a future archival requirement needs a large immutable non-checkpoint data bundle, publish it as a separately identified research-data record rather than silently embedding it in the software release.
 
-## 5. Canonical reproduction statement for release notes
+## 5. Hugging Face checkpoint distribution
+
+Large checkpoint artifacts are distributed separately from GitHub through the Hugging Face project overview repository:
+
+- https://huggingface.co/shute2004/virtual-fly
+
+The planned model repositories are:
+
+- `shute2004/virtual-fly-initial-YYYYMMDD` — canonical v1 initial checkpoint;
+- `shute2004/virtual-fly-trained-YYYYMMDD` — canonical v1 trained checkpoint;
+- `shute2004/virtual-fly-video-before` — exact historical checkpoint used for the Before side of the published comparison video;
+- `shute2004/virtual-fly-video-after` — exact historical checkpoint used for the After side of the published comparison video.
+
+`YYYYMMDD` is not chosen until the actual publication day. The historical video repositories are never described as the canonical initial/trained pair. Internal versions v240/v966 remain provenance fields only.
+
+Each checkpoint repository contains the native checkpoint files plus a model card, attribution notice, machine-readable provenance, and SHA-256 list. Full trajectories, frame directories, raw MaleCNS data, normalized snapshots, FlyBody assets, unrelated development checkpoints, and build artifacts are excluded unless they are directly necessary to use the checkpoint.
+
+The official MaleCNS download page licenses `male-cns:v1.0` under CC BY 4.0. Because the published weights are derived numerical states based on that connectome, the prepared checkpoint repositories use `cc-by-4.0` metadata and explicit MaleCNS attribution. Raw MaleCNS is not mirrored; users obtain it from the official source or the canonical acquisition/reproduction path. FlyBody, FlyGym, and MuJoCo assets are likewise not copied into checkpoint repositories.
+
+The complete prepared layout, model-card templates, exact checkpoint file sizes/hashes, and publication procedure are tracked in [`../../../release/huggingface/`](../../../release/huggingface/README.md).
+
+Hugging Face repository creation/upload is a publication action and is deliberately not performed during Phase 4 preparation.
+
+## 6. Canonical reproduction statement for release notes
 
 Recommended factual summary:
 
@@ -69,7 +92,7 @@ Recommended factual summary:
 
 Do not shorten this to "the fly learned Flyppy" or similar.
 
-## 6. Zenodo GitHub integration
+## 7. Zenodo GitHub integration
 
 Current Zenodo documentation describes the GitHub integration as follows:
 
@@ -91,7 +114,7 @@ Official metadata documentation:
 - https://help.zenodo.org/docs/github/describe-software/
 - https://help.zenodo.org/docs/github/describe-software/zenodo-json/
 
-## 7. DOI handling
+## 8. DOI handling
 
 Do not invent a DOI in README or `CITATION.cff` before one exists.
 
@@ -104,19 +127,19 @@ For the normal GitHub integration path, create the GitHub Release and allow Zeno
 
 If a DOI must be known before publication, use a manual Zenodo deposition and reserve a DOI there instead of pretending the GitHub integration has already assigned one.
 
-## 8. Creator metadata
+## 9. Creator metadata
 
 For `v0.1.0`, the creator identity is intentionally the established Git/GitHub project identity `shute2004`. No legal name, ORCID, or affiliation is inferred from local machine/account information. Those optional fields may be added before the DOI-bearing release only if the project owner explicitly wants them in the permanent citation record.
 
 `CITATION.cff` and `.zenodo.json` are kept semantically synchronized for title, version, license, creator identity, repository identity, and project description. Because both files are present, current Zenodo GitHub integration uses `.zenodo.json` for archival metadata; `CITATION.cff` remains for GitHub and other citation tooling.
 
-## 9. Pre-publication privacy/provenance audit
+## 10. Pre-publication privacy/provenance audit
 
 The 2026-09-19 tracked-file scan found no high-confidence credential-shaped strings and no personal email addresses in tracked files. It found absolute local filesystem paths in exactly 14 historical provenance files: one archived development note and 13 tracked reports/logs/JSON records.
 
 The decision for `v0.1.0` is to preserve those 14 originals unchanged. Their paths record the machine context of historical runs, tracebacks, or generated reports; rewriting them would alter the original provenance record. Current public READMEs and current multilingual documentation contain no `/Users/<local-user>/...` path. [`../../../reports/README.md`](../../../reports/README.md) and [`../../archive/README.md`](../../archive/README.md) explicitly explain that such historical paths are provenance rather than installation instructions.
 
-## 10. Third-party fresh-clone preflight
+## 11. Third-party fresh-clone preflight
 
 A fresh shallow clone of `main` at `b1245a7022d6460a9046ec6cf7af18bb09818868` was tested on 2026-09-19 without using the development checkout's virtual environment, Cargo build directory, MaleCNS snapshot, or generated artifacts.
 
@@ -130,7 +153,7 @@ Verified from README-level instructions:
 
 The full canonical experiment was deliberately not rerun as part of this publication preflight.
 
-## 11. Local release rehearsal
+## 12. Local release rehearsal
 
 A release candidate bundle was assembled locally without creating a Git tag or GitHub Release. The rehearsal generated a source archive from the clean publication candidate, copied the four planned historical attachments under their release filenames, and verified every attachment size and SHA-256 against `release/release-assets-v0.1.0.json`.
 
@@ -138,7 +161,18 @@ The source archive contained the README, license, citation/Zenodo metadata, cano
 
 A read-only GitHub check on 2026-09-19 confirmed that the repository remained **private**, `main` was the default branch, and no tags or GitHub Releases existed. No publication action was performed by this preflight.
 
-## 12. Release checklist
+### Hugging Face checkpoint rehearsal
+
+The four prepared Hugging Face repository templates were also assembled locally with the exact source checkpoint directories, without creating or uploading any Hugging Face repository. Every file listed in each prepared `SHA256SUMS` was rehashed from the assembled repository and matched the recorded value. The resulting checkpoint payload sizes were:
+
+- canonical initial: 207,998,044 bytes;
+- canonical trained: 207,998,046 bytes;
+- historical video Before: 207,997,939 bytes;
+- historical video After: 207,997,940 bytes.
+
+The existing `shute2004/virtual-fly` Hugging Face overview repository was not modified. An unauthenticated read-only Git probe could not verify its current contents, so Phase 4 treats the project owner's existing repository as the destination and prepares the exact overview card locally under `release/huggingface/overview/README.md`.
+
+## 13. Release checklist
 
 - [x] publication changes are on default `main`
 - [ ] repository visibility is intentionally set for public release
@@ -151,7 +185,15 @@ A read-only GitHub check on 2026-09-19 confirmed that the repository remained **
 - [x] release assets recorded with SHA-256 hashes and reverified locally
 - [x] local release-bundle rehearsal passed without creating a tag or Release
 - [x] third-party attribution included
+- [x] Hugging Face four-repository publication layout, model-card templates, exact checkpoint hashes, and required file lists prepared
+- [x] local four-repository Hugging Face bundle/hash rehearsal passed without upload
+- [x] canonical/Historical-video checkpoint lineages explicitly separated in cards and GitHub docs
+- [x] raw MaleCNS and FlyBody/FlyGym/MuJoCo assets excluded from checkpoint upload plan; official acquisition paths retained
 - [x] creator identity for `v0.1.0` intentionally set to `shute2004`; ORCID/affiliation omitted unless explicitly supplied
+- [ ] choose actual publication date and finalize the two canonical Hugging Face repository names
+- [ ] create/upload the four Hugging Face checkpoint repositories
+- [ ] publish/update `shute2004/virtual-fly` overview card with final four links
+- [ ] replace placeholder canonical Hugging Face names/links in GitHub docs after the repositories exist
 - [ ] tag `v0.1.0`
 - [ ] GitHub Release created
 - [ ] Zenodo repository integration enabled

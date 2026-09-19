@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "overview_repository": "shute2004/virtual-fly",
+  "publication_policy": {
+    "github_contains_large_checkpoints": false,
+    "huggingface_contains_raw_malecns": false,
+    "huggingface_contains_flybody_assets": false,
+    "canonical_repository_date_placeholder": "YYYYMMDD",
+    "canonical_and_historical_video_lineages_are_distinct": true
+  },
+  "upstream": {
+    "malecns_dataset": "male-cns:v1.0",
+    "malecns_license": "CC-BY-4.0",
+    "malecns_official_download": "https://male-cns.janelia.org/download/",
+    "virtual_fly_source": "https://github.com/shute2004/virtual-fly"
+  },
+  "artifacts": [
+    {
+      "id": "canonical-initial",
+      "planned_repository": "shute2004/virtual-fly-initial-YYYYMMDD",
+      "lineage": "canonical-v1",
+      "historical": false,
+      "source_locator": "external-reference:canonical-v1-reference/artifacts/canonical-experiment-v1/initial/checkpoint",
+      "scientific_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+      "dataset": "male-cns:v1.0",
+      "neuron_count": 166700,
+      "edge_count": 25582938,
+      "global_weight_version": 0,
+      "aggregate_neural_step": 0,
+      "checkpoint_semantics": "global-weights-only-v1",
+      "step_semantics": "aggregate-slot-neural-step-count-v1",
+      "total_bytes": 207998044,
+      "files": [
+        {"path": "checkpoint/activity-trace.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/eligibility.f32le", "size_bytes": 102331752, "sha256": "c6cfb26d239011986790646a5d5c9989c07b06bc6ed1aeec71c1bbe9180ba3d3"},
+        {"path": "checkpoint/manifest.json", "size_bytes": 540, "sha256": "e9988d10b5fa61edacfeb6bab54c25cac75db852494bc67b05e82e8ba6f6b520"},
+        {"path": "checkpoint/membrane.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/modulation.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/refractory.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/spikes.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/weights.f32le", "size_bytes": 102331752, "sha256": "4b158ecce6c851c9a321a5e64cafcc75362e398a485a080494771c1dc3e019ce"}
+      ]
+    },
+    {
+      "id": "canonical-trained",
+      "planned_repository": "shute2004/virtual-fly-trained-YYYYMMDD",
+      "lineage": "canonical-v1",
+      "historical": false,
+      "source_locator": "external-reference:canonical-v1-reference/artifacts/canonical-experiment-v1/training/checkpoint",
+      "scientific_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+      "dataset": "male-cns:v1.0",
+      "neuron_count": 166700,
+      "edge_count": 25582938,
+      "global_weight_version": 6,
+      "aggregate_neural_step": 484,
+      "checkpoint_semantics": "global-weights-only-v1",
+      "step_semantics": "aggregate-slot-neural-step-count-v1",
+      "changed_edges_from_canonical_initial": 2163179,
+      "total_bytes": 207998046,
+      "files": [
+        {"path": "checkpoint/activity-trace.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/eligibility.f32le", "size_bytes": 102331752, "sha256": "c6cfb26d239011986790646a5d5c9989c07b06bc6ed1aeec71c1bbe9180ba3d3"},
+        {"path": "checkpoint/manifest.json", "size_bytes": 542, "sha256": "299fc53ee528f753272187fa020b31f2a2bbf19dee9f01d0aa276acd5c51f96e"},
+        {"path": "checkpoint/membrane.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/modulation.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/refractory.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/spikes.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/weights.f32le", "size_bytes": 102331752, "sha256": "e4384d5c0c77b788bfc918517ee289876c97e1472c23204965b0614b563bd706"}
+      ]
+    },
+    {
+      "id": "historical-video-before",
+      "planned_repository": "shute2004/virtual-fly-video-before",
+      "lineage": "historical-video",
+      "historical": true,
+      "source_locator": "artifacts/experiments/flyppy-v7-envv7-frontier/checkpoint",
+      "video_playback_source": "artifacts/experiments/flyppy-post-compare-final/before/playback.json",
+      "dataset": "male-cns:v1.0",
+      "neuron_count": 166700,
+      "edge_count": 25582938,
+      "global_weight_version": 240,
+      "checkpoint_neural_step": 26224,
+      "checkpoint_semantics": "legacy-unspecified-in-manifest",
+      "video_evaluation_plasticity": false,
+      "video_passed_gates": 1,
+      "total_bytes": 207997939,
+      "files": [
+        {"path": "checkpoint/activity-trace.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/eligibility.f32le", "size_bytes": 102331752, "sha256": "c6cfb26d239011986790646a5d5c9989c07b06bc6ed1aeec71c1bbe9180ba3d3"},
+        {"path": "checkpoint/manifest.json", "size_bytes": 435, "sha256": "50b5bbe0826f0b29a4bb2cb8761537131657d724aed34cc78186b50a4f888a21"},
+        {"path": "checkpoint/membrane.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/modulation.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/refractory.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/spikes.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/weights.f32le", "size_bytes": 102331752, "sha256": "3917884f90084a5f3542838c2a0c006c5941406ad50bbb1ff20ba32183b715f8"}
+      ]
+    },
+    {
+      "id": "historical-video-after",
+      "planned_repository": "shute2004/virtual-fly-video-after",
+      "lineage": "historical-video",
+      "historical": true,
+      "source_locator": "artifacts/experiments/flyppy-v7h-online-video-v966/checkpoint",
+      "video_playback_source": "artifacts/experiments/flyppy-post-compare-final/after/playback.json",
+      "dataset": "male-cns:v1.0",
+      "neuron_count": 166700,
+      "edge_count": 25582938,
+      "global_weight_version": 966,
+      "checkpoint_neural_step": 164754,
+      "checkpoint_semantics": "legacy-unspecified-in-manifest",
+      "video_evaluation_plasticity": false,
+      "video_passed_gates": 2,
+      "total_bytes": 207997940,
+      "files": [
+        {"path": "checkpoint/activity-trace.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/eligibility.f32le", "size_bytes": 102331752, "sha256": "c6cfb26d239011986790646a5d5c9989c07b06bc6ed1aeec71c1bbe9180ba3d3"},
+        {"path": "checkpoint/manifest.json", "size_bytes": 436, "sha256": "5fc50a289bdf7419f99423a938280d49ddd3a315e666ca0f8c931fb6c11e40a2"},
+        {"path": "checkpoint/membrane.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/modulation.f32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/refractory.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/spikes.u32le", "size_bytes": 666800, "sha256": "59bc68b376b730245aa0a6187794bf1b8bb5cf893925f731adc6d454c4034d10"},
+        {"path": "checkpoint/weights.f32le", "size_bytes": 102331752, "sha256": "a950e2b567fdf6de63457c8cf442142980a36389d91f89733a139006ed138b37"}
+      ]
+    }
+  ]
+}

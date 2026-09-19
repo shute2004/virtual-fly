@@ -130,6 +130,23 @@ bash -n canonical/canonical-v1/reproduce.sh
 
 最初の2つはPython側の意味づけ・実行制御に関する試験と、Rust製神経実行系の試験です。最後のコマンドはcanonical再現スクリプトを実行せず、シェルの入口が構文上有効であることだけを確認します。
 
+## チェックポイントと大容量成果物
+
+大容量のチェックポイントはGitHubリポジトリ本体へ入れず、Hugging Face側のvirtual-fly入口から分離して配布します。
+
+- [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
+
+公開時は、用途ごとに次の4リポジトリへ分けます。
+
+- `virtual-fly-initial-YYYYMMDD` — canonical v1の初期チェックポイント
+- `virtual-fly-trained-YYYYMMDD` — canonical v1で6エピソードの学習処理を経たチェックポイント
+- `virtual-fly-video-before` — 公開Before / After動画のBefore側に実際に使用した過去系統のチェックポイント
+- `virtual-fly-video-after` — 同じ動画のAfter側に実際に使用した過去系統のチェックポイント
+
+日付付きの2リポジトリ名は、実際の公開日にのみ`YYYYMMDD`を確定します。動画用Before / Afterは**canonical v1の初期・学習後チェックポイントとは別系統**です。v240 / v966などの内部番号はリポジトリ名には出さず、来歴情報としてのみ保持します。MaleCNSの生データ、FlyBodyの資産、軌跡一式、全フレーム、無関係な開発途中の成果物は、単に存在するという理由ではHugging Faceへ複製しません。
+
+公開構造、モデルカード雛形、必要ファイル一覧、帰属情報、チェックポイントのハッシュ値は [`release/huggingface/`](release/huggingface/README.md) にまとめています。
+
 ## canonical v1を再現する
 
 再現スクリプトは、公式配布元からのMaleCNSデータ新規取得、スナップショットと派生成果物の再生成、6エピソードの基準学習、初期・最終チェックポイントの検証、固定評価、来歴記録の生成までを一括で実行します。

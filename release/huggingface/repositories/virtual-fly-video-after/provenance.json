@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "artifact_id": "historical-video-after",
+  "planned_repository": "shute2004/virtual-fly-video-after",
+  "lineage": "historical-video",
+  "historical": true,
+  "dataset": "male-cns:v1.0",
+  "neuron_count": 166700,
+  "edge_count": 25582938,
+  "global_weight_version": 966,
+  "source_locator": "artifacts/experiments/flyppy-v7h-online-video-v966/checkpoint",
+  "source_hash_manifest": "https://github.com/shute2004/virtual-fly/blob/main/release/huggingface/checkpoint-artifacts-v1.json",
+  "malecns_official_source": "https://male-cns.janelia.org/download/",
+  "malecns_license": "CC-BY-4.0",
+  "checkpoint_neural_step": 164754,
+  "checkpoint_semantics": "legacy-unspecified-in-manifest",
+  "video_playback_source": "artifacts/experiments/flyppy-post-compare-final/after/playback.json",
+  "video_evaluation_plasticity": false,
+  "video_passed_gates": 2
+}

@@ -128,6 +128,23 @@ bash -n canonical/canonical-v1/reproduce.sh
 
 The first two commands exercise the Python semantic/orchestration tests and Rust neural-runtime tests. The final command checks the canonical reproducer shell entry point without executing the experiment.
 
+## Checkpoints and large artifacts
+
+Large checkpoints are distributed separately from the GitHub source repository through the Hugging Face project hub:
+
+- [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
+
+The publication layout separates four checkpoint repositories:
+
+- `virtual-fly-initial-YYYYMMDD` — canonical v1 initial checkpoint;
+- `virtual-fly-trained-YYYYMMDD` — canonical v1 checkpoint after the six canonical training episodes;
+- `virtual-fly-video-before` — historical checkpoint actually used for the Before side of the published comparison video;
+- `virtual-fly-video-after` — historical checkpoint actually used for the After side of the published comparison video.
+
+The two dated canonical names are finalized only on the actual publication day. The historical video pair is **not** the canonical initial/trained pair; internal versions such as v240/v966 are retained only in artifact provenance. Raw MaleCNS data, FlyBody assets, trajectories, frame directories, and unrelated development artifacts are not mirrored merely for completeness.
+
+The exact publication structure, model-card templates, required file lists, attribution, and prepared checkpoint hashes are tracked in [`release/huggingface/`](release/huggingface/README.md).
+
 ## Reproduce canonical v1
 
 The canonical reproducer acquires fresh official sources, reconstructs the snapshot and derived artifacts, runs the six-episode canonical training, validates the initial/final checkpoints, performs frozen evaluation, and emits a provenance manifest.

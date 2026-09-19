@@ -152,11 +152,30 @@ Large files are not tracked in Git, including:
 
 Instead, Git tracks the small provenance records, configuration, hashes, and summary reports required to reacquire or regenerate them.
 
-## 9. Historical provenance paths
+## 9. Hugging Face checkpoint distribution
+
+Large checkpoint artifacts intended for third-party download are published separately from the GitHub source repository through the `shute2004/virtual-fly` Hugging Face project hub.
+
+The publication structure deliberately separates:
+
+- canonical v1 initial checkpoint: `virtual-fly-initial-YYYYMMDD`;
+- canonical v1 trained checkpoint: `virtual-fly-trained-YYYYMMDD`;
+- historical Before-video checkpoint: `virtual-fly-video-before`;
+- historical After-video checkpoint: `virtual-fly-video-after`.
+
+The `YYYYMMDD` suffix is selected only on the actual publication day. Historical video checkpoints are not canonical initial/trained checkpoints, even when the same runtime can inspect their files.
+
+Checkpoint repositories contain the native checkpoint directory plus lightweight `README.md`, attribution, provenance, and SHA-256 records. Full trajectories, frame directories, raw source datasets, unrelated checkpoints, and build artifacts are excluded unless they become directly necessary for using or verifying that checkpoint.
+
+The checkpoint weights derive from MaleCNS `male-cns:v1.0`, licensed by the official source under CC BY 4.0. The raw MaleCNS dataset is not mirrored on Hugging Face; users obtain it from the official source or through the canonical acquisition/reproduction path. FlyBody, FlyGym, and MuJoCo assets are likewise not copied into checkpoint repositories merely for convenience.
+
+The prepared repository cards, exact checkpoint hashes, and required file lists are tracked in [`../../release/huggingface/`](../../release/huggingface/README.md).
+
+## 10. Historical provenance paths
 
 A small number of archived development notes and tracked historical reports retain absolute local filesystem paths from the machine on which the original run, traceback, or report was recorded. These strings are preserved as part of the original provenance record rather than rewritten after the fact. They are not installation requirements and are not dependencies of the current code. Current public documentation and commands use repository-relative or portable paths.
 
-## 10. Public browser experiments
+## 11. Public browser experiments
 
 Results returned by browsers are treated as outside the trusted execution boundary.
 
@@ -171,7 +190,7 @@ At minimum, each result should identify:
 
 Important findings should be rerun on the server side or across multiple independent clients.
 
-## 11. Personal data
+## 12. Personal data
 
 Public experiments should not collect personal information or browser identifiers that are unnecessary for the neuroscience experiment.
 
