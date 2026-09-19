@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
 from virtual_fly.runtime.vision import VisionRuntimeConfig
 
@@ -29,6 +31,20 @@ class VisionRuntimeConfigTests(unittest.TestCase):
         self.assertEqual(VisionRuntimeConfig.normalized("ray", 7).mode, "direct-ray")
         self.assertEqual(VisionRuntimeConfig.normalized("flygym", 7).mode, "raster")
 
+
+    def test_packed_main_passes_runtime_semantics_before_execution(self) -> None:
+        from virtual_fly.training import population_packed
+
+        with patch.dict(
+            os.environ,
+            {"VF_FLYPPY_VISION_MODE": "direct-ray", "VF_FLYPPY_OMMATIDIA_RAYS": "13"},
+            clear=False,
+        ), patch.object(population_packed.trainer, "main", return_value=1) as mocked:
+            self.assertEqual(population_packed.main(), 1)
+        kwargs = mocked.call_args.kwargs
+        self.assertEqual(kwargs["body_runtime"], "packed-process")
+        self.assertEqual(kwargs["vision_mode_override"], "direct-ray")
+        self.assertEqual(kwargs["vision_rays_override"], 13)
 
 if __name__ == "__main__":
     unittest.main()

@@ -146,7 +146,15 @@ def _patch_runtime_metadata(output_dir: Path) -> None:
                 temp.replace(p)
 
 def main() -> int:
-    result = trainer.main(spawn_factory=_spawn_packed)
+    requested_vision = VisionRuntimeConfig.from_environment(
+        default_mode="raster", default_rays=7
+    )
+    result = trainer.main(
+        spawn_factory=_spawn_packed,
+        body_runtime="packed-process",
+        vision_mode_override=requested_vision.mode,
+        vision_rays_override=requested_vision.rays_per_ommatidium,
+    )
     if result == 0:
         _patch_runtime_metadata(_output_dir_from_argv())
     return result

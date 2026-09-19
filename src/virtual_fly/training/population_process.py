@@ -74,7 +74,13 @@ from virtual_fly.training.curriculum import (
 )
 
 
-def main(*, spawn_factory=spawn_body_processes) -> int:
+def main(
+    *,
+    spawn_factory=spawn_body_processes,
+    body_runtime: str = "process-isolated",
+    vision_mode_override: str = "raster",
+    vision_rays_override: int = 0,
+) -> int:
     args = parse_args()
     probe_seed = int(args.fixed_course_seed) if args.fixed_course_seed is not None else int(args.seed)
     probe_course = FlyppyCourse(
@@ -181,9 +187,9 @@ def main(*, spawn_factory=spawn_body_processes) -> int:
     start_episode = resume_plan.start_episode
     reproducibility = run_reproducibility_metadata(
         args,
-        body_runtime="process-isolated",
-        vision_mode_override="raster",
-        vision_rays_override=0,
+        body_runtime=body_runtime,
+        vision_mode_override=vision_mode_override,
+        vision_rays_override=vision_rays_override,
     )
     provenance_path = write_run_provenance(
         output,
@@ -252,9 +258,10 @@ def main(*, spawn_factory=spawn_body_processes) -> int:
     telemetry_mode = "always" if args.telemetry else "viewer-demand"
     print(
         "population_runtime=enabled population={} shared_weight=true weight_averaging=false "
-        "environment={} motor_boundary=whole-body body_runtime=process telemetry={} launch_mode={}".format(
+        "environment={} motor_boundary=whole-body body_runtime={} telemetry={} launch_mode={}".format(
             args.population,
             args.environment_version,
+            body_runtime,
             telemetry_mode,
             args.launch_mode,
         )
@@ -301,7 +308,7 @@ def main(*, spawn_factory=spawn_body_processes) -> int:
                             global_weight_version=brain.global_weight_version,
                             curriculum_mode=args.curriculum_mode,
                             launch_mode=args.launch_mode,
-                            body_runtime="process-isolated",
+                            body_runtime=body_runtime,
                         ),
                         save_checkpoint=brain.save_checkpoint,
                     )
@@ -910,7 +917,7 @@ def main(*, spawn_factory=spawn_body_processes) -> int:
         "shared_weight": True,
         "weight_averaging": False,
         "commit_semantics": "episode-local additive+clamp transaction rebased onto latest global weight",
-        "body_runtime": "process-isolated",
+        "body_runtime": body_runtime,
         "launch_mode": args.launch_mode,
         "environment_version": args.environment_version,
         "flight_body_version": getattr(args, "flight_body_version", "v3"),
