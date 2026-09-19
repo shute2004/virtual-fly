@@ -19,7 +19,7 @@ The physical fly body and related measured flight material are derived from/upst
 
 - Repository: https://github.com/TuragaLab/flybody
 
-FlyBody source, assets, and distributed datasets remain governed by their upstream terms. `virtual-fly` does not relicense them under the repository MIT License.
+The FlyBody repository is distributed under the Apache License 2.0. FlyBody source, assets, and separately distributed datasets remain governed by their applicable upstream terms. `virtual-fly` does not relicense them under the repository MIT License.
 
 ## FlyGym / NeuroMechFly
 
@@ -29,7 +29,7 @@ FlyBody source, assets, and distributed datasets remain governed by their upstre
 - Repository/source links are available from the upstream project.
 - Canonical dependency lock currently uses FlyGym 2.1.0.
 
-The upstream FlyGym license and notices apply to FlyGym itself.
+FlyGym is distributed under the Apache License 2.0. Its upstream license and notices continue to apply to FlyGym itself.
 
 ## MuJoCo
 
@@ -38,7 +38,7 @@ Physical simulation uses MuJoCo.
 - Project: https://mujoco.org/
 - Repository: https://github.com/google-deepmind/mujoco
 
-MuJoCo remains under its upstream license.
+MuJoCo is distributed under the Apache License 2.0 and remains under that upstream license.
 
 ## Generated videos and images
 
