@@ -110,16 +110,24 @@ The repository currently uses the established Git/GitHub project identity `shute
 
 Before the first DOI-bearing release, the project owner should replace or enrich this with the preferred scholarly name, ORCID, and affiliation if those should appear in the permanent citation record.
 
-## 9. Release checklist
+## 9. Pre-publication privacy/provenance audit
 
-- [ ] publication changes are on default `main`
+The 2026-09-19 tracked-file scan found no high-confidence credential-shaped strings. It did find absolute local filesystem paths in 14 historical archive/report files. Those paths were retained rather than silently rewriting historical provenance.
+
+The repository remains private at the time of this audit. Before changing visibility to public, review those historical paths deliberately: either preserve them as part of the original development record or redact only machine/user-specific path components while documenting that sanitation. Do not rewrite scientific values, outcomes, hashes, or lineage metadata as part of such a cleanup.
+
+## 10. Release checklist
+
+- [x] publication changes are on default `main`
 - [ ] repository visibility is intentionally set for public release
+- [ ] historical absolute local paths have been deliberately accepted or provenance-preservingly sanitized
 - [ ] clean release checkout
-- [ ] tests/document links/JSON metadata validated
-- [ ] canonical reference files unchanged
-- [ ] canonical vs. historical distinction visible in README and release notes
-- [ ] release assets match `release-assets-v0.1.0.json` hashes
-- [ ] third-party attribution included
+- [x] documentation links / JSON / CFF / package metadata validated
+- [x] canonical scientific reference files unchanged
+- [x] canonical vs. historical distinction visible in README and release notes
+- [x] release assets recorded with SHA-256 hashes
+- [x] third-party attribution included
+- [ ] preferred scholarly creator name / ORCID / affiliation finalized, if desired
 - [ ] tag `v0.1.0`
 - [ ] GitHub Release created
 - [ ] Zenodo repository integration enabled
