@@ -21,7 +21,7 @@
 
 - [`experiments.md`](experiments.md) — 分阶段实验、对照条件、行为/神经指标和学习判定标准
 - [`wing-motor-boundary.md`](wing-motor-boundary.md) — 单个翼运动神经元到外周肌肉的边界
-- [`references.md`](references.md) — 一次文献、官方数据和主要外部软件
+- [`references.md`](references.md) — 科学参考文献，以及将一手论文与具体实现判断对应起来的依据表
 
 ## canonical 实验
 

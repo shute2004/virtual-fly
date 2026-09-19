@@ -8,6 +8,8 @@ It is **not** an artificial neural network trained on the fly connectome. The pr
 
 > **Project status:** canonical experiment v1 and its end-to-end reproducer are complete. The canonical run demonstrates a fully traceable current-code execution chain and measurable local-plasticity-driven changes to stored MaleCNS weights. It did **not** show categorical behavioral improvement in the short canonical run.
 
+**Scientific references:** [`docs/en/references.md`](docs/en/references.md) collects the major primary papers and official upstream resources used by the project, with an evidence map showing which implementation decisions each source supports.
+
 ## Historical visualization
 
 ![Historical v240 to v966 Before/After visualization](docs/assets/historical-v240-v966-before-after.gif)

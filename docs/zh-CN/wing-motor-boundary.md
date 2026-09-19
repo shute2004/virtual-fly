@@ -156,11 +156,11 @@ PAM01 内部也可能具有生理异质性，因此项目不会声称所有 PAM0
 
 ## 7. 参考资料
 
-- Lesser et al., *Organization of circuits linking descending input to motor output in the Drosophila Male Adult Nerve Cord connectome*, eLife, version of record 2026.
+- Cheong et al., *Organization of circuits linking descending input to motor output in the Drosophila Male Adult Nerve Cord connectome*, eLife, version of record 2026.
   - https://elifesciences.org/articles/96084
 - Ehrhardt et al., *Single-cell type analysis of wing premotor circuits in the ventral nerve cord of Drosophila melanogaster*.
   - https://pmc.ncbi.nlm.nih.gov/articles/PMC10312520/
-- Azevedo et al., *Synaptic architecture of leg and wing premotor control networks in Drosophila*.
+- Lesser et al., *Synaptic architecture of leg and wing premotor control networks in Drosophila*, Nature 2024.
   - https://pmc.ncbi.nlm.nih.gov/articles/PMC10312524/
 - *How tp1, an indirect wing steering muscle, stabilizes Drosophila's flight*.
   - https://pmc.ncbi.nlm.nih.gov/articles/PMC12637562/

@@ -21,7 +21,7 @@
 
 - [`experiments.md`](experiments.md) — 段階的実験、対照条件、行動・神経指標、学習判定基準
 - [`wing-motor-boundary.md`](wing-motor-boundary.md) — 個別翼運動ニューロンから末梢筋までの境界
-- [`references.md`](references.md) — 一次論文、公式データ、主要な外部ソフトウェア
+- [`references.md`](references.md) — 科学的参考文献と、一次論文を実装判断へ対応付けた根拠表
 
 ## canonical実験
 

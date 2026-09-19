@@ -8,6 +8,8 @@
 
 > **当前状态：** 基准实验 canonical v1 及其完整复现脚本已经完成。canonical v1 证明了从当前代码到实验结果的来源链可以完整追踪，也确认局部可塑性确实会改变 MaleCNS 中保存的权重。但在这个较短的实验中，**没有观察到明确的行为改善**。
 
+**科学参考文献：** [`docs/zh-CN/references.md`](docs/zh-CN/references.md) 汇总了当前实现所参考的主要一手论文和官方资料，并说明每项资料具体支撑了哪些实现判断。
+
 ## 历史开发系的对比动画
 
 ![历史开发系 v240 到 v966 的 Before/After 对比](docs/assets/historical-v240-v966-before-after.gif)

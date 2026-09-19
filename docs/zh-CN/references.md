@@ -1,143 +1,155 @@
-# 基础资料与外部资源
+# 科学参考文献与实现依据对应表
 
 [English](../en/references.md) · [日本語](../ja/references.md) · [简体中文](references.md)
 
-本文是项目所使用的一次文献、官方数据集和主要外部软件的索引入口。
+`virtual-fly`并不是把某一篇论文直接翻译成代码，而是综合使用了连接组学、视觉神经科学、电生理、运动回路、飞行肌肉和身体力学等多个领域的一手研究与官方数据。
 
-实际使用外部资料时，不只记录 URL，还应在实验来源记录中保存论文或数据集版本、许可和获取日期。
+本文档不仅列出参考资料，还明确说明**每篇文献具体支撑了virtual-fly中的哪类实现判断**。这里优先整理与当前实现直接相关的主要文献，而不是声称覆盖开发过程中查阅过的全部资料。被列入这里，并不意味着virtual-fly中的所有数值参数都由该论文直接测得。推断值、假设值和校准值仍会在实现和实验来源记录中单独标注。
 
-## 1. MaleCNS
+## 当前实现的主要科学依据
 
-### Male CNS Connectome project
+| 文献 | 状态 | 领域 | 在virtual-fly中主要提供的依据 |
+|---|---|---|---|
+| Bates et al. (2026), *Distributed control circuits across a brain-and-cord connectome*, Nature | 已同行评审 | MaleCNS | 将成年雄性果蝇脑与腹神经索作为连续CNS连接组处理；全CNS连接与注释 |
+| Nern et al. (2025), *Connectome-driven neural inventory of a complete visual system*, Nature | 已同行评审 | 视觉 | 视叶组织、lamina与R1-R6重建范围的限制，以及不凭空补造缺失光感受器的判断 |
+| Langen et al. (2015), *The Developmental Rules of Neural Superposition in Drosophila*, Cell | 已同行评审 | 视觉 | 神经叠加，以及相邻小眼的R1-R6与lamina cartridge之间的对应关系 |
+| Juusola et al. (2016), *Electrophysiological Method for Recording Intracellular Voltage Responses of Drosophila Photoreceptors and Interneurons to Light Stimuli In Vivo*, JoVE | 已同行评审 | 视觉 / 电生理 | R1-R6和lamina中间神经元对局部光刺激的生理响应 |
+| Haag et al. (2016), *Complementary mechanisms create direction selectivity in the fly*, eLife | 已同行评审 | 视觉 | 方向选择性应从视叶局部回路中产生，而不是由CNS外部的运动分类器直接给出 |
+| Lesser et al. (2024), *Synaptic architecture of leg and wing premotor control networks in Drosophila*, Nature | 已同行评审 | 运动控制 | 翼前运动网络的模块结构、运动神经元招募方式，以及腿与翼前运动网络的差异 |
+| Cheong et al. (2026), *Organization of circuits linking descending input to motor output in the Drosophila Male Adult Nerve Cord connectome*, eLife | 已同行评审・正式版本 | 运动控制 | 成年雄性腹神经索中下降输入→前运动回路→运动输出的组织方式 |
+| Ehrhardt et al. (2025), *Single-cell type analysis of wing premotor circuits in the ventral nerve cord of Drosophila melanogaster* | 预印本 | 运动控制 | 翼前运动回路的细胞类型级组织，以及运动神经元和肌肉关系的解释 |
+| Teoh et al. (2025), *How tp1, an indirect wing steering muscle, stabilizes Drosophila’s flight* | 预印本 | 飞行控制 | 间接转向肌tp1对飞行稳定和翼铰链力学的作用 |
+| Vaxenburg et al. (2025), *Whole-body physics simulation of fruit fly locomotion*, Nature | 已同行评审 | 身体 / 物理 | FlyBody全身几何、MuJoCo身体模型，以及飞行和步行相关的身体力学 |
 
-- 项目：https://male-cns.janelia.org/
-- 下载 / 程序化访问：https://male-cns.janelia.org/download/
-- 数据集：`male-cns:v1.0`
-- neuPrint：https://neuprint.janelia.org/
-- 论文附属仓库：https://github.com/flyconnectome/2025malecns
+## 1. MaleCNS与成年雄性CNS连接组
 
-官方下载页面同时提供 `neuprint-python` API 和批量数据下载。数据集采用 CC-BY 许可。
+### Bates et al. (2026)
 
-### 论文
+**Bates, A. S., Phelps, J. S., Kim, M. et al.** *Distributed control circuits across a brain-and-cord connectome*. Nature 656, 957–970 (2026).
 
-Berg et al. (2026), *Distributed control circuits across a brain-and-cord connectome*, Nature.
+- DOI: https://doi.org/10.1038/s41586-026-10735-w
+- 论文: https://www.nature.com/articles/s41586-026-10735-w
+- MaleCNS官方项目: https://male-cns.janelia.org/
+- 下载与程序访问: https://male-cns.janelia.org/download/
+- 本项目使用的数据集: `male-cns:v1.0`
+- neuPrint: https://neuprint.janelia.org/
+- 论文附属仓库: https://github.com/flyconnectome/2025malecns
 
-- https://www.nature.com/articles/s41586-026-10735-w
+这是把成年雄性果蝇脑与腹神经索视为连续CNS连接组时最核心的科学来源。`virtual-fly`把公开MaleCNS作为`t = 0`时的神经结构，之后产生的功能性权重变化则与原始数据分开保存。
 
-这是把脑和腹神经索视为连续中枢神经系统连接组的主要参考资料。
-
-### MaleCNS 视叶的视网膜对应关系
-
-官方注释 `assignedOlHex1` / `assignedOlHex2` 被用作视叶柱的视网膜对应坐标。视觉输入实现不能把任意 body ID 顺序或数组下标当作空间位置。
-
-MaleCNS 官方媒体还公开了从 R1-R6 到下行神经元的视觉—运动通路示例。
+解析视叶的视网膜对应关系时，还会使用MaleCNS官方注释中的`assignedOlHex1` / `assignedOlHex2`。官方站点也提供了从R1-R6到下降神经元的视觉—运动通路示例。
 
 - https://male-cns.janelia.org/media/
 
-## 2. 果蝇早期视觉系统
+## 2. 复眼与视叶回路
 
-### 完整视觉系统连接组
+### Nern et al. (2025)
 
-Nern et al. (2025), *Connectome-driven neural inventory of a complete visual system*, Nature.
+**Nern, A., Loesche, F., Takemura, S.-y. et al.** *Connectome-driven neural inventory of a complete visual system*. Nature 641, 1225–1237 (2025).
 
-- https://www.nature.com/articles/s41586-025-08746-0
+- DOI: https://doi.org/10.1038/s41586-025-08746-0
+- 论文: https://www.nature.com/articles/s41586-025-08746-0
 
-该研究明确指出，lamina 并未完全包含在成像体积中，因此重建出的 Lai 和 R1-R6 数量低于真实生物总量。`virtual-fly` 不会人为补造缺失的 R1-R6，也不会强行让每个柱都拥有六个细胞。只有 MaleCNS 公开数据中实际存在的 R1-R6 才标记为 `observed`。
+该工作用于解释视觉系统连接组及其覆盖范围的限制。特别是，lamina和R1-R6的部分缺失被视为数据边界，而不是允许人为补造不存在光感受器的理由。只有公开数据中实际存在的细胞才被视为已观测对象。
 
-### 神经叠加
+### Langen et al. (2015)
 
-Langen et al. (2015), *The Developmental Rules of Neural Superposition in Drosophila*.
+**Langen, M., Agi, E. et al.** *The Developmental Rules of Neural Superposition in Drosophila*. Cell 162, 120–133 (2015).
 
-- https://pmc.ncbi.nlm.nih.gov/articles/PMC4646663/
+- DOI: https://doi.org/10.1016/j.cell.2015.05.055
+- 开放论文: https://pmc.ncbi.nlm.nih.gov/articles/PMC4646663/
 
-来自不同相邻小眼、但共享同一视觉轴的 R1-R6 会汇聚到同一个 lamina cartridge。实现视网膜对应输入时，这是重要的布线原则，不能简单把同一个小眼中的六个细胞平均成一个点。
+这是神经叠加的重要依据。来自相邻小眼、但共享同一视觉轴的R1-R6会汇聚到同一个lamina cartridge。因此，当前实现不会简单地把一个小眼中的6个细胞平均成单一信号。
 
-Juusola et al. 的电生理方法概述：
+### Juusola et al. (2016)
 
-- https://pmc.ncbi.nlm.nih.gov/articles/PMC4993232/
+**Juusola, M., Dau, A., Zheng, L. & Rien, D.** *Electrophysiological Method for Recording Intracellular Voltage Responses of Drosophila Photoreceptors and Interneurons to Light Stimuli In Vivo*. Journal of Visualized Experiments, issue 112, 54142 (2016).
 
-该资料可用于理解 lamina cartridge 的局部视网膜对应处理，以及 R1-R6 向 L1-L3 等目标发送组胺能输出的机制。
+- DOI: https://doi.org/10.3791/54142
+- 开放论文: https://pmc.ncbi.nlm.nih.gov/articles/PMC4993232/
 
-### 方向选择性与柱状组织
+该资料用于理解R1-R6光感受器和lamina中间神经元对局部光刺激的电生理响应。
 
-Fisher et al. (2015/2016), *Complementary mechanisms create direction selectivity in the fly*.
+### Haag et al. (2016)
 
-- https://pmc.ncbi.nlm.nih.gov/articles/PMC4978522/
+**Haag, J., Arenz, A., Serbe, E., Gabbiani, F. & Borst, A.** *Complementary mechanisms create direction selectivity in the fly*. eLife 5, e17421 (2016).
 
-T4/T5 的方向选择性由视叶柱状阵列上的局部回路形成。因此 `virtual-fly` 不会在 CNS 外部先计算类似 T4/T5 的运动特征再注入下游，而是尽量让这些响应从 R1-R6 开始，通过公开神经回路产生。
+- DOI: https://doi.org/10.7554/eLife.17421
+- 开放论文: https://pmc.ncbi.nlm.nih.gov/articles/PMC4978522/
 
-## 3. FlyBody
+该论文是理解T4/T5方向选择性如何在视叶局部回路中形成的重要依据之一。因此，当前视觉输入不会先在CNS外部计算“向上运动”“向下运动”等标签，再把答案注入神经系统。
 
-- 仓库：https://github.com/TuragaLab/flybody
-- MuJoCo Menagerie 中的副本：https://github.com/google-deepmind/mujoco_menagerie/tree/main/flybody
+## 3. 翼前运动回路与运动神经元
 
-FlyBody 是果蝇三维解剖身体和 MuJoCo 物理模型的主要来源之一。
+### Lesser et al. (2024)
 
-重要：本项目不会把 FlyBody 附带的强化学习策略用作 `virtual-fly` 的学习机制。项目使用身体形状、物理、执行机构等资源，而运动命令来自虚拟 CNS。
+**Lesser, E., Azevedo, A. W., Phelps, J. S. et al.** *Synaptic architecture of leg and wing premotor control networks in Drosophila*. Nature 631, 369–377 (2024).
 
-## 4. FlyGym / NeuroMechFly
+- DOI: https://doi.org/10.1038/s41586-024-07600-z
+- 论文: https://www.nature.com/articles/s41586-024-07600-z
 
-- 文档：https://neuromechfly.org/
-- 安装：https://neuromechfly.org/installation/
-- 教程：https://neuromechfly.org/tutorials/
+该工作为翼前运动网络的模块化组织、运动神经元招募结构以及腿和翼之间的差异提供了依据。`virtual-fly`不会先把一组翼运动神经元平均后再选择动作，而是保留从单个运动神经元到外周肌肉的路径。
 
-这些项目用于参考感觉整合、身体模拟、MuJoCo 集成、FlyBody 使用和 GPU 执行方式。
+### Cheong et al. (2026)
 
-FlyGym 2.x 与旧版 API 不兼容，因此必须明确固定依赖版本。
+**Cheong, H. S. J., Eichler, K., Stürner, T. et al.** *Organization of circuits linking descending input to motor output in the Drosophila Male Adult Nerve Cord connectome*. eLife, version of record (2026).
 
-FlyGym 标准复眼 `Retina` 使用合成六角网格，因此不能直接视为 MaleCNS 个体的 body ID 与视网膜位置映射。当前 MaleCNS 边界使用 FlyBody 的原始眼部相机作为局部光源，同时优先采用 MaleCNS 中实际的柱坐标。
+- DOI: https://doi.org/10.7554/eLife.96084.3
+- 论文: https://elifesciences.org/articles/96084
 
-## 5. MuJoCo
+这是确认成年雄性腹神经索中下降神经元输入如何经过前运动回路到达运动神经元的重要来源。
 
-- 项目：https://mujoco.org/
-- 仓库：https://github.com/google-deepmind/mujoco
-- Menagerie：https://github.com/google-deepmind/mujoco_menagerie
+### Ehrhardt et al. (2025・预印本)
 
-MuJoCo 是身体物理模拟的主要候选引擎。
+**Ehrhardt, E., Whitehead, S. C. et al.** *Single-cell type analysis of wing premotor circuits in the ventral nerve cord of Drosophila melanogaster*. bioRxiv preprint, version 3 (2025).
 
-## 6. 访问 MaleCNS
+- DOI: https://doi.org/10.1101/2023.05.31.542897
+- 开放记录: https://pmc.ncbi.nlm.nih.gov/articles/PMC10312520/
 
-官方 Python 访问方式大致如下：
+该预印本作为辅助依据，用于解释翼前运动回路的细胞类型级组织，以及识别翼运动神经元和肌肉之间的关系。它会明确作为预印本处理，而不会伪装成已同行评审的最终论文。
 
-```python
-from neuprint import Client
+## 4. 飞行肌肉、转向与全身力学
 
-client = Client(
-    "https://neuprint.janelia.org",
-    dataset="male-cns:v1.0",
-    token="...",
-)
-```
+### Teoh et al. (2025・预印本)
 
-认证令牌不得提交到代码或配置文件中。
+**Teoh, H. K., Biswas, D., Leung, A. et al.** *How tp1, an indirect wing steering muscle, stabilizes Drosophila’s flight*. bioRxiv preprint, version 2 (2025).
 
-## 7. 仍需整理的一次文献
+- DOI: https://doi.org/10.1101/2025.11.02.686144
+- 开放记录: https://pmc.ncbi.nlm.nih.gov/articles/PMC12637562/
 
-在继续增加或精化机制之前，至少应整理以下果蝇一次研究：
+该预印本用于解释间接转向肌tp1在飞行稳定中的作用，以及相关翼铰链力学。它同样与已同行评审论文分开标注。
 
-- 膜电位与放电特性；
-- 化学突触传递；
-- 电突触；
-- 神经递质与受体；
-- 蘑菇体可塑性；
-- PAM / PPL1 等多巴胺能回路；
-- 奖赏性与厌恶性条件学习；
-- STDP 等活动依赖可塑性；
-- 稳态可塑性；
-- 结构可塑性；
-- 自发运动；
-- 飞行中央模式和下行控制；
-- 翼运动神经元与飞行肌；
-- 复眼光感受转换；
-- 本体感觉与机械感觉。
+### Vaxenburg et al. (2025)
 
-实现参数应优先使用果蝇特异的证据，而不是仅仅因为方便就采用一般神经科学中的数值。
+**Vaxenburg, R., Siwanowicz, I., Merel, J. et al.** *Whole-body physics simulation of fruit fly locomotion*. Nature 643, 1312–1320 (2025).
 
-## 8. 使用参考资料的规则
+- DOI: https://doi.org/10.1038/s41586-025-09029-4
+- 论文: https://www.nature.com/articles/s41586-025-09029-4
+- FlyBody仓库: https://github.com/TuragaLab/flybody
+- MuJoCo Menagerie中的FlyBody: https://github.com/google-deepmind/mujoco_menagerie/tree/main/flybody
 
-1. 优先使用一次论文和官方数据，而不是博客或解说文章。
-2. 使用其他物种的数值时，应按情况标记为 `assumed` 或 `inferred`。
-3. 不自动跟随数据集更新，每次实验固定明确版本。
-4. 把实测连接组与由其产生的可变虚拟个体状态分开保存。
-5. 不得在未说明的情况下，用外部软件附带的强化学习或神经网络控制器替代 CNS。
-6. 不得用 CNS 外部的便利特征工程替代真实局部回路承担的特征提取。
+这是解剖学详细的FlyBody全身模型与MuJoCo身体物理的主要科学依据。原论文为了展示步行和飞行使用了强化学习，但`virtual-fly`只采用身体几何、物理和执行结构，不把论文中的强化学习策略当作虚拟CNS。
+
+## 5. 主要官方数据与外部软件
+
+以下内容不能替代上面的科学论文，但它们是当前实现的重要官方数据源和依赖项。
+
+- **MaleCNS** — https://male-cns.janelia.org/
+- **neuPrint** — https://neuprint.janelia.org/
+- **FlyBody** — https://github.com/TuragaLab/flybody
+- **FlyGym / NeuroMechFly文档** — https://neuromechfly.org/
+- **MuJoCo** — https://mujoco.org/
+- **MuJoCo仓库** — https://github.com/google-deepmind/mujoco
+- **MuJoCo Menagerie** — https://github.com/google-deepmind/mujoco_menagerie
+
+FlyGym标准复眼`Retina`使用合成六角网格，因此不能直接当作MaleCNS个体中body ID与真实视网膜位置的观测对应。当前感觉边界优先使用MaleCNS的视网膜对应注释和公开连接。
+
+## 6. 文献使用与来源记录规则
+
+1. 优先使用一手论文和官方数据，而不是二手解说。
+2. 明确记录每篇论文具体支撑哪一个实现边界，不能把一篇论文当作所有无关参数的统一依据。
+3. 区分已同行评审论文、预印本、官方数据和软件文档。
+4. 没有直接从文献测得的数值，应按情况标记为`inferred`、`assumed`或`calibrated`。
+5. 数据集和外部软件按实验固定版本，不静默跟随上游更新。
+6. 将实测源数据与会随时间变化的虚拟个体状态分开保存。
+7. 不得把外部软件附带的强化学习策略或神经网络控制器悄悄替代虚拟CNS。

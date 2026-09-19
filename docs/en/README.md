@@ -21,7 +21,7 @@ This directory contains the public research documentation in English. The Japane
 
 - [`experiments.md`](experiments.md) — staged experiments, controls, behavioral/neural metrics, and learning criteria
 - [`wing-motor-boundary.md`](wing-motor-boundary.md) — individual wing motor-neuron to peripheral-muscle boundary
-- [`references.md`](references.md) — primary literature, official datasets, and major external software
+- [`references.md`](references.md) — scientific references and an evidence map from primary literature to implementation decisions
 
 ## Canonical experiment
 
