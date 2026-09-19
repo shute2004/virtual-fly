@@ -12,7 +12,8 @@
   "source_hash_manifest": "https://github.com/shute2004/virtual-fly/blob/main/release/huggingface/checkpoint-artifacts-v1.json",
   "malecns_official_source": "https://male-cns.janelia.org/download/",
   "malecns_license": "CC-BY-4.0",
-  "scientific_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+  "original_experiment_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+  "public_equivalent_git_sha": "f9c86c904d67ff974f3c43d37aab3619bc93fc1b",
   "aggregate_neural_step": 0,
   "checkpoint_semantics": "global-weights-only-v1",
   "step_semantics": "aggregate-slot-neural-step-count-v1"

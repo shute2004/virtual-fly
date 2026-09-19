@@ -6,11 +6,13 @@
 
 ## 1. 基准实验（canonical v1）
 
-canonical v1 是对外发布时的基准实验。科学计算部分固定在以下 Git 提交，并且执行时工作树没有未提交修改：
+canonical v1 是对外发布时的基准实验。已记录的实验实际运行于无未提交修改的 Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`。在公开前只针对隐私进行历史重写后，内容等价的公开科学代码提交为：
 
 ```text
-7fa464aad7269d34f46f1171080b51e095d1d811
+f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 ```
+
+在 canonical 时点，两者只在 14 个历史报告/来源记录中的本地 OS 用户名脱敏上存在差异；可执行源码、canonical 条件和科学产物生成逻辑均未改变。映射关系记录在 [`../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../canonical/canonical-v1/privacy-redaction-provenance.json)。
 
 简要结果见 [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)，完整来源记录见 [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json)。
 
@@ -45,7 +47,7 @@ canonical v1 是对外发布时的基准实验。科学计算部分固定在以�
 
 ## 2. 完整复现验证
 
-2026 年 9 月 19 日，我们使用 `canonical/canonical-v1/reproduce.sh`，从无修改的 `7fa464a` 创建独立工作树，并从头到尾执行了完整复现流程。
+2026 年 9 月 19 日，我们使用 `canonical/canonical-v1/reproduce.sh`，从原始实验 commit `7fa464a` 创建独立 clean worktree，并从头到尾执行了完整复现流程。这次验证发生在隐私重写之前，不会被描述成是在 `f9c86c9` 上执行。由于公开等价提交没有改变可执行代码、配置或科学产物生成逻辑，因此没有仅因隐私脱敏而重新运行完整训练。
 
 已经验证：
 

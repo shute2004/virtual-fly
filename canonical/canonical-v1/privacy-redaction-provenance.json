@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "kind": "virtual-fly-pre-publication-privacy-redaction-map",
+  "original_experiment_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+  "public_equivalent_git_sha": "f9c86c904d67ff974f3c43d37aab3619bc93fc1b",
+  "redaction": {
+    "reason": "Remove the local OS username from absolute paths before the first public release.",
+    "replacement": "/Users/<local-user>/...",
+    "canonical_commit_changed_paths": 14,
+    "scope": [
+      "historical reports",
+      "historical logs and JSON provenance",
+      "one archived development note"
+    ]
+  },
+  "scientific_equivalence": {
+    "source_code_changed": false,
+    "canonical_experiment_conditions_changed": false,
+    "checkpoint_or_scientific_artifact_changed": false,
+    "historical_result_values_changed": false,
+    "only_local_path_username_text_changed": true
+  },
+  "execution_history": {
+    "recorded_canonical_experiment_ran_at_original_sha": true,
+    "recorded_canonical_experiment_ran_at_public_equivalent_sha": false,
+    "full_training_rerun_for_privacy_redaction": false,
+    "rationale": "The public-equivalent commit differs from the original experiment commit only by privacy redaction in historical path strings, so the scientific executable/configuration tree is unchanged."
+  }
+}

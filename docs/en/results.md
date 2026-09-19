@@ -6,11 +6,13 @@ This document defines which results may be described as current canonical result
 
 ## 1. Canonical experiment v1
 
-Canonical v1 is the publication-facing reference experiment. Its scientific workload is pinned to clean Git commit:
+Canonical v1 is the publication-facing reference experiment. The recorded experiment was actually run from clean Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`. After a pre-publication privacy-only history rewrite, the content-equivalent public scientific commit is:
 
 ```text
-7fa464aad7269d34f46f1171080b51e095d1d811
+f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 ```
+
+The rewrite changed only the local OS username inside 14 historical report/provenance files at the canonical commit; executable source, canonical conditions, and scientific artifact-generation logic are unchanged. The mapping is recorded in [`../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../canonical/canonical-v1/privacy-redaction-provenance.json).
 
 The compact result is in [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md); complete provenance is in [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json).
 
@@ -45,7 +47,7 @@ Frozen evaluation disables plasticity and task-triggered DAN currents. Both the 
 
 ## 2. End-to-end reproduction verification
 
-On 2026-09-19, `canonical/canonical-v1/reproduce.sh` was run from beginning to end using an isolated clean checkout of `7fa464a`.
+On 2026-09-19, `canonical/canonical-v1/reproduce.sh` was run from beginning to end using an isolated clean checkout of the original experiment commit `7fa464a`. This verification predates the privacy rewrite and is not represented as a run at `f9c86c9`. Because the public-equivalent commit changes no executable/configuration/scientific-generation logic, full training was not rerun solely for the privacy redaction.
 
 Verified:
 

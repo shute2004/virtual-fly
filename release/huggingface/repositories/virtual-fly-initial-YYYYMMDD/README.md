@@ -19,7 +19,7 @@ tags:
 
 This is the initial checkpoint of the current `virtual-fly` canonical experiment. **Initial does not mean a randomly initialized artificial neural network.** It means the initial neural checkpoint used by canonical v1 after constructing the simulation state from the released MaleCNS connectome and the canonical runtime assumptions.
 
-Canonical v1 is pinned to scientific Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`. This checkpoint is global weight version **0** at aggregate neural step **0**.
+This checkpoint was produced by the recorded canonical v1 experiment at original Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`. Its privacy-redacted public scientific equivalent is `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`; the rewrite changed only historical local-path usernames, not executable source or canonical conditions. This checkpoint is global weight version **0** at aggregate neural step **0**.
 
 ## Checkpoint semantics
 

@@ -1,6 +1,6 @@
 # Canonical experiment v1
 
-This directory is a **fresh current-semantics reference experiment** generated from clean commit `7fa464aad7269d34f46f1171080b51e095d1d811` (`dirty=false`).
+This directory records a **fresh current-semantics reference experiment** that was actually run from clean commit `7fa464aad7269d34f46f1171080b51e095d1d811` (`dirty=false`). Before first public release, Git history was privacy-redacted to remove a local OS username from historical absolute paths. The content-equivalent public commit for scientific use is `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`; the mapping and its exact scope are recorded in [`privacy-redaction-provenance.json`](privacy-redaction-provenance.json).
 
 It is not a regeneration of v240, v960, v966, v1704, or the posting Before/After experiment. Those remain historical lineages with different provenance.
 
@@ -18,6 +18,8 @@ Recorded reference provenance and result are stored in `reference-manifest.json`
 
 A full `reproduce.sh` run requires a wgpu-compatible GPU backend for the neural runtime in addition to the normal MuJoCo/runtime dependencies. The reproducer's neural calibration step explicitly selects the GPU backend; the recorded reference run used Apple Metal.
 
-On 2026-09-19, `reproduce.sh` was run from beginning to end against a clean isolated `7fa464a` checkout. All recorded static artifact hashes matched byte-for-byte, training completed global v0 → v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and the initial/final frozen outcomes matched the recorded reference.
+On 2026-09-19, `reproduce.sh` was run from beginning to end against a clean isolated checkout of the **original experiment commit** `7fa464a`. All recorded static artifact hashes matched byte-for-byte, training completed global v0 → v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and the initial/final frozen outcomes matched the recorded reference. This run predates the privacy rewrite; it is not claimed to have been executed at the public-equivalent SHA.
 
-`reproduce.sh` writes each end-to-end verification run outside the repository by default, under `${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/`. Set `VF_CANONICAL_OUTPUT_ROOT` to choose a different output directory. This changes only storage placement; the pinned scientific commit and canonical experiment conditions are unchanged.
+For public reproduction, `reproduce.sh` checks out `f9c86c9`, the privacy-redacted equivalent of the original experiment commit. The two trees differ only in 14 historical report/provenance files where the local OS username in absolute paths was replaced by `<local-user>`; executable source, experiment configuration, and scientific artifact-generation logic are byte-identical. Full canonical training was therefore not rerun solely for the privacy rewrite.
+
+`reproduce.sh` writes each end-to-end verification run outside the repository by default, under `${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/`. Set `VF_CANONICAL_OUTPUT_ROOT` to choose a different output directory. This changes only storage placement; the public-equivalent scientific commit and canonical experiment conditions are unchanged.

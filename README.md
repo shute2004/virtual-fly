@@ -24,7 +24,7 @@ The publication-facing reference is [`canonical/canonical-v1/`](canonical/canoni
 
 | Item | Canonical v1 |
 |---|---|
-| Scientific code | `7fa464aad7269d34f46f1171080b51e095d1d811` (clean) |
+| Public scientific code equivalent | `f9c86c904d67ff974f3c43d37aab3619bc93fc1b` (privacy-redacted equivalent of the clean experiment commit) |
 | MaleCNS snapshot | 166,700 neurons / 25,582,938 directed edges |
 | DAN semantics | released `class=DAN` + dopamine consensus; 338 modulators |
 | Body / environment | v7 / v7 |
@@ -39,7 +39,7 @@ The publication-facing reference is [`canonical/canonical-v1/`](canonical/canoni
 
 Frozen evaluation disables both plasticity and task-triggered DAN stimulation (`reward_current=0`, `aversive_current=0`). The short canonical run therefore establishes **weight change under the current local-plasticity semantics**, not improved behavior, generalization, or long-term learning stability.
 
-The end-to-end reproducer was rerun from beginning to end in a clean isolated `7fa464a` checkout on 2026-09-19. All source-derived static artifact hashes matched the recorded reference, training reached global v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and both frozen outcomes matched the recorded reference.
+The recorded canonical experiment and the 2026-09-19 end-to-end verification were actually run from clean commit `7fa464aad7269d34f46f1171080b51e095d1d811`. Before public release, Git history was rewritten only to replace the local OS username inside historical absolute paths. The corresponding public scientific commit is `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`. At that commit, the only tree differences are 14 historical report/provenance files containing the privacy redaction; executable source, canonical conditions, and scientific artifact-generation logic are unchanged. Full training was therefore not rerun solely for this privacy rewrite. The exact mapping is recorded in [`canonical/canonical-v1/privacy-redaction-provenance.json`](canonical/canonical-v1/privacy-redaction-provenance.json).
 
 See:
 
@@ -162,7 +162,7 @@ By default, its large output bundle is written **outside the repository**:
 ${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/
 ```
 
-Use `VF_CANONICAL_OUTPUT_ROOT=/path/to/output` to choose another location. The script always executes the scientific workload in an isolated clean worktree pinned to `7fa464a`.
+Use `VF_CANONICAL_OUTPUT_ROOT=/path/to/output` to choose another location. The public reproducer executes the scientific workload in an isolated clean worktree pinned to the privacy-redacted public equivalent `f9c86c9`. The recorded 2026-09-19 experiment remains attributed to its original pre-rewrite commit `7fa464a`; the project does not claim that historical run was executed at the rewritten SHA.
 
 ## Development training path
 

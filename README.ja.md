@@ -26,7 +26,7 @@ Xへ投稿した動画、README GIFの生成に使った元動画、GitHub Relea
 
 | 項目 | canonical v1 |
 |---|---|
-| 科学計算に使用したコード | `7fa464aad7269d34f46f1171080b51e095d1d811`（変更なしの状態） |
+| 公開用の科学コード相当commit | `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`（実験時のclean commitをprivacy redactionした内容同等版） |
 | MaleCNSスナップショット | 166,700ニューロン / 25,582,938有向辺 |
 | DANの定義 | 公開注釈`class=DAN`とドーパミン判定の一致、338個 |
 | 身体 / 環境 | v7 / v7 |
@@ -41,7 +41,7 @@ Xへ投稿した動画、README GIFの生成に使った元動画、GitHub Relea
 
 固定評価では、可塑性と課題イベントによるDAN刺激をどちらも停止しています（`reward_current=0`, `aversive_current=0`）。したがってcanonical v1が示しているのは、**現在の局所可塑性則のもとで保存重みが変化したこと**です。行動改善、一般化、長期的な学習安定性まで実証したものではありません。
 
-2026年9月19日には、変更のない`7fa464a`から一連の再現処理を最初から実行しました。元データから生成される静的成果物のハッシュ値はすべて記録済みの基準値と一致し、学習は共有重みv6まで完了しました。保存重みが変化した辺の数も2,163,179で一致し、初期・最終チェックポイントの再読み込みと固定評価の結果も基準記録と一致しました。
+canonical実験と2026年9月19日のend-to-end再現確認は、実際には変更のないcommit `7fa464aad7269d34f46f1171080b51e095d1d811`で実行しました。公開前に、過去資料の絶対パスに含まれていたローカルOSユーザー名だけを削除するためGit履歴をprivacy rewriteしています。内容的に対応する公開用commitは`f9c86c904d67ff974f3c43d37aab3619bc93fc1b`です。このcommitとの差分は、canonical時点では14個のhistorical report / provenance内にあるユーザー名の匿名化だけで、実行コード、canonical条件、scientific artifact生成ロジックは変わっていません。そのため、このprivacy rewriteだけを理由としたfull trainingの再実行は行っていません。対応関係は [`canonical/canonical-v1/privacy-redaction-provenance.json`](canonical/canonical-v1/privacy-redaction-provenance.json) に記録しています。
 
 詳細:
 
@@ -164,7 +164,7 @@ bash canonical/canonical-v1/reproduce.sh
 ${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/
 ```
 
-保存先は`VF_CANONICAL_OUTPUT_ROOT=/path/to/output`で変更できます。科学計算部分は、常に変更のない`7fa464a`を切り出した独立作業ツリーで実行されます。
+保存先は`VF_CANONICAL_OUTPUT_ROOT=/path/to/output`で変更できます。公開版の再現スクリプトは、privacy redaction後の公開相当commit `f9c86c9`を切り出した独立clean worktreeで科学計算を実行します。2026年9月19日の記録済み実験は元の`7fa464a`で実行した事実を保持しており、書き換え後のSHAで実行したとは扱いません。
 
 ## 現在の開発用学習
 

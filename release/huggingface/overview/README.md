@@ -40,7 +40,7 @@ The canonical repository names receive their date only on the actual publication
 | Initial | `shute2004/virtual-fly-initial-YYYYMMDD` | Initial checkpoint of canonical v1, global weight version 0 |
 | Trained | `shute2004/virtual-fly-trained-YYYYMMDD` | Canonical v1 after six training episodes, global weight version 6 |
 
-Canonical v1 is pinned to scientific Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`. The short canonical run changed exactly 2,163,179 stored edges, but its frozen initial and final evaluations had the same categorical outcome. It therefore demonstrates current-semantics local-plasticity weight change, not established behavioral improvement.
+The recorded canonical v1 experiment was actually run at Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`. Before public release, a privacy-only history rewrite produced public scientific equivalent `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`; only historical absolute-path usernames changed, not executable source or canonical conditions. The short canonical run changed exactly 2,163,179 stored edges, but its frozen initial and final evaluations had the same categorical outcome. It therefore demonstrates current-semantics local-plasticity weight change, not established behavioral improvement.
 
 ### Historical Before / After video
 

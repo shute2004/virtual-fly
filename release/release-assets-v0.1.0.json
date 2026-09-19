@@ -2,8 +2,10 @@
   "schema_version": 1,
   "planned_release": "v0.1.0",
   "canonical_reference": {
-    "scientific_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
-    "canonical_package_introduced_in": "72954602b5c2e94c861ad07e809ce5b3ba39e804"
+    "original_experiment_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+    "public_equivalent_git_sha": "f9c86c904d67ff974f3c43d37aab3619bc93fc1b",
+    "canonical_package_original_commit": "72954602b5c2e94c861ad07e809ce5b3ba39e804",
+    "canonical_package_public_equivalent_commit": "47a0ab1d9fb75434ed6661eeb7c948873c9c03ed"
   },
   "policy": {
     "large_assets_in_git": false,

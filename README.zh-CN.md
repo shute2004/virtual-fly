@@ -26,7 +26,7 @@
 
 | 项目 | canonical v1 |
 |---|---|
-| 科学计算所用代码 | `7fa464aad7269d34f46f1171080b51e095d1d811`（工作树无修改） |
+| 公开使用的科学代码等价提交 | `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`（实验时 clean commit 的隐私脱敏等价版本） |
 | MaleCNS 快照 | 166,700 个神经元 / 25,582,938 条有向边 |
 | DAN 定义 | 公开注释 `class=DAN` 与多巴胺判定同时成立，共 338 个 |
 | 身体 / 环境 | v7 / v7 |
@@ -41,7 +41,7 @@
 
 固定评估同时关闭可塑性和任务事件触发的 DAN 刺激（`reward_current=0`, `aversive_current=0`）。因此，canonical v1 能够说明的是：**在当前局部可塑性规则下，保存的权重确实发生了变化**。它并不能证明行为改善、泛化能力或长期学习稳定性。
 
-2026 年 9 月 19 日，我们从无修改的 `7fa464a` 开始重新执行了完整复现流程。由源数据生成的静态产物哈希值全部与记录的基准值一致；学习顺利进行到共享权重 v6；发生变化的边数同样是 2,163,179；初始和最终检查点都能重新载入；两次固定评估的结果也与基准记录一致。
+canonical 实验和 2026 年 9 月 19 日的端到端复现验证，实际都是在无修改的 commit `7fa464aad7269d34f46f1171080b51e095d1d811` 上执行的。公开前，为了只删除历史资料绝对路径中的本地 OS 用户名，我们对 Git 历史进行了隐私重写。内容上对应的公开提交是 `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`。在 canonical 时点，两者的树差异仅限于 14 个历史报告/来源记录中的用户名脱敏；可执行源码、canonical 条件和科学产物生成逻辑均未改变。因此，没有仅因这次隐私重写而重新运行完整训练。映射关系记录在 [`canonical/canonical-v1/privacy-redaction-provenance.json`](canonical/canonical-v1/privacy-redaction-provenance.json)。
 
 详细资料：
 
@@ -164,7 +164,7 @@ bash canonical/canonical-v1/reproduce.sh
 ${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/
 ```
 
-可通过 `VF_CANONICAL_OUTPUT_ROOT=/path/to/output` 指定其他保存位置。科学计算部分始终在由无修改的 `7fa464a` 创建的独立工作树中执行。
+可通过 `VF_CANONICAL_OUTPUT_ROOT=/path/to/output` 指定其他保存位置。公开版复现脚本会在隐私脱敏后的公开等价提交 `f9c86c9` 上创建独立 clean worktree 并执行科学计算。2026 年 9 月 19 日已记录的实验仍明确归属于原始 `7fa464a`，不会被描述成是在重写后的 SHA 上执行。
 
 ## 当前开发用学习
 

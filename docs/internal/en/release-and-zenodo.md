@@ -90,7 +90,7 @@ Creation/upload of the four checkpoint repositories is a publication action and 
 
 Recommended factual summary:
 
-> Canonical experiment v1 is pinned to clean scientific commit `7fa464aad7269d34f46f1171080b51e095d1d811`. A full end-to-end rerun on 2026-09-19 reproduced all recorded static artifact hashes, completed six canonical training episodes from global v0 to v6, changed exactly 2,163,179 stored edges, reloaded both checkpoints successfully, and reproduced the recorded frozen initial/final outcomes. The short canonical run did not show categorical behavioral improvement.
+> Canonical experiment v1 was actually run from clean scientific commit `7fa464aad7269d34f46f1171080b51e095d1d811`. A full end-to-end rerun at that original commit on 2026-09-19 reproduced all recorded static artifact hashes, completed six canonical training episodes from global v0 to v6, changed exactly 2,163,179 stored edges, reloaded both checkpoints successfully, and reproduced the recorded frozen initial/final outcomes. Before public release, a privacy-only history rewrite replaced the local OS username in historical absolute paths; the corresponding public scientific commit is `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`. No executable source, canonical condition, or scientific artifact-generation logic changed, so full training was not rerun solely for the privacy rewrite. The short canonical run did not show categorical behavioral improvement.
 
 Do not shorten this to "the fly learned Flyppy" or similar.
 
@@ -118,13 +118,13 @@ For `v0.1.0`, the creator identity is intentionally the established Git/GitHub p
 
 ## 10. Pre-publication privacy/provenance audit
 
-The 2026-09-19 tracked-file scan found no high-confidence credential-shaped strings and no personal email addresses in tracked files. It found absolute local filesystem paths in exactly 14 historical provenance files: one archived development note and 13 tracked reports/logs/JSON records.
+The 2026-09-19 tracked-file scan found no high-confidence credential-shaped strings and no personal email addresses in tracked files. It found the local OS username in absolute filesystem paths in exactly 14 files at the canonical experiment commit: one archived development note and 13 tracked reports/logs/JSON records. Across the later pre-publication history, the same string appeared only in those historical paths (including the pre-archive location of the note) plus this internal audit document.
 
-The decision for `v0.1.0` is to preserve those 14 originals unchanged. Their paths record the machine context of historical runs, tracebacks, or generated reports; rewriting them would alter the original provenance record. The fixed canonical scientific commit `7fa464a` already contains these historical strings, so removing them from published Git history would require a history rewrite and would invalidate that exact canonical SHA. The resulting privacy/provenance tradeoff is therefore explicitly accepted for v0.1.0. Current public READMEs and current multilingual documentation contain no `/Users/<local-user>/...` path. [`../../../reports/README.md`](../../../reports/README.md) and [`../../archive/README.md`](../../archive/README.md) explicitly explain that such historical paths are provenance rather than installation instructions.
+Before `v0.1.0`, the Git history was rewritten so the username component is represented as `<local-user>`. At the canonical commit, an exact tree comparison between original `7fa464aad7269d34f46f1171080b51e095d1d811` and public equivalent `f9c86c904d67ff974f3c43d37aab3619bc93fc1b` found exactly 14 changed paths, and every changed blob was byte-for-byte equal to the original after only the username substitution. No source-code, canonical configuration, checkpoint, scientific artifact, result value, commit message, author identity, or experiment condition changed. The original→public mapping is recorded in [`../../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../../canonical/canonical-v1/privacy-redaction-provenance.json).
 
 ## 11. Third-party fresh-clone preflight
 
-A fresh shallow clone of `main` at `b1245a7022d6460a9046ec6cf7af18bb09818868` was tested on 2026-09-19 without using the development checkout's virtual environment, Cargo build directory, MaleCNS snapshot, or generated artifacts.
+A fresh shallow clone of `main` at pre-rewrite commit `b1245a7022d6460a9046ec6cf7af18bb09818868` was tested on 2026-09-19 without using the development checkout's virtual environment, Cargo build directory, MaleCNS snapshot, or generated artifacts. Its privacy-redacted public equivalent is `54a414da3e50e7c325747c9d580dc4a086a4a7ab`; the test itself was performed before the rewrite.
 
 Verified from README-level instructions:
 
@@ -173,6 +173,7 @@ The existing private `shute2004/virtual-fly` Hugging Face overview repository ha
 - [x] canonical/Historical-video checkpoint lineages explicitly separated in cards and GitHub docs
 - [x] raw MaleCNS and FlyBody/FlyGym/MuJoCo assets excluded from checkpoint upload plan; official acquisition paths retained
 - [x] creator identity for `v0.1.0` intentionally set to `shute2004`; ORCID/affiliation omitted unless explicitly supplied
+- [x] pre-publication history privacy rewrite completed; local OS username removed from all reachable public history and canonical old→public SHA mapping recorded
 - [ ] choose actual publication date and finalize the two canonical Hugging Face repository names
 - [ ] create/upload the four Hugging Face checkpoint repositories
 - [ ] publish/update `shute2004/virtual-fly` overview card with final four links

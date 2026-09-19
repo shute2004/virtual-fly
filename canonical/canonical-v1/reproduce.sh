@@ -10,7 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 CONFIG="$SCRIPT_DIR/config.json"
 REFERENCE_MANIFEST="$SCRIPT_DIR/reference-manifest.json"
-EXPECTED_SHA="7fa464aad7269d34f46f1171080b51e095d1d811"
+ORIGINAL_EXPERIMENT_SHA="7fa464aad7269d34f46f1171080b51e095d1d811"
+PUBLIC_EQUIVALENT_SHA="f9c86c904d67ff974f3c43d37aab3619bc93fc1b"
+EXPECTED_SHA="$PUBLIC_EQUIVALENT_SHA"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DEFAULT_OUTPUT_BASE="${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions"
 OUTPUT_ROOT="${VF_CANONICAL_OUTPUT_ROOT:-$DEFAULT_OUTPUT_BASE/canonical-v1-$STAMP}"
@@ -45,7 +47,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "canonical_reference_sha=$EXPECTED_SHA"
+echo "canonical_original_experiment_sha=$ORIGINAL_EXPERIMENT_SHA"
+echo "canonical_public_equivalent_sha=$PUBLIC_EQUIVALENT_SHA"
+echo "canonical_reproduction_sha=$EXPECTED_SHA"
 echo "canonical_reproduction_output=$OUTPUT_ROOT"
 echo "canonical_worktree=$WORKTREE"
 
@@ -404,7 +408,7 @@ def sha(p):
 reference_result=cfg['reference_result']
 repro={
  'schema_version':1,'kind':'virtual-fly-canonical-v1-reproduction-run','created_at_utc':datetime.now(timezone.utc).isoformat(),
- 'canonical_reference':{'git_sha':expected_sha,'reference_manifest_sha256':sha(reference),'reference_result':reference_result},
+ 'canonical_reference':{'original_experiment_git_sha':'7fa464aad7269d34f46f1171080b51e095d1d811','public_equivalent_git_sha':expected_sha,'reference_manifest_sha256':sha(reference),'reference_result':reference_result},
  'code':train['reproducibility']['code'],'dependencies':train['reproducibility']['dependency_lock'],'runtime_versions':versions,
  'static_reproducibility':checks,
  'training':{
@@ -444,6 +448,7 @@ PY
 # Preserve exact reproduction inputs alongside the run.
 cp "$CONFIG" "$OUTPUT_ROOT/canonical-config.json"
 cp "$REFERENCE_MANIFEST" "$OUTPUT_ROOT/reference-manifest.json"
+cp "$SCRIPT_DIR/privacy-redaction-provenance.json" "$OUTPUT_ROOT/privacy-redaction-provenance.json"
 
 # Final scientific SHA/clean-state check. Generated files live outside the
 # worktree (except ignored build/source caches), so Git remains clean.

@@ -24,7 +24,7 @@ canonical系のリポジトリ名の日付は、実際の公開日にのみ確�
 | 初期 | `shute2004/virtual-fly-initial-YYYYMMDD` | canonical v1の初期チェックポイント。global weight version 0 |
 | 学習後 | `shute2004/virtual-fly-trained-YYYYMMDD` | canonical v1で6エピソードの学習処理を経たチェックポイント。global weight version 6 |
 
-canonical v1の科学計算部分はGit commit `7fa464aad7269d34f46f1171080b51e095d1d811`に固定されています。この短いcanonical実験では、保存された25,582,938本の辺のうち2,163,179本で重みが変化しました。一方、可塑性とタスク由来のDAN刺激を無効化した固定評価では、初期・学習後とも同じ分類上の結果でした。
+記録済みのcanonical v1実験は、実際にはGit commit `7fa464aad7269d34f46f1171080b51e095d1d811`で実行しました。公開前のprivacy-onlyな履歴書き換え後、公開用の科学コード相当commitは`f9c86c904d67ff974f3c43d37aab3619bc93fc1b`です。変更はhistorical absolute path内のローカルOSユーザー名だけで、実行コードやcanonical条件は変わっていません。この短いcanonical実験では、保存された25,582,938本の辺のうち2,163,179本で重みが変化しました。一方、可塑性とタスク由来のDAN刺激を無効化した固定評価では、初期・学習後とも同じ分類上の結果でした。
 
 したがってcanonical v1が示しているのは、**現行の局所可塑性の意味づけのもとで保存重みが実際に変化したこと**であり、明確な行動改善や一般化を実証したという主張ではありません。
 

@@ -6,11 +6,13 @@
 
 ## 1. 基準実験（canonical v1）
 
-canonical v1は、公開時の基準となる実験です。科学計算部分は、未コミット変更のない次のGitコミットに固定しています。
+canonical v1は、公開時の基準となる実験です。記録済みの実験は、未コミット変更のないGit commit `7fa464aad7269d34f46f1171080b51e095d1d811`で実際に実行しました。公開前のprivacy-onlyな履歴書き換え後、内容的に対応する公開用の科学コードcommitは次です。
 
 ```text
-7fa464aad7269d34f46f1171080b51e095d1d811
+f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 ```
+
+canonical時点で変わったのは、14個のhistorical report / provenanceに含まれるローカルOSユーザー名だけです。実行コード、canonical条件、scientific artifact生成ロジックは変わっていません。対応関係は [`../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../canonical/canonical-v1/privacy-redaction-provenance.json) に記録しています。
 
 結果の短い要約は [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)、完全な来歴記録は [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json) にあります。
 
@@ -45,7 +47,7 @@ canonical v1は、公開時の基準となる実験です。科学計算部分�
 
 ## 2. 一連の再現確認
 
-2026年9月19日に`canonical/canonical-v1/reproduce.sh`を使い、変更のない`7fa464a`を切り出した独立作業ツリーから、最初から最後まで再現処理を実行しました。
+2026年9月19日に`canonical/canonical-v1/reproduce.sh`を使い、元の実験commit `7fa464a`を切り出した独立clean worktreeから、最初から最後まで再現処理を実行しました。この確認はprivacy rewriteより前のものであり、`f9c86c9`で実行したものとは扱いません。公開相当commitでは実行コード・設定・科学的生成ロジックが変化していないため、privacy redactionだけを理由とするfull trainingの再実行は行っていません。
 
 確認した内容:
 

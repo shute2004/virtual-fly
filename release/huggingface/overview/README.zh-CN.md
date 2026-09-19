@@ -24,7 +24,7 @@ canonical 系列仓库名中的日期只在实际发布日期确定后填写。
 | 初始 | `shute2004/virtual-fly-initial-YYYYMMDD` | canonical v1 的初始检查点，global weight version 0 |
 | 学习后 | `shute2004/virtual-fly-trained-YYYYMMDD` | canonical v1 完成 6 个训练回合后的检查点，global weight version 6 |
 
-canonical v1 的科学计算部分固定在 Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`。这次较短的 canonical 实验中，25,582,938 条存储边里有 2,163,179 条发生了权重变化。但在关闭可塑性和任务触发 DAN 刺激的固定评估中，初始状态和学习后状态的分类结果相同。
+已记录的 canonical v1 实验实际运行于 Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`。公开前只针对隐私进行历史重写后，公开使用的科学代码等价提交为 `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`；变化仅限于历史绝对路径中的本地 OS 用户名，可执行源码和 canonical 条件均未改变。这次较短的 canonical 实验中，25,582,938 条存储边里有 2,163,179 条发生了权重变化。但在关闭可塑性和任务触发 DAN 刺激的固定评估中，初始状态和学习后状态的分类结果相同。
 
 因此 canonical v1 证明的是：**在当前局部可塑性定义下，保存的 MaleCNS 权重确实发生了变化**。它并不声称已经证明了明确的行为改善、泛化能力或长期学习稳定性。
 
