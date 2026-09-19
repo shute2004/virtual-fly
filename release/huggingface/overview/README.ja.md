@@ -4,7 +4,7 @@
 
 `virtual-fly`は、成体オスのショウジョウバエの公開MaleCNSコネクトームを初期状態として、神経活動・神経修飾・局所シナプス可塑性を時間発展させ、FlyBody / MuJoCoの身体と物理環境に閉ループ接続する研究プロジェクトです。
 
-このHugging Faceリポジトリは、`virtual-fly`の**大容量成果物を配布するための入口**です。ソースコード、科学的な説明、canonical実験のmanifest、一連の再現スクリプトはGitHubにあります。
+このHugging Faceリポジトリでは、`virtual-fly`の概要と、公開するチェックポイントリポジトリの構成をまとめています。ソースコード、科学的な説明、canonical実験のmanifest、一連の再現スクリプトはGitHubにあります。
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - 英語文書: https://github.com/shute2004/virtual-fly/tree/main/docs/en
@@ -19,7 +19,7 @@
 
 canonical系のリポジトリ名の日付は、実際の公開日にのみ確定します。
 
-| 成果物 | リポジトリ | 意味 |
+| チェックポイント | リポジトリ | 意味 |
 |---|---|---|
 | 初期 | `shute2004/virtual-fly-initial-YYYYMMDD` | canonical v1の初期チェックポイント。global weight version 0 |
 | 学習後 | `shute2004/virtual-fly-trained-YYYYMMDD` | canonical v1で6エピソードの学習処理を経たチェックポイント。global weight version 6 |
@@ -30,7 +30,7 @@ canonical v1の科学計算部分はGit commit `7fa464aad7269d34f46f1171080b51e0
 
 ### 過去系統のBefore / After動画
 
-| 成果物 | リポジトリ | 来歴上の役割 |
+| チェックポイント | リポジトリ | 来歴上の役割 |
 |---|---|---|
 | Before | `shute2004/virtual-fly-video-before` | 公開したBefore / After比較動画のBefore側で実際に使用した過去系統のチェックポイント |
 | After | `shute2004/virtual-fly-video-after` | 同じ動画のAfter側で実際に使用した過去系統のチェックポイント |
@@ -51,11 +51,11 @@ canonical v1の科学計算部分はGit commit `7fa464aad7269d34f46f1171080b51e0
 - 今回の公開対象と無関係な開発途中のチェックポイント
 - ビルドキャッシュや仮想環境
 
-上流データと派生静的成果物については、MaleCNS公式配布元とGitHubのcanonical再現スクリプトを取得・再生成の正規経路とします。
+上流データと、そこから生成する静的データについては、MaleCNS公式配布元とGitHubのcanonical再現スクリプトを取得・再生成の正規経路とします。
 
 ## ライセンスと帰属
 
-`virtual-fly`独自のソースコードと文書はMIT Licenseで公開します。チェックポイントの重みは、MaleCNS公式サイトがCC BY 4.0で配布している`male-cns:v1.0`を基礎とする派生成果物です。そのため、チェックポイント用リポジトリは`cc-by-4.0`として明示し、MaleCNSへの帰属情報を付けます。
+`virtual-fly`独自のソースコードと文書はMIT Licenseで公開します。チェックポイントの重みは、MaleCNS公式サイトがCC BY 4.0で配布している`male-cns:v1.0`を基礎として生成した派生データです。そのため、チェックポイント用リポジトリは`cc-by-4.0`として明示し、MaleCNSへの帰属情報を付けます。
 
 FlyBody、FlyGym、MuJoCoはそれぞれ上流のライセンスに従い、利便性だけを理由にチェックポイント用リポジトリへ複製しません。
 
@@ -72,4 +72,4 @@ uv sync --frozen
 bash canonical/canonical-v1/reproduce.sh
 ```
 
-Hugging Faceの各チェックポイントリポジトリは、大容量成果物を取得しやすくするための配布面です。canonical v1の科学的な定義は、GitHub上のcanonicalパッケージを基準とします。
+Hugging Faceの各チェックポイントリポジトリは、チェックポイントを配布するためのものです。canonical v1の科学的な定義は、GitHub上のcanonicalパッケージを基準とします。

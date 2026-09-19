@@ -20,7 +20,7 @@ tags:
 
 `virtual-fly` is a research project that starts from the released adult male Drosophila MaleCNS connectome and evolves neural activity, neuromodulation, and local synaptic plasticity in closed loop with a FlyBody / MuJoCo body and a physical environment.
 
-This Hugging Face repository is the **artifact-distribution overview** for the project. Source code, scientific documentation, canonical manifests, and the end-to-end reproducer live on GitHub:
+This Hugging Face repository provides an overview of `virtual-fly` and describes the checkpoint repositories used to distribute its released checkpoints. Source code, scientific documentation, canonical manifests, and the end-to-end reproducer live on GitHub:
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - English documentation: https://github.com/shute2004/virtual-fly/tree/main/docs/en
@@ -35,7 +35,7 @@ Two distinct lineages are published. **Do not treat the historical video pair as
 
 The canonical repository names receive their date only on the actual publication day.
 
-| Artifact | Repository | Meaning |
+| Checkpoint | Repository | Meaning |
 |---|---|---|
 | Initial | `shute2004/virtual-fly-initial-YYYYMMDD` | Initial checkpoint of canonical v1, global weight version 0 |
 | Trained | `shute2004/virtual-fly-trained-YYYYMMDD` | Canonical v1 after six training episodes, global weight version 6 |
@@ -44,7 +44,7 @@ Canonical v1 is pinned to scientific Git commit `7fa464aad7269d34f46f1171080b51e
 
 ### Historical Before / After video
 
-| Artifact | Repository | Provenance role |
+| Checkpoint | Repository | Provenance role |
 |---|---|---|
 | Before | `shute2004/virtual-fly-video-before` | Exact historical checkpoint used for the Before side of the published comparison video |
 | After | `shute2004/virtual-fly-video-after` | Exact historical checkpoint used for the After side of the published comparison video |
@@ -53,7 +53,7 @@ The historical cards record their internal development versions (`v240` and `v96
 
 ## What is hosted here
 
-The artifact repositories contain checkpoint files plus lightweight provenance, hashes, attribution, and a model card. They do not mirror the full research workspace.
+The checkpoint repositories contain checkpoint files plus lightweight provenance, hashes, attribution, and a model card. They do not mirror the full research workspace.
 
 Not hosted here by default:
 
@@ -65,7 +65,7 @@ Not hosted here by default:
 - unrelated development checkpoints;
 - build caches or virtual environments.
 
-The official MaleCNS source and the GitHub canonical reproducer remain the acquisition/reconstruction path for upstream data and derived static artifacts.
+The official MaleCNS source and the GitHub canonical reproducer remain the acquisition/reconstruction path for upstream data and derived static data.
 
 ## Licensing and attribution
 

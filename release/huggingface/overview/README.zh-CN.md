@@ -4,7 +4,7 @@
 
 `virtual-fly` 是一个研究项目：以成年雄性果蝇公开的 MaleCNS 连接组作为初始状态，让神经活动、神经调制和局部突触可塑性随时间演化，并与 FlyBody / MuJoCo 身体及物理环境形成闭环。
 
-这个 Hugging Face 仓库是 `virtual-fly` **大型研究产物的分发入口**。源代码、科学说明、canonical 实验清单以及完整复现脚本位于 GitHub：
+这个 Hugging Face 仓库用于介绍 `virtual-fly`，并说明各个检查点仓库的发布结构。源代码、科学说明、canonical 实验清单以及完整复现脚本位于 GitHub：
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - 英文文档: https://github.com/shute2004/virtual-fly/tree/main/docs/en
@@ -19,7 +19,7 @@
 
 canonical 系列仓库名中的日期只在实际发布日期确定后填写。
 
-| 产物 | 仓库 | 含义 |
+| 检查点 | 仓库 | 含义 |
 |---|---|---|
 | 初始 | `shute2004/virtual-fly-initial-YYYYMMDD` | canonical v1 的初始检查点，global weight version 0 |
 | 学习后 | `shute2004/virtual-fly-trained-YYYYMMDD` | canonical v1 完成 6 个训练回合后的检查点，global weight version 6 |
@@ -30,7 +30,7 @@ canonical v1 的科学计算部分固定在 Git commit `7fa464aad7269d34f46f1171
 
 ### 历史 Before / After 视频
 
-| 产物 | 仓库 | 来源角色 |
+| 检查点 | 仓库 | 来源角色 |
 |---|---|---|
 | Before | `shute2004/virtual-fly-video-before` | 公开 Before / After 对比视频中 Before 一侧实际使用的历史检查点 |
 | After | `shute2004/virtual-fly-video-after` | 同一视频中 After 一侧实际使用的历史检查点 |
@@ -51,7 +51,7 @@ canonical v1 的科学计算部分固定在 Git commit `7fa464aad7269d34f46f1171
 - 与本次公开无关的开发中检查点
 - 构建缓存或虚拟环境
 
-对于上游数据和派生静态产物，MaleCNS 官方来源与 GitHub 上的 canonical 复现脚本是正式的获取和重建路径。
+对于上游数据和由其生成的静态数据，MaleCNS 官方来源与 GitHub 上的 canonical 复现脚本是正式的获取和重建路径。
 
 ## 许可证与归属
 
@@ -72,4 +72,4 @@ uv sync --frozen
 bash canonical/canonical-v1/reproduce.sh
 ```
 
-Hugging Face 上的检查点仓库用于方便分发大型产物。canonical v1 的科学定义仍以 GitHub 中的 canonical 包为准。
+Hugging Face 上的各检查点仓库用于分发检查点文件。canonical v1 的科学定义仍以 GitHub 中的 canonical 包为准。
