@@ -12,7 +12,7 @@ Training used body v7 / environment v7 / direct-ray K13 / haltere timing subset 
 
 Frozen comparison uses plasticity **OFF** and DAN stimulation **OFF** (`reward_current=0`, `aversive_current=0`) so the comparison isolates stored weight state as far as the current model permits. Both initial and final evaluations passed Gate 1 and collided with the next gate at control step 120.
 
-Recorded reference provenance and result are stored in `reference-manifest.json` and `reference-report.md`. Publication-facing interpretation and the boundary to historical results are documented in [`../../docs/results.md`](../../docs/results.md).
+Recorded reference provenance and result are stored in `reference-manifest.json` and `reference-report.md`. Publication-facing interpretation and the boundary to historical results are documented in [`../../docs/en/results.md`](../../docs/en/results.md).
 
 ## End-to-end verification
 

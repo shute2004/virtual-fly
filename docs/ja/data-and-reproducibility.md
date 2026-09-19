@@ -1,5 +1,7 @@
 # データの来歴と再現性
 
+[English](../en/data-and-reproducibility.md) · [日本語](data-and-reproducibility.md) · [简体中文](../zh-CN/data-and-reproducibility.md)
+
 ## 1. 基準データ
 
 初期基準には、HHMI Janeliaなどが公開している成体オスショウジョウバエ全CNSコネクトーム`male-cns:v1.0`を使う。

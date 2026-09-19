@@ -1,5 +1,7 @@
 # 翼運動ニューロンと末梢筋の境界
 
+[English](../en/wing-motor-boundary.md) · [日本語](wing-motor-boundary.md) · [简体中文](../zh-CN/wing-motor-boundary.md)
+
 ## 1. 目的
 
 Flyppy学習でCNSの外側に行動決定器を置かないため、MaleCNSから身体への境界を、公開されている個々の翼運動ニューロンまで下げる。

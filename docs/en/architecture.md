@@ -1,6 +1,6 @@
 # Current architecture
 
-[English](architecture.md) · [日本語](architecture.ja.md) · [简体中文](architecture.zh-CN.md)
+[English](architecture.md) · [日本語](../ja/architecture.md) · [简体中文](../zh-CN/architecture.md)
 
 This document describes the architecture implemented by the current production/canonical path. It is not a roadmap and does not retroactively describe historical artifacts.
 

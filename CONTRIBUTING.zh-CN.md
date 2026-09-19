@@ -8,9 +8,9 @@
 
 - [`README.zh-CN.md`](README.zh-CN.md)
 - [`AGENTS.md`](AGENTS.md)
-- [`docs/architecture.zh-CN.md`](docs/architecture.zh-CN.md)
-- [`docs/results.zh-CN.md`](docs/results.zh-CN.md)
-- [`docs/requirements.md`](docs/requirements.md)
+- [`docs/zh-CN/architecture.md`](docs/zh-CN/architecture.md)
+- [`docs/zh-CN/results.md`](docs/zh-CN/results.md)
+- [`docs/zh-CN/requirements.md`](docs/zh-CN/requirements.md)
 
 ## 分支方针
 
@@ -61,7 +61,7 @@
 
 v240 / v960 / v966 / v1704 等历史实验产物和诊断结果会继续保留，用于追踪研究过程，但不能重新标记为当前的基准结果。
 
-对外发布实验结果时，请以 [`docs/results.zh-CN.md`](docs/results.zh-CN.md) 和 [`canonical/canonical-v1/`](canonical/canonical-v1/) 为准。
+对外发布实验结果时，请以 [`docs/zh-CN/results.md`](docs/zh-CN/results.md) 和 [`canonical/canonical-v1/`](canonical/canonical-v1/) 为准。
 
 ## 修改应尽量单一
 
@@ -107,11 +107,11 @@ v240 / v960 / v966 / v1704 等历史实验产物和诊断结果会继续保留�
 
 ## 文档语言
 
-对外文档以英文为默认版本，主要入口同时提供日文和简体中文版本。
+面向公开发布的研究文档统一放在 `docs/en/`、`docs/ja/`、`docs/zh-CN/` 中，并在三个语言目录下使用相同文件名。新增或修改公开文档时，应把三种语言视为同一组文档共同维护。
 
 翻译版应写成各自语言中自然的文章，而不是机械保留英文词汇。代码标识符、文件名，以及 MaleCNS / FlyBody / MuJoCo 等专有名称可以保留原文。
 
-内部研究和开发记录可以保留原来的日文，以免破坏当时的语境。不要仅为了形式统一而批量翻译历史资料。
+内部研究和开发文档放在 `docs/internal/<language>/`，历史资料放在 `docs/archive/`。这些内容不是公开文档的翻译缺失，可以按需要保留原语言。不要仅为了形式统一而批量翻译历史资料。
 
 ## Pull Request 与提交记录
 

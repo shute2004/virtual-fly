@@ -1,6 +1,6 @@
 # 現在の構成
 
-[English](architecture.md) · [日本語](architecture.ja.md) · [简体中文](architecture.zh-CN.md)
+[English](../en/architecture.md) · [日本語](architecture.md) · [简体中文](../zh-CN/architecture.md)
 
 この文書では、現在の通常実行経路とcanonical v1で**実際に使われている構成**を説明します。将来計画を説明する文書ではなく、過去の実験生成物に現在の仕様をさかのぼって当てはめるものでもありません。
 
@@ -280,7 +280,7 @@ scripts/                      起動、データ準備、解析、過去方式�
 
 新しい実装では、過去スクリプト名の互換用呼び出しを直接使うのではなく、原則として`src/virtual_fly/`以下の実装を利用します。
 
-過去の実験結果は、その実験時点の条件と来歴を維持して保存します。詳しくは [`results.ja.md`](results.ja.md) を参照してください。
+過去の実験結果は、その実験時点の条件と来歴を維持して保存します。詳しくは [`results.md`](results.md) を参照してください。
 
 ## 19. 現在まだ生物学的に実装済みとは言えないもの
 

@@ -42,7 +42,7 @@ For `v0.1.0`, attach the historical presentation media only if it remains useful
 - `historical-before-v240-playback.json`
 - `historical-after-v966-playback.json`
 
-These assets are **historical**, not canonical results. Their exact local source paths, sizes, and SHA-256 hashes are recorded in [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json).
+These assets are **historical**, not canonical results. Their exact local source paths, sizes, and SHA-256 hashes are recorded in [`../../../release/release-assets-v0.1.0.json`](../../../release/release-assets-v0.1.0.json).
 
 The release notes must say explicitly that canonical v1 did not show categorical behavioral improvement and that the v240→v966 media belongs to an older development lineage.
 

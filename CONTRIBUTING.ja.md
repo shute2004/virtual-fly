@@ -8,9 +8,9 @@
 
 - [`README.ja.md`](README.ja.md)
 - [`AGENTS.md`](AGENTS.md)
-- [`docs/architecture.ja.md`](docs/architecture.ja.md)
-- [`docs/results.ja.md`](docs/results.ja.md)
-- [`docs/requirements.md`](docs/requirements.md)
+- [`docs/ja/architecture.md`](docs/ja/architecture.md)
+- [`docs/ja/results.md`](docs/ja/results.md)
+- [`docs/ja/requirements.md`](docs/ja/requirements.md)
 
 ## ブランチ方針
 
@@ -61,7 +61,7 @@
 
 v240 / v960 / v966 / v1704などの過去の実験生成物や診断結果は、研究の来歴として保持します。ただし、それらを現在の基準結果として読み替えません。
 
-公開時に結果を主張する場合は、[`docs/results.ja.md`](docs/results.ja.md) と [`canonical/canonical-v1/`](canonical/canonical-v1/) を基準にしてください。
+公開時に結果を主張する場合は、[`docs/ja/results.md`](docs/ja/results.md) と [`canonical/canonical-v1/`](canonical/canonical-v1/) を基準にしてください。
 
 ## 変更の単位
 
@@ -107,11 +107,11 @@ Gitの外に置くものの例:
 
 ## 文書の言語
 
-公開向け文書は英語を既定とし、主要な入口には日本語版と簡体字中国語版も用意します。
+公開向けの研究文書は、`docs/en/`、`docs/ja/`、`docs/zh-CN/`に同じファイル名で揃えます。公開文書を追加・更新するときは、3言語版を同じ文書集合として保守してください。
 
 翻訳版は英語の単語を機械的に残すのではなく、それぞれの言語として自然に読める文章にしてください。コード上の識別子、ファイル名、MaleCNS / FlyBody / MuJoCoなどの固有名詞は必要に応じて原表記を使います。
 
-内部の研究・開発記録は、当時の文脈を保つため日本語のままで構いません。見た目を統一するためだけに過去資料を一括翻訳しないでください。
+内部の研究・開発文書は`docs/internal/<language>/`へ、過去資料は`docs/archive/`へ置きます。これらは公開文書の翻訳漏れではなく、必要な言語のまま保持して構いません。見た目を統一するためだけに過去資料を一括翻訳しないでください。
 
 ## Pull Requestとコミット
 

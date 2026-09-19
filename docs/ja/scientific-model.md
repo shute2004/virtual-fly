@@ -1,5 +1,7 @@
 # 神経系・可塑性モデルの方針
 
+[English](../en/scientific-model.md) · [日本語](scientific-model.md) · [简体中文](../zh-CN/scientific-model.md)
+
 ## 1. このプロジェクトで再現したいもの
 
 本プロジェクトは、コネクトームを人工ニューラルネットワークの配線として利用することを目的としない。

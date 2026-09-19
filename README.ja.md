@@ -43,8 +43,8 @@
 
 - [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — 基準実験の結果要約
 - [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完全な来歴記録
-- [`docs/results.ja.md`](docs/results.ja.md) — 基準結果と過去結果の区別
-- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — 来歴と実行上の意味づけに関する監査・修正記録
+- [`docs/ja/results.md`](docs/ja/results.md) — 基準結果と過去結果の区別
+- [`docs/ja/reproducibility-fixes-2026-09-19.md`](docs/ja/reproducibility-fixes-2026-09-19.md) — 来歴と実行上の意味づけに関する監査・修正記録
 
 ## 現在実装されているもの
 
@@ -81,7 +81,7 @@ Flyppyの物理環境
 - 並列学習では共有重みを1つ持ちますが、膜電位、発火状態、不応期、活動履歴、神経修飾、適格度などの短期状態はエピソードごとに初期化します。
 - 現在の並列学習用チェックポイントが保存するのは共有重みであり、仮想個体の全状態を持続的に保存するものではありません。
 
-実装の詳細は [`docs/architecture.ja.md`](docs/architecture.ja.md) と [`docs/code-structure.md`](docs/code-structure.md) を参照してください。
+実装の詳細は [`docs/ja/architecture.md`](docs/ja/architecture.md) と [`docs/ja/code-structure.md`](docs/ja/code-structure.md) を参照してください。
 
 ## このプロジェクトが主張していないこと
 
@@ -147,7 +147,7 @@ bash scripts/dev/train_flyppy_population.sh
 ```text
 canonical/      基準実験パッケージと来歴記録
 crates/         Rust製の神経実行系と実行プログラム
-docs/           設計、科学上の約束事、再現性、履歴資料
+docs/           3言語の公開文書（`en/`・`ja/`・`zh-CN/`）、内部文書、履歴資料
 reports/        小容量の診断結果と過去の開発レポート
 scripts/        データ準備、解析、互換用コマンド、起動スクリプト
 src/            現行Pythonパッケージ（`virtual_fly`）
@@ -157,17 +157,17 @@ artifacts/      ローカルの大容量データ、チェックポイント、�
 release/        公開用ファイルの来歴記録。大容量ファイル本体はGit管理外
 ```
 
-文書全体の案内は [`docs/README.ja.md`](docs/README.ja.md) を参照してください。
+文書全体の案内は [`docs/ja/README.md`](docs/ja/README.md) を参照してください。
 
 ## 結果・来歴・大容量データ
 
-過去の開発結果は研究の来歴として有用なため残していますが、現在の基準結果として読み替えることはしません。区別は [`docs/results.ja.md`](docs/results.ja.md) に明記しています。
+過去の開発結果は研究の来歴として有用なため残していますが、現在の基準結果として読み替えることはしません。区別は [`docs/ja/results.md`](docs/ja/results.md) に明記しています。
 
 MaleCNSの生データ、スナップショット、チェックポイント、軌跡データ、描画動画、ビルドキャッシュなどの大容量ファイルはGitから除外し、小さな来歴記録、ハッシュ値、設定、レポートだけを追跡します。
 
 ## 引用方法
 
-引用情報は [`CITATION.cff`](CITATION.cff) に記載しています。長期保存用のGitHubリリースは公開用ブランチのタグから作成し、Zenodoと連携する設計です。手順は [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md) を参照してください。
+引用情報は [`CITATION.cff`](CITATION.cff) に記載しています。長期保存用のGitHubリリースは公開用ブランチのタグから作成し、Zenodoと連携する設計です。手順は [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md) を参照してください。
 
 ## ライセンス
 

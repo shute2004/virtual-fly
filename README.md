@@ -41,8 +41,8 @@ See:
 
 - [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — compact canonical result
 - [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — complete provenance
-- [`docs/results.md`](docs/results.md) — canonical vs. historical result boundary
-- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — provenance/semantics audit and fixes
+- [`docs/en/results.md`](docs/en/results.md) — canonical vs. historical result boundary
+- [`docs/en/reproducibility-fixes-2026-09-19.md`](docs/en/reproducibility-fixes-2026-09-19.md) — provenance/semantics audit and fixes
 
 ## What is implemented
 
@@ -79,7 +79,7 @@ Important current boundaries:
 - population training shares one global weight state, but episode-local membrane/spike/refractory/trace/modulation/eligibility state is reset between episodes;
 - current population checkpoints persist global weights, not a complete persistent biological individual state.
 
-For implementation details, see [`docs/architecture.md`](docs/architecture.md) and [`docs/code-structure.md`](docs/code-structure.md).
+For implementation details, see [`docs/en/architecture.md`](docs/en/architecture.md) and [`docs/en/code-structure.md`](docs/en/code-structure.md).
 
 ## What this project does not claim
 
@@ -145,7 +145,7 @@ bash scripts/dev/train_flyppy_population.sh
 ```text
 canonical/      pinned canonical experiment package and reference provenance
 crates/         Rust neural runtime and runners
-docs/           architecture, scientific contracts, reproducibility and history
+docs/           multilingual public docs (`en/`, `ja/`, `zh-CN/`), internal notes, and archive
 reports/        small tracked diagnostics and historical development reports
 scripts/        data preparation, analysis, compatibility CLIs and launchers
 src/            current Python package (`virtual_fly`)
@@ -159,13 +159,13 @@ See [`docs/README.md`](docs/README.md) for the documentation map.
 
 ## Results, provenance, and large data
 
-Historical development results remain available because they are useful provenance, but they must not be silently relabeled as canonical. The distinction is documented in [`docs/results.md`](docs/results.md).
+Historical development results remain available because they are useful provenance, but they must not be silently relabeled as canonical. The distinction is documented in [`docs/en/results.md`](docs/en/results.md).
 
-Large files such as MaleCNS raw downloads, normalized snapshots, checkpoints, trajectories, rendered videos, and build caches are excluded from Git. Small manifests, hashes, and reports are tracked instead. See [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md).
+Large files such as MaleCNS raw downloads, normalized snapshots, checkpoints, trajectories, rendered videos, and build caches are excluded from Git. Small manifests, hashes, and reports are tracked instead. See [`docs/en/data-and-reproducibility.md`](docs/en/data-and-reproducibility.md).
 
 ## Citation
 
-Citation metadata is provided in [`CITATION.cff`](CITATION.cff). A GitHub Release intended for archival should be tagged from the publication branch and archived with Zenodo; see [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md).
+Citation metadata is provided in [`CITATION.cff`](CITATION.cff). A GitHub Release intended for archival should be tagged from the publication branch and archived with Zenodo; see [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md).
 
 ## License
 

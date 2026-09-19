@@ -1,6 +1,6 @@
 # 当前系统结构
 
-[English](architecture.md) · [日本語](architecture.ja.md) · [简体中文](architecture.zh-CN.md)
+[English](../en/architecture.md) · [日本語](../ja/architecture.md) · [简体中文](architecture.md)
 
 本文说明当前常规执行路径和 canonical v1 **实际使用的系统结构**。它不是未来规划文档，也不会把现在的定义追溯性地套用到历史实验产物上。
 
@@ -280,7 +280,7 @@ scripts/                      启动、数据准备、分析和历史诊断工�
 
 新的实现原则上应使用 `src/virtual_fly/` 下的代码，而不是直接依赖为了兼容旧脚本名称而保留的包装层。
 
-历史实验结果会保留当时的实验条件和来源记录。详见 [`results.zh-CN.md`](results.zh-CN.md)。
+历史实验结果会保留当时的实验条件和来源记录。详见 [`results.md`](results.md)。
 
 ## 19. 当前还不能称为已经完成的生物学重建
 

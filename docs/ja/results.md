@@ -1,6 +1,6 @@
 # 結果と来歴の区分
 
-[English](results.md) · [日本語](results.ja.md) · [简体中文](results.zh-CN.md)
+[English](../en/results.md) · [日本語](results.md) · [简体中文](../zh-CN/results.md)
 
 この文書では、どの結果を現在の基準結果として扱うか、どの結果を過去の開発記録としてのみ保持するかを明確にします。
 
@@ -12,7 +12,7 @@ canonical v1は、公開時の基準となる実験です。科学計算部分�
 7fa464aad7269d34f46f1171080b51e095d1d811
 ```
 
-結果の短い要約は [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md)、完全な来歴記録は [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json) にあります。
+結果の短い要約は [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)、完全な来歴記録は [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json) にあります。
 
 ### 実験条件
 
@@ -85,7 +85,7 @@ v240、v960、v966、v1704および関連する投稿用・診断用の実行結
 
 この映像は、過去の学習済み状態を視覚的に比較する資料として有用ですが、canonical v1の行動結果ではありません。
 
-READMEに掲載しているGIFは、公開用の元動画`before-after-neural.mp4`から1.5倍速で生成したものです。元動画、GIF、関連する生の再生記録の来歴とハッシュ値は [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json) に記録しています。大容量の元動画や再生記録はGitへ直接登録せず、GitHubリリースで過去資料と明記して配布する方針です。
+READMEに掲載しているGIFは、公開用の元動画`before-after-neural.mp4`から1.5倍速で生成したものです。元動画、GIF、関連する生の再生記録の来歴とハッシュ値は [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json) に記録しています。大容量の元動画や再生記録はGitへ直接登録せず、GitHubリリースで過去資料と明記して配布する方針です。
 
 ## 5. README・公開リリース・論文・投稿で主張できる範囲
 

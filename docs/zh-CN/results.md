@@ -1,6 +1,6 @@
 # 结果与来源记录的区分
 
-[English](results.md) · [日本語](results.ja.md) · [简体中文](results.zh-CN.md)
+[English](../en/results.md) · [日本語](../ja/results.md) · [简体中文](results.md)
 
 本文明确区分：哪些结果可以作为当前的基准结果，哪些结果只作为历史开发记录保留。
 
@@ -12,7 +12,7 @@ canonical v1 是对外发布时的基准实验。科学计算部分固定在以�
 7fa464aad7269d34f46f1171080b51e095d1d811
 ```
 
-简要结果见 [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md)，完整来源记录见 [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json)。
+简要结果见 [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)，完整来源记录见 [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json)。
 
 ### 实验条件
 
@@ -85,7 +85,7 @@ v240、v960、v966、v1704 以及相关的公开展示和诊断运行结果，�
 
 这段动画适合用来直观比较历史开发过程中两个已学习状态，但它不是 canonical v1 的行为结果。
 
-README 中的 GIF 由公开展示用原始视频 `before-after-neural.mp4` 以 1.5 倍速转换得到。原始视频、GIF 和相关原始回放记录的来源与哈希值见 [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json)。大型原始视频和回放记录不会直接提交到 Git，而计划在 GitHub 发布版本中明确标注为历史资料后发布。
+README 中的 GIF 由公开展示用原始视频 `before-after-neural.mp4` 以 1.5 倍速转换得到。原始视频、GIF 和相关原始回放记录的来源与哈希值见 [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json)。大型原始视频和回放记录不会直接提交到 Git，而计划在 GitHub 发布版本中明确标注为历史资料后发布。
 
 ## 5. README、发布版本、论文和公开帖子中的表述范围
 

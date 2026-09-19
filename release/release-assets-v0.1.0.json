@@ -8,7 +8,7 @@
   "policy": {
     "large_assets_in_git": false,
     "historical_media_is_canonical_evidence": false,
-    "notes": "The assets below are historical visualization/provenance material. Canonical v1 results are defined by canonical/canonical-v1 and docs/results.md."
+    "notes": "The assets below are historical visualization/provenance material. Canonical v1 results are defined by canonical/canonical-v1 and docs/en/results.md."
   },
   "tracked_preview": {
     "path": "docs/assets/historical-v240-v966-before-after.gif",

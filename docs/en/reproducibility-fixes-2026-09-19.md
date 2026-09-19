@@ -1,5 +1,7 @@
 # Reproducibility and semantic-contract fixes — 2026-09-19
 
+[English](reproducibility-fixes-2026-09-19.md) · [日本語](../ja/reproducibility-fixes-2026-09-19.md) · [简体中文](../zh-CN/reproducibility-fixes-2026-09-19.md)
+
 This change set addresses forward-going reproducibility and semantic-contract failures found during the pre-OSS audit. It intentionally does **not** rewrite historical checkpoints or claim that old artifacts were generated under current semantics.
 
 ## Scientific-semantics boundary

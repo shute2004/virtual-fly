@@ -1,6 +1,6 @@
 # Results and provenance boundaries
 
-[English](results.md) · [日本語](results.ja.md) · [简体中文](results.zh-CN.md)
+[English](results.md) · [日本語](../ja/results.md) · [简体中文](../zh-CN/results.md)
 
 This document defines which results may be described as current canonical results and which are retained only as historical development evidence.
 
@@ -12,7 +12,7 @@ Canonical v1 is the publication-facing reference experiment. Its scientific work
 7fa464aad7269d34f46f1171080b51e095d1d811
 ```
 
-The compact result is in [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md); complete provenance is in [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json).
+The compact result is in [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md); complete provenance is in [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json).
 
 ### Conditions
 
@@ -85,7 +85,7 @@ The publication-oriented historical comparison uses:
 
 This media is useful as a visualization of a historical learned-state comparison, not as the canonical behavioral result.
 
-The Git repository tracks only a small representative image and a release-asset manifest. The full MP4 and raw playback JSON are kept out of Git and should be distributed as explicitly labeled GitHub Release assets. See [`../release/release-assets-v0.1.0.json`](../release/release-assets-v0.1.0.json).
+The Git repository tracks only a small representative image and a release-asset manifest. The full MP4 and raw playback JSON are kept out of Git and should be distributed as explicitly labeled GitHub Release assets. See [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json).
 
 ## 5. Claiming rules for README, releases, papers, and posts
 

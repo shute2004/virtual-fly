@@ -8,7 +8,7 @@ For publication-facing results, start with:
 
 - [`../canonical/canonical-v1/reference-report.md`](../canonical/canonical-v1/reference-report.md)
 - [`../canonical/canonical-v1/reference-manifest.json`](../canonical/canonical-v1/reference-manifest.json)
-- [`../docs/results.md`](../docs/results.md)
+- [`../docs/en/results.md`](../docs/en/results.md)
 
 Files named `latest.*`, continuously updated development summaries, one-off diagnostics, and historical fixed evaluations may describe older or mixed lineages. Their original context should be preserved rather than rewritten to match current semantics.
 

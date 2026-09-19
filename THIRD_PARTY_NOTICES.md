@@ -48,4 +48,4 @@ The historical Before/After media intended for GitHub Release distribution is do
 
 ## Scientific references
 
-Primary scientific references and upstream source links are maintained in [`docs/references.md`](docs/references.md). Experiment-specific machine-readable source hashes and provenance are stored in the canonical/reference manifests.
+Primary scientific references and upstream source links are maintained in [`docs/en/references.md`](docs/en/references.md). Experiment-specific machine-readable source hashes and provenance are stored in the canonical/reference manifests.

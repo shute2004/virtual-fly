@@ -8,9 +8,9 @@ Before making a scientific/runtime change, read:
 
 - [`README.md`](README.md)
 - [`AGENTS.md`](AGENTS.md)
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/results.md`](docs/results.md)
-- [`docs/requirements.md`](docs/requirements.md)
+- [`docs/en/architecture.md`](docs/en/architecture.md)
+- [`docs/en/results.md`](docs/en/results.md)
+- [`docs/en/requirements.md`](docs/en/requirements.md)
 
 ## Branch policy
 
@@ -61,7 +61,7 @@ Do not present an inferred or calibrated boundary as a directly observed biologi
 
 Historical v240/v960/v966/v1704 artifacts and diagnostics are retained for provenance. Do not rewrite or relabel them as current canonical results.
 
-Publication-facing result claims must follow [`docs/results.md`](docs/results.md) and the canonical package under [`canonical/canonical-v1/`](canonical/canonical-v1/).
+Publication-facing result claims must follow [`docs/en/results.md`](docs/en/results.md) and the canonical package under [`canonical/canonical-v1/`](canonical/canonical-v1/).
 
 ## Change scope
 
@@ -103,13 +103,13 @@ Examples that belong outside Git:
 - rendered MP4s;
 - build caches/profiling traces.
 
-Track small manifests, hashes, configs, and reports instead. See [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md).
+Track small manifests, hashes, configs, and reports instead. See [`docs/en/data-and-reproducibility.md`](docs/en/data-and-reproducibility.md).
 
 ## Documentation language
 
-Publication-facing documentation is English-first. Japanese and Simplified Chinese versions are desirable for major public entry points.
+Publication-facing research documentation is English-first and lives in `docs/en/`, `docs/ja/`, and `docs/zh-CN/` with matching filenames across the three language directories. Adding a public document means maintaining the same document in all three languages.
 
-Internal research/development notes may remain Japanese when that best preserves the original context. Do not mass-translate historical records merely for cosmetic consistency.
+Internal research/development notes belong under `docs/internal/<language>/`; historical records belong under `docs/archive/`. These categories are intentionally not required to be mirrored into every language. Do not mass-translate historical records merely for cosmetic consistency.
 
 ## Pull requests / commits
 

@@ -43,8 +43,8 @@
 
 - [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — 基准实验结果摘要
 - [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完整来源记录
-- [`docs/results.zh-CN.md`](docs/results.zh-CN.md) — 基准结果与历史开发结果的区分
-- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — 来源记录与运行定义的审计、修复说明
+- [`docs/zh-CN/results.md`](docs/zh-CN/results.md) — 基准结果与历史开发结果的区分
+- [`docs/zh-CN/reproducibility-fixes-2026-09-19.md`](docs/zh-CN/reproducibility-fixes-2026-09-19.md) — 来源记录与运行定义的审计、修复说明
 
 ## 当前已经实现的内容
 
@@ -81,7 +81,7 @@ Flyppy 物理环境
 - 并行学习只有一份共享权重；膜电位、放电状态、不应期、活动历史、神经调制和资格迹等短期状态会在每个回合重新初始化。
 - 当前并行学习的检查点只把共享权重视为跨回合保存的状态，并不是一个虚拟个体全部状态的持久化快照。
 
-实现细节见 [`docs/architecture.zh-CN.md`](docs/architecture.zh-CN.md) 和 [`docs/code-structure.md`](docs/code-structure.md)。
+实现细节见 [`docs/zh-CN/architecture.md`](docs/zh-CN/architecture.md) 和 [`docs/zh-CN/code-structure.md`](docs/zh-CN/code-structure.md)。
 
 ## 本项目没有宣称的内容
 
@@ -147,7 +147,7 @@ bash scripts/dev/train_flyppy_population.sh
 ```text
 canonical/      基准实验包与来源记录
 crates/         Rust 神经运行系统与执行程序
-docs/           架构、科学约束、复现说明和历史资料
+docs/           三语公开文档（`en/`、`ja/`、`zh-CN/`）、内部文档与历史资料
 reports/        小型诊断结果与历史开发报告
 scripts/        数据准备、分析、兼容命令和启动脚本
 src/            当前 Python 包（`virtual_fly`）
@@ -157,17 +157,17 @@ artifacts/      本地大型数据、检查点和视频，不纳入 Git
 release/        发布文件的来源记录，大型文件本体不纳入 Git
 ```
 
-文档导航见 [`docs/README.zh-CN.md`](docs/README.zh-CN.md)。
+文档导航见 [`docs/zh-CN/README.md`](docs/zh-CN/README.md)。
 
 ## 结果、来源记录与大型数据
 
-历史开发结果具有研究追踪价值，因此会被保留，但不会被重新解释为当前的基准结果。具体区分见 [`docs/results.zh-CN.md`](docs/results.zh-CN.md)。
+历史开发结果具有研究追踪价值，因此会被保留，但不会被重新解释为当前的基准结果。具体区分见 [`docs/zh-CN/results.md`](docs/zh-CN/results.md)。
 
 MaleCNS 生数据、快照、检查点、轨迹数据、渲染视频、构建缓存等大型文件不会提交到 Git；仓库只追踪体积较小的来源记录、哈希值、配置和报告。
 
 ## 引用
 
-引用信息见 [`CITATION.cff`](CITATION.cff)。用于长期存档的 GitHub 发布版本将从公开分支上的标签创建，并计划与 Zenodo 联动。详细流程见 [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md)。
+引用信息见 [`CITATION.cff`](CITATION.cff)。用于长期存档的 GitHub 发布版本将从公开分支上的标签创建，并计划与 Zenodo 联动。详细流程见 [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md)。
 
 ## 许可证
 
