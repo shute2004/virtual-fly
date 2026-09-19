@@ -34,6 +34,7 @@ runs/
 results/
 renders/
 profiles/
+release/assets/
 
 # Large scientific files
 *.h5

@@ -12,6 +12,10 @@ Training used body v7 / environment v7 / direct-ray K13 / haltere timing subset 
 
 Frozen comparison uses plasticity **OFF** and DAN stimulation **OFF** (`reward_current=0`, `aversive_current=0`) so the comparison isolates stored weight state as far as the current model permits. Both initial and final evaluations passed Gate 1 and collided with the next gate at control step 120.
 
-Recorded reference provenance and result are stored in `reference-manifest.json` and `reference-report.md`.
+Recorded reference provenance and result are stored in `reference-manifest.json` and `reference-report.md`. Publication-facing interpretation and the boundary to historical results are documented in [`../../docs/results.md`](../../docs/results.md).
+
+## End-to-end verification
+
+On 2026-09-19, `reproduce.sh` was run from beginning to end against a clean isolated `7fa464a` checkout. All recorded static artifact hashes matched byte-for-byte, training completed global v0 → v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and the initial/final frozen outcomes matched the recorded reference.
 
 `reproduce.sh` writes each end-to-end verification run outside the repository by default, under `${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/`. Set `VF_CANONICAL_OUTPUT_ROOT` to choose a different output directory. This changes only storage placement; the pinned scientific commit and canonical experiment conditions are unchanged.

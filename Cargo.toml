@@ -8,7 +8,7 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 rust-version = "1.87"
-license = "UNLICENSED"
+license = "MIT"
 repository = "https://github.com/shute2004/virtual-fly"
 
 [workspace.dependencies]

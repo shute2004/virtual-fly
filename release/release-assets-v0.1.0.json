@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "planned_release": "v0.1.0",
+  "canonical_reference": {
+    "scientific_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
+    "canonical_package_introduced_in": "72954602b5c2e94c861ad07e809ce5b3ba39e804"
+  },
+  "policy": {
+    "large_assets_in_git": false,
+    "historical_media_is_canonical_evidence": false,
+    "notes": "The assets below are historical visualization/provenance material. Canonical v1 results are defined by canonical/canonical-v1 and docs/results.md."
+  },
+  "tracked_preview": {
+    "path": "docs/assets/historical-v240-v966-before-after.jpg",
+    "source_frame": "artifacts/experiments/flyppy-post-final-video/frames/frame-00420.jpg",
+    "sha256": "dab166c835ef9dafa262cf3b4f1fbbb403be82fadf2d83f47b73f91e9c806cce",
+    "size_bytes": 161903,
+    "role": "historical-v240-v966-readme-preview"
+  },
+  "release_assets": [
+    {
+      "release_name": "historical-before-after-v240-v966.mp4",
+      "source_artifact_path": "artifacts/experiments/flyppy-post-final-video/before-after-neural.mp4",
+      "sha256": "b5e7ef2dc484768ac18cad2e803e896fdf0fc6667292b7f590ea0fc55a297adb",
+      "size_bytes": 6009813,
+      "role": "historical-visualization",
+      "before_global_weight_version": 240,
+      "after_global_weight_version": 966,
+      "canonical": false
+    },
+    {
+      "release_name": "historical-before-after-v240-v966-metadata.json",
+      "source_artifact_path": "artifacts/experiments/flyppy-post-final-video/metadata.json",
+      "sha256": "15cbb8445bcb908d369e08fd15531183c96646d5867c70be4b06daa795dd51e6",
+      "size_bytes": 379,
+      "role": "historical-visualization-metadata",
+      "canonical": false
+    },
+    {
+      "release_name": "historical-before-v240-playback.json",
+      "source_artifact_path": "artifacts/experiments/flyppy-post-compare-final/before/playback.json",
+      "sha256": "9cfa355645078cec0e62f4e379dc06b649c5d95c373b8a3603a4ae57a67a4575",
+      "size_bytes": 4001537,
+      "role": "historical-raw-playback",
+      "global_weight_version": 240,
+      "passed_gates": 1,
+      "canonical": false
+    },
+    {
+      "release_name": "historical-after-v966-playback.json",
+      "source_artifact_path": "artifacts/experiments/flyppy-post-compare-final/after/playback.json",
+      "sha256": "4f80f4df9cbf87a4825def2e9d75faa30af3841192c58a1b9aac0ca645bc8384",
+      "size_bytes": 10020323,
+      "role": "historical-raw-playback",
+      "global_weight_version": 966,
+      "passed_gates": 2,
+      "canonical": false
+    }
+  ],
+  "not_release_assets_by_default": [
+    "raw MaleCNS downloads",
+    "normalized MaleCNS snapshots",
+    "large training checkpoints",
+    "full development trajectory directories",
+    "build caches and virtual environments"
+  ]
+}

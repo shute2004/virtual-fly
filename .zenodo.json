@@ -1,0 +1,25 @@
+{
+  "creators": [
+    {
+      "name": "shute2004",
+      "type": "ProjectMember"
+    }
+  ],
+  "title": "virtual-fly: a connectome-initialized, plastic virtual Drosophila in closed loop",
+  "version": "0.1.0",
+  "access_right": "open",
+  "keywords": [
+    "Drosophila",
+    "connectome",
+    "computational neuroscience",
+    "neuromodulation",
+    "synaptic plasticity",
+    "embodied simulation",
+    "MuJoCo",
+    "reproducible research"
+  ],
+  "license": "mit",
+  "upload_type": "software",
+  "language": "eng",
+  "description": "virtual-fly starts from the released adult male Drosophila MaleCNS connectome and evolves neural activity, neuromodulation, and local synaptic plasticity in closed loop with a FlyBody/MuJoCo body and environment. Canonical experiment v1 provides a pinned provenance-tracked reference run and an end-to-end reproducer. The short canonical run demonstrates changes to stored CNS weights under the current local-plasticity semantics; it does not establish categorical behavioral improvement, generalization, or long-term learning stability."
+}

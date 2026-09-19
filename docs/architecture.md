@@ -1,337 +1,298 @@
-# システム設計
+# Current architecture
 
-## 1. 全体像
+[English](architecture.md) · [日本語](architecture.ja.md) · [简体中文](architecture.zh-CN.md)
 
-`virtual-fly` は、神経系・身体・環境・実験制御を明確に分離する。
+This document describes the architecture implemented by the current production/canonical path. It is not a roadmap and does not retroactively describe historical artifacts.
+
+## 1. System boundary
+
+`virtual-fly` separates four responsibilities:
+
+1. **nervous system** — MaleCNS dynamics, modulation, eligibility, local plasticity;
+2. **sensory/peripheral embodiment** — local physical transduction and motor-neuron-to-muscle state;
+3. **body and environment** — FlyBody / MuJoCo and Flyppy geometry;
+4. **experiment orchestration** — resets, curriculum conditions, persistence, provenance, reports.
+
+The experiment layer may decide *when* a physical task event occurred and which neural population is stimulated by that event. It does not compute an action target or a desired synaptic weight.
 
 ```text
-┌──────────────────────────────────────────────┐
-│ Experiment Runner                            │
-│ conditions / seeds / checkpoints / logging   │
-└──────────────┬───────────────────────────────┘
-               │
-               v
-┌──────────────────────┐      ┌──────────────────────┐
-│ Environment          │<---->│ Body / Physics       │
-│ Flyppy world         │      │ FlyBody / MuJoCo     │
-└──────────┬───────────┘      └──────────┬───────────┘
-           │ sensory scene               │ motor state
-           v                             ^
-┌──────────────────────┐      ┌──────────┴───────────┐
-│ Sensory Transduction │      │ Motor Interface      │
-│ visual / other       │      │ CNS -> body mapping │
-└──────────┬───────────┘      └──────────^───────────┘
-           │                              │
-           v                              │
-┌──────────────────────────────────────────────┐
-│ Neural Runtime                               │
-│ adult male CNS                               │
-│ neural dynamics / synapses / plasticity      │
-│ neuromodulation / structural change          │
-└──────────────────────────────────────────────┘
+physical scene
+    ↓
+local sensory transduction
+    ↓
+MaleCNS neural runtime
+    ↓
+individual motor-neuron activity
+    ↓
+peripheral muscle state
+    ↓
+FlyBody / MuJoCo
+    ↓
+physical scene
 ```
 
-学習アルゴリズムを別モジュールとして置かない。学習は `Neural Runtime` 内の局所的な可塑性としてのみ発生する。
+## 2. Canonical closed loop
 
-## 2. 技術方針
-
-### 2.1 Rust: 神経系コア
-
-Rustを次の用途に使用する。
-
-- 大規模疎グラフの保持
-- ニューロン状態の更新
-- シナプス伝播
-- 可塑性状態の更新
-- 構造可塑性
-- 神経修飾状態
-- チェックポイントの高速入出力
-- 将来のWASM対応
-
-Pythonオブジェクトをニューロン・シナプス単位で大量生成する設計は避ける。
-
-### 2.2 Python: 科学実験・統合
-
-Pythonを次の用途に使用する。
-
-- MaleCNS / neuPrint データ取得と前処理
-- FlyGym / FlyBody / MuJoCo との接続
-- 実験設定
-- 可視化・解析
-- RustコアへのFFI
-- 参照実装・小規模検証
-
-Rust-Python境界は `PyO3` / `maturin` を第一候補とする。
-
-### 2.3 Web: 後段
-
-最終公開段階では神経系コアの一部または全部をWASMへ展開し、可能な部分をWebGPUへ移す。
-
-ただしブラウザ対応を初期実装の制約にしすぎない。まずネイティブ実行で科学的な閉ループを成立させる。
-
-## 3. 推奨ディレクトリ構成
+The current canonical Flyppy path is:
 
 ```text
-virtual-fly/
-├── README.md
-├── AGENTS.md
-├── Cargo.toml                 # Rust workspace
-├── pyproject.toml             # Python package / tooling
-├── crates/
-│   ├── vf-core/               # 時間・状態・イベント等の共通型
-│   ├── vf-connectome/         # MaleCNS内部表現とI/O
-│   ├── vf-neural/             # 神経ダイナミクス
-│   ├── vf-plasticity/         # 可塑性・神経修飾
-│   ├── vf-checkpoint/         # 状態保存
-│   └── vf-python/             # PyO3 bindings
-├── python/
-│   └── virtual_fly/
-│       ├── data/              # 取得・変換
-│       ├── body/              # FlyBody/FlyGym adapter
-│       ├── sensory/           # 感覚変換
-│       ├── motor/             # 運動系写像
-│       ├── envs/              # Flyppy等
-│       ├── experiments/       # 実験runner
-│       └── analysis/          # 解析
-├── configs/
-│   ├── neural/
-│   ├── plasticity/
-│   ├── body/
-│   └── experiments/
-├── scripts/
-│   ├── data/
-│   └── dev/
-├── tests/
-├── docs/
-└── artifacts/                 # gitignore対象。実験生成物
+Flyppy v7 physical environment
+        ↓
+FlyBody compound-eye geometry
+        ↓
+local direct-ray sampling (K=13)
+        ↓
+released MaleCNS R1-R6 body-ID currents
+        ↓
+whole-MaleCNS signed neural dynamics
+        ↓
+local eligibility + dopaminergic modulation
+        ↓
+individual released motor-neuron spikes
+        ↓
+WholeBodyPeriphery
+        ↓
+FlyBody v7 physical actuation
+        ↓
+MuJoCo state transition
+        ↓
+Flyppy event detection
+        ├─ gate passage → selected reward-associated DAN current
+        └─ collision    → selected aversive-associated DAN current
 ```
 
-これは目標構造であり、最初から空ディレクトリを大量に作る必要はない。
+There is no external neural network or action policy in this path.
 
-## 4. 神経系内部表現
+## 3. MaleCNS source and mutable state
 
-### 4.1 NeuronTable
-
-ニューロン単位の静的属性と動的状態を分ける。
-
-静的属性例:
-
-- `body_id`
-- `cell_type`
-- `superclass`
-- `region`
-- `neurotransmitter`
-- データ来歴
-
-動的状態例:
-
-- 膜電位または採用モデル固有の状態
-- 活動状態
-- refractory state
-- 神経修飾状態
-- モデル固有内部変数
-
-実装ではStructure of Arraysを優先し、全個体を連続配列で保持できるようにする。
-
-### 4.2 SynapseStore
-
-MaleCNSには非常に多数のシナプスがあるため、疎構造を前提とする。
-
-初期候補:
-
-- CSR / CSC相当の静的ベース接続
-- 可塑性値の別配列
-- 構造変更用delta layer
-
-構造可塑性を導入した後も、毎ステップ巨大なCSR全体を再構築しない。
-
-概念的には:
+The released MaleCNS data is treated as the initial structural snapshot, not as a mutable training file.
 
 ```text
-base connectome (immutable source snapshot)
+immutable source snapshot
         +
-plastic state (mutable)
+mutable functional weight state
         +
-structural delta (created / removed edges)
+short-term neural/plasticity state
         =
-current functional connectome
+current simulated nervous system
 ```
 
-とする。
+Canonical v1 uses:
 
-実測コネクトームそのものを破壊的変更せず、「現在の仮想個体の状態」を別レイヤとして保持する。
+- 166,700 neurons;
+- 25,582,938 directed connection edges;
+- released neurotransmitter and annotation information;
+- class-DAN definition requiring dopamine consensus and released `class=DAN` annotation.
 
-## 5. シミュレーション時間
+Source files are never modified in place by learning.
 
-身体物理と神経系では必要な時間刻みが異なる可能性が高い。
+## 4. Neural runtime
 
-```text
-physics step
-  ├─ neural substep 1
-  ├─ neural substep 2
-  ├─ ...
-  └─ neural substep N
-```
+The large neural runtime is implemented in Rust under `crates/`. Python owns orchestration and body integration; the Rust process owns whole-CNS state evolution.
 
-の多重時間刻みを許容する。
+The current activity semantics distinguish silent, depolarizing activity events, and hyperpolarizing activity deviations so inhibitory/graded pathways are not reduced to a single unsigned spike bit.
 
-固定値は設計段階で決めず、採用する神経モデルとFlyBody側の安定条件から決める。
+Major runtime responsibilities include:
 
-## 6. イベントと刺激
+- sparse MaleCNS graph storage;
+- state propagation;
+- modulation state;
+- eligibility dynamics;
+- local weight updates;
+- shared-weight population transactions;
+- checkpoint loading/saving.
 
-外部環境から神経系への入力は、抽象的な学習命令ではなく `StimulusEvent` として表す。
+GPU execution is a compute backend, not a separate learned controller.
 
-例:
+## 5. Local plasticity
 
-```text
-StimulusEvent {
-    target: neuron set / sensory channel,
-    waveform: ...,
-    onset: ...,
-    duration: ...,
-    provenance: visual | reward-circuit | aversive-circuit | ...
-}
-```
-
-重要なのは、`reward = +1` を可塑性エンジンへ渡さないことである。
-
-成功イベントを受けた実験層が、対応する神経回路へ与える刺激波形へ変換する。
-
-## 7. 可塑性アーキテクチャ
-
-可塑性はプラガブルにするが、一般の機械学習optimizer形式にはしない。
+The production plasticity path is local. Conceptually, an edge update depends on local eligibility and postsynaptic neuromodulation:
 
 ```text
-neural activity
-+ local synapse state
-+ neuromodulator state
-+ time
+pre/post activity history
         ↓
-local plasticity rule
+eligibility
+        +
+local dopaminergic modulation
         ↓
-synapse state change
+local bounded synaptic update
 ```
 
-構造可塑性も別インターフェースとして持たせる。
+The environment does not pass `reward = +1`, `reward = -1`, Q-values, target actions, or policy loss into a weight optimizer.
+
+The accelerated PlasticFastGraph implementation reduces which edges must be scanned/updated; it does not substitute a different learning rule.
+
+## 6. Neuromodulatory events
+
+Task events are translated into neural stimulation.
+
+Canonical class-DAN semantics use real released DAN body IDs. The task-specific reward-associated and aversive-associated subsets are experimental stimulation conditions, not a claim that every neuron in those labels has a universal scalar reward meaning.
 
 ```text
-activity history / local state
+gate passage
+    ↓
+current into selected reward-associated DAN subset
+
+collision
+    ↓
+current into selected aversive-associated DAN subset
+```
+
+Canonical frozen evaluation sets both task-triggered DAN currents to zero so stored-weight state can be compared without new task reinforcement.
+
+## 7. Vision boundary
+
+The production vision path does not classify obstacles outside the CNS.
+
+```text
+MuJoCo / FlyBody eye geometry
         ↓
-formation / pruning candidate
+per-ommatidium local direct rays
         ↓
-structural delta
+local photoreceptor transduction/adaptation
+        ↓
+corresponding released R1-R6 body IDs
+        ↓
+MaleCNS visual circuitry
 ```
 
-初期段階では、機能可塑性を先に検証し、構造可塑性は後から追加してよい。
+Spatial identity is preserved into the CNS. External edge detection, object recognition, motion labels, or global spatial pooling are not used as the production visual answer.
 
-## 8. 感覚系
+## 8. Haltere boundary
 
-### 8.1 視覚
+The haltere path derives local mechanical signals from the physical body and maps them to MaleCNS sensory afferents.
 
-Flappy環境では視覚を最優先する。
+Canonical v1 uses the inferred 97-neuron timing subset (46 left / 51 right), current gain 0.05, with `interaction-load-v2` transduction.
 
-処理境界:
+This mapping is explicitly an inferred sensory boundary; it must not be described as directly observed complete haltere physiology.
+
+## 9. Motor boundary
+
+Production behavior is not produced from a DNg02 population-average decoder.
+
+The current boundary is:
 
 ```text
-MuJoCo scene
-   ↓
-compound-eye renderer
-   ↓
-photoreceptor / peripheral visual model
-   ↓
-MaleCNS visual entry points
+released motor-neuron body ID activity
+        ↓
+WholeBodyPeriphery
+        ↓
+individual motor-unit / muscle activation state
+        ↓
+versioned FlyBody adapter
+        ↓
+physical force/torque in MuJoCo
 ```
 
-MaleCNSデータに含まれない末梢感覚器は補完モデルとして明示する。補完モデルをCNSの実測コネクトームと混同しない。
+The peripheral/body seam contains engineering approximations, but it does not inspect obstacle position, reward state, or desired action.
 
-### 8.2 自己受容・機械感覚
+Historical DNg02 aggregate code remains only as legacy/diagnostic material.
 
-FlyBodyから得られる関節角、角速度、接触、力などを、生物学的感覚入力へ変換する層を後から追加する。
+## 10. Body version lineage
 
-## 9. 運動系
-
-最初の運動変換は、下降・運動系ニューロン活動からFlyBodyアクチュエータへの写像とする。
+Body version numbers are historical labels rather than a simple inheritance sequence:
 
 ```text
-CNS output
-   ↓
-biological mapping adapter
-   ↓
-body actuation
+v3
+└─ v4
+   ├─ v5
+   ├─ v6
+   └─ v7
+
+v8 = v6 measured steering + v7 neutral trim
 ```
 
-このadapterには環境認識・方策・ゲーム攻略ロジックを入れない。
+Important consequence: **v7 is not "v6 plus improvements"**. Canonical v1 uses v7 because v7 was the pinned canonical condition, not because it subsumes every v5/v6 mechanic.
 
-将来的には:
+## 11. Environment v7
+
+Flyppy environment versions are also explicit experimental conditions. Current v7 includes physical side walls so a 3D body cannot count as passing by bypassing the gate laterally.
+
+Gate passage uses full-body geometry around the wall plane rather than treating the thorax center as a zero-size point.
+
+## 12. Population training
+
+The production population trainer uses one shared global weight state.
+
+Each slot:
+
+1. starts an episode from a specific global weight version;
+2. accumulates episode-local plasticity operations;
+3. finishes independently in `async` mode;
+4. rebases its transaction onto the latest global weights;
+5. commits to create the next global weight version.
+
+This is **not weight averaging**.
+
+Because completion order can vary, asynchronous shared-weight training is not claimed to be bitwise equivalent to serial single-fly training. Source weight version and staleness are recorded for provenance.
+
+## 13. Curriculum boundary
+
+Curriculum code chooses reset/experience conditions; it does not choose motor actions.
+
+The boundary-band curriculum separates easier/focus experience from full-course evaluation logic. Curriculum success is experiment scheduling state, not a scalar synaptic reward API.
+
+## 14. Checkpoint boundary
+
+Current population persistence is intentionally `global-weights-only-v1`.
+
+Across episodes, learned global weights persist. Episode-local state such as membrane values, spikes, refractory state, activity traces, modulation, and eligibility is reset.
+
+This means a current population checkpoint must **not** be described as a complete persisted biological individual state.
+
+The on-disk checkpoint container still has compatibility arrays for broader neural state; publication claims follow the weights-only semantic contract rather than the raw file layout.
+
+## 15. Frozen evaluation
+
+A publication-quality weight comparison must distinguish:
+
+- plasticity disabled;
+- task-triggered DAN stimulation disabled;
+- initial vs. final stored weight state;
+- identical body/environment/sensory conditions.
+
+Canonical v1 applies these conditions. Older fixed evaluations did not always disable event-triggered DAN currents, which is one reason they remain historical rather than canonical evidence.
+
+## 16. Observer/viewer boundary
+
+The 3D body viewer and neural viewer are observers only.
+
+When no viewer is attached, production training does not need to generate viewer snapshots continuously. Attaching or detaching the viewer must not change neural, physical, plasticity, or curriculum state.
+
+## 17. Current code ownership
 
 ```text
-motor neuron
-  ↓
-neuromuscular junction
-  ↓
-muscle model
-  ↓
-body joint / wing
+src/virtual_fly/embodiment/   body factory, versioned body seams, retina, haltere, periphery
+src/virtual_fly/runtime/      neural bridge, body workers, packed processes, telemetry
+src/virtual_fly/training/     config, curriculum, population scheduling, checkpoint semantics
+src/virtual_fly/playback/     frozen playback/evaluation orchestration
+src/virtual_fly/reporting/    stable report/history output
+src/virtual_fly/reproducibility.py
+                              provenance/hash/semantic validation
+src/virtual_fly/semantics.py  compatibility-sensitive semantic identifiers
+crates/                       Rust neural runtime and command-line runners
+scripts/                      thin launchers, data preparation, analysis, legacy diagnostics
 ```
 
-へ置き換える。
+See [`code-structure.md`](code-structure.md) for the developer-facing module map.
 
-## 10. チェックポイント
+## 18. Historical code and artifacts
 
-チェックポイントは「重みファイル」ではなく仮想個体の状態である。
+Historical scripts, reports, and artifacts remain useful provenance. Their presence in the repository does not make them part of the current production path.
 
-推奨構造:
+New production code should depend on `src/virtual_fly/` modules rather than historical script-module compatibility shims.
 
-```text
-manifest.json
-neurons.bin
-synapses.bin
-plasticity.bin
-structural_delta.bin
-neuromodulation.bin
-body_state.bin
-rng.bin
-```
+Historical experiment results must retain their original semantic/provenance labels. See [`results.md`](results.md).
 
-実際の形式はベンチマーク後に決める。大規模配列の保存には、圧縮可能で部分読み出し可能な形式を優先する。
+## 19. Not currently implemented as canonical biology
 
-## 11. 実験IDと個体系譜
+The following should not be inferred from the current architecture:
 
-同じ初期コネクトームから複数個体を分岐させるため、個体に親子関係を持たせる。
+- complete conductance-level biophysics for every neuron and synapse;
+- complete receptor-specific neurotransmitter dynamics;
+- validated structural synapse formation/pruning as part of canonical v1;
+- complete peripheral sensory physiology;
+- complete flight-muscle mechanics;
+- complete persistent neural state across training episodes.
 
-```text
-male-cns:v1.0
-      ↓
-fly/base-0000
-      ├── fly/0001
-      ├── fly/0002
-      └── fly/0003
-             └── fly/0104
-```
-
-各派生個体について、親チェックポイント、経験履歴、コード版を追跡する。
-
-## 12. ブラウザ分散実験への境界
-
-将来、ブラウザ側へ渡す単位は「任意コード」ではなく、署名・バージョン付きの実験パッケージとする。
-
-クライアントから返る結果は信頼しない。
-
-- 入力条件を固定した再検証
-- ハッシュ・バージョン確認
-- 異常値検出
-- 重複排除
-- 一部実験の複数クライアント再実行
-
-を想定する。
-
-## 13. 最初に実装しないもの
-
-- ブラウザ分散計算
-- 巨大なWeb UI
-- 全感覚器
-- 完全な筋肉モデル
-- 全種類の可塑性
-- 発生過程
-
-まずは小規模神経サブグラフで「動く・変わる・保存できる」を確認し、その後に全CNSと身体を接続する。
+These are model boundaries, not hidden components.

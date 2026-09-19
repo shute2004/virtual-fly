@@ -1,97 +1,126 @@
-# Contributing
+# Contributing to virtual-fly
 
-## 1. 開発方針
+[English](CONTRIBUTING.md) · [日本語](CONTRIBUTING.ja.md) · [简体中文](CONTRIBUTING.zh-CN.md)
 
-`virtual-fly` は、現実のショウジョウバエの神経回路・身体・感覚系などから再構築した仮想ショウジョウバエをコンピュータ上で飼育可能にするための開発プロジェクトである。変更理由と再現性を重視する。
+`virtual-fly` is a research software project. Contributions are welcome when they preserve the distinction between measured biology, literature-derived choices, inference, engineering assumptions, and calibration.
 
-実装前に `README.md`、`AGENTS.md`、`docs/requirements.md`、`docs/architecture.md` を読むこと。
+Before making a scientific/runtime change, read:
 
-## 2. ブランチ運用
+- [`README.md`](README.md)
+- [`AGENTS.md`](AGENTS.md)
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/results.md`](docs/results.md)
+- [`docs/requirements.md`](docs/requirements.md)
 
-`main` は検証済みマイルストーンを置く安定統合ブランチとして扱う。日常の実装・実験途中の変更を直接積み上げない。
+## Branch policy
 
-Flyppy v3の継続開発は長期作業ブランチ `dev/flyppy-v3` を使用する。旧名 `feat/flybody-flyppy-loop` は単一featureの範囲を越えたため廃止する。
+`main` is the stable/publication branch. Development work may continue on dedicated branches such as `dev/flyppy-v3`, but publication milestones should be integrated back into `main` rather than leaving the default branch stale.
 
-次を満たす区切りで作業ブランチのHEADを `main` へ反映する。
+A milestone is ready to integrate when:
 
-- その変更単位のテストが通っている
-- 必要な評価・実験レポートが更新されている
-- 既知のblocking regressionを残していない
-- 未完の診断コードや一時生成物を安定版として混ぜていない
+- relevant tests pass;
+- provenance/semantic contracts are documented;
+- no known blocking regression is hidden;
+- temporary generated artifacts are not mixed into source control;
+- publication claims match the evidence actually produced by that lineage.
 
-`main` を長期間放置して実態と乖離させない。マイルストーン反映後も継続開発は作業ブランチで行い、次の区切りで再び `main` を更新する。
+## Scientific invariants
 
-## 3. 変更単位
+Do not introduce, without an explicit project-level design change:
 
-1つの変更では、可能な限り1つの検証可能な目的に絞る。
+- backpropagation or gradient descent as the nervous-system learner;
+- Q-learning, policy gradient, actor-critic, or an external learned policy;
+- a hand-written Flyppy obstacle policy;
+- direct scalar reward-to-weight updates;
+- an external feature extractor/classifier that replaces a known local sensory circuit while only preserving its final answer.
 
-例:
+Learning in the canonical architecture follows:
 
-- MaleCNS loader
-- neural state stepping
-- plasticity rule
-- checkpoint format
-- FlyBody adapter
-- sensory transduction
+```text
+sensory stimulation
+    → neural dynamics
+    → behavior
+    → neuromodulatory stimulation
+    → local plasticity
+    → changed nervous system
+```
 
-神経モデル変更とUI変更など、独立した変更を同じPRへ混ぜない。
+## Provenance labels
 
-## 4. ショウジョウバエ再構築モデルを変える変更
+Where practical, distinguish:
 
-以下を変更する場合、PRまたはコミットメッセージだけで済ませず関連文書を更新する。
+- `observed`
+- `literature`
+- `inferred`
+- `assumed`
+- `calibrated`
 
-- 神経ダイナミクス
-- 可塑性
-- 神経修飾
-- 感覚変換
-- CNS→身体写像
-- 実験の成功・失敗刺激
+Do not present an inferred or calibrated boundary as a directly observed biological fact.
 
-少なくとも以下を記録する。
+## Historical vs. canonical results
 
-- 何を変更したか
-- 根拠
-- 出典
-- 既存実験への影響
-- 仮定か実測か
+Historical v240/v960/v966/v1704 artifacts and diagnostics are retained for provenance. Do not rewrite or relabel them as current canonical results.
 
-## 5. テスト
+Publication-facing result claims must follow [`docs/results.md`](docs/results.md) and the canonical package under [`canonical/canonical-v1/`](canonical/canonical-v1/).
 
-新しい計算コアには、可能な限り次を用意する。
+## Change scope
 
-- 単体テスト
-- 決定論テスト
-- 小規模参照ケース
-- checkpoint round-trip
-- 境界値テスト
+Prefer one verifiable purpose per change, for example:
 
-高速backendを追加する場合は参照backendとの比較を追加する。
+- MaleCNS data semantics;
+- neural state stepping;
+- plasticity;
+- checkpoint format;
+- sensory transduction;
+- motor/peripheral mapping;
+- body physics;
+- reproducibility/reporting.
 
-## 6. データ
+When changing neural dynamics, plasticity, neuromodulation, sensory transduction, CNS→body mapping, reinforcement stimulation targets, or checkpoint semantics, update the relevant documentation in the same change.
 
-大容量の外部データ・実験生成物をGitへ直接コミットしない。
+## Testing
 
-データ追加時は、取得元、版、ライセンス、ハッシュ、取得・変換手順を残す。
+For new computational core changes, add the smallest useful combination of:
 
-秘密情報、neuPrint token、クラウド認証情報等をコミットしない。
+- unit tests;
+- deterministic/reference tests;
+- checkpoint round-trip tests;
+- semantic contract tests;
+- backend parity checks where relevant.
 
-## 7. ドキュメント
+Do not optimize a backend by silently changing scientific semantics.
 
-内部文書は原則日本語。
+## Data and generated artifacts
 
-コード識別子・API・外部固有名詞は英語のままでよい。
+Do not commit large external datasets or generated experiment artifacts to Git.
 
-設計とコードが食い違う変更をマージしない。
+Examples that belong outside Git:
 
-## 8. コードスタイル
+- raw MaleCNS downloads;
+- normalized large snapshots;
+- checkpoints;
+- trajectories;
+- rendered MP4s;
+- build caches/profiling traces.
 
-詳細なformatter / linter設定は実装開始時に固定する。
+Track small manifests, hashes, configs, and reports instead. See [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md).
 
-予定:
+## Documentation language
 
-- Rust: `rustfmt`, `clippy`
-- Python: `ruff`, 型チェック
+Publication-facing documentation is English-first. Japanese and Simplified Chinese versions are desirable for major public entry points.
 
-## 9. ライセンス
+Internal research/development notes may remain Japanese when that best preserves the original context. Do not mass-translate historical records merely for cosmetic consistency.
 
-プロジェクト本体のライセンスは現時点で未確定。外部データ・モデル・コードの再配布は、それぞれの利用条件を確認してから行う。
+## Pull requests / commits
+
+For scientifically meaningful changes, describe:
+
+- what changed;
+- why;
+- whether the change is observed/literature/inferred/assumed/calibrated;
+- which previous experiments become incompatible or historical;
+- how the change was tested.
+
+## License
+
+By contributing to this repository, you agree that your original contributions may be distributed under the repository's [MIT License](LICENSE). Do not contribute third-party code/data/assets unless their terms permit the intended use and the necessary attribution/notice is included.

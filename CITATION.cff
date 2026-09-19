@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use virtual-fly in research, please cite the software release and its archived DOI when available."
+title: "virtual-fly: a connectome-initialized, plastic virtual Drosophila in closed loop"
+type: software
+version: "0.1.0"
+authors:
+  - name: "shute2004"
+repository-code: "https://github.com/shute2004/virtual-fly"
+url: "https://github.com/shute2004/virtual-fly"
+license: MIT
+abstract: >-
+  A connectome-initialized virtual adult male Drosophila system that evolves
+  MaleCNS neural activity, neuromodulation, and local synaptic plasticity in
+  closed loop with a FlyBody/MuJoCo physical body and environment. Canonical
+  experiment v1 provides a pinned, provenance-tracked reference run and an
+  end-to-end reproducer; the short canonical run demonstrates stored-weight
+  changes under the current local-plasticity semantics but does not establish
+  categorical behavioral improvement.
+keywords:
+  - Drosophila
+  - connectome
+  - computational neuroscience
+  - neuromodulation
+  - synaptic plasticity
+  - embodied simulation
+  - MuJoCo
+  - reproducible research

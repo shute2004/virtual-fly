@@ -1,174 +1,174 @@
 # virtual-fly
 
-成体オスのショウジョウバエ（*Drosophila melanogaster*）のMaleCNSコネクトームを初期状態として、神経活動・神経修飾・局所シナプス可塑性を時間発展させ、FlyBody / MuJoCoの身体と閉ループ接続するプロジェクトです。
+[English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 
-目標は、外部のANN・Transformer・Q学習・policy gradient・backpropなどで行動を学習させるのではなく、**MaleCNS自身の局所可塑性によって仮想ハエの行動が変化するか**を実装として確かめることです。
+`virtual-fly` is a research project that starts from the released adult male *Drosophila melanogaster* MaleCNS connectome and evolves neural activity, neuromodulation, and local synaptic plasticity in closed loop with a FlyBody / MuJoCo body and a physical environment.
 
-## 現在の正規経路
+It is **not** an artificial neural network trained on the fly connectome. The production path does not use backpropagation, gradient descent, Q-learning, policy gradients, an external neural-network controller, or a hand-written obstacle policy. Learning-related weight changes are produced inside the simulated nervous system by local activity, eligibility, and dopaminergic modulation.
 
-現在のFlyppy学習経路は次です。
+> **Project status:** canonical experiment v1 and its end-to-end reproducer are complete. The canonical run demonstrates a fully traceable current-code execution chain and measurable local-plasticity-driven changes to stored MaleCNS weights. It did **not** show categorical behavioral improvement in the short canonical run.
+
+## Canonical result
+
+The publication-facing reference is [`canonical/canonical-v1/`](canonical/canonical-v1/README.md). It is intentionally separate from older development lineages.
+
+| Item | Canonical v1 |
+|---|---|
+| Scientific code | `7fa464aad7269d34f46f1171080b51e095d1d811` (clean) |
+| MaleCNS snapshot | 166,700 neurons / 25,582,938 directed edges |
+| DAN semantics | released `class=DAN` + dopamine consensus; 338 modulators |
+| Body / environment | v7 / v7 |
+| Vision | direct-ray, K=13 rays/ommatidium |
+| Haltere input | 97-neuron timing subset, gain `0.05`, `interaction-load-v2` |
+| Training | 6 episodes, population 2, async shared weights, boundary-band |
+| Global weight version | v0 → v6 |
+| Aggregate neural step | 484 |
+| Exactly changed stored edges | 2,163,179 |
+| Frozen initial evaluation | 1 gate, then gate collision at control step 120 |
+| Frozen final evaluation | 1 gate, then gate collision at control step 120 |
+
+Frozen evaluation disables both plasticity and task-triggered DAN stimulation (`reward_current=0`, `aversive_current=0`). The short canonical run therefore establishes **weight change under the current local-plasticity semantics**, not improved behavior, generalization, or long-term learning stability.
+
+The end-to-end reproducer was independently rerun from a clean `7fa464a` checkout on 2026-09-19. All source-derived static artifact hashes matched the recorded reference, training reached global v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and both frozen outcomes matched the recorded reference.
+
+See:
+
+- [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — compact canonical result
+- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — complete provenance
+- [`docs/results.md`](docs/results.md) — canonical vs. historical result boundary
+- [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — provenance/semantics audit and fixes
+
+## Historical visualization
+
+![Historical v240 to v966 comparison](docs/assets/historical-v240-v966-before-after.jpg)
+
+The image above is a frame from the posting-oriented **historical** Before/After visualization (`v240 → v966`). It is useful for showing the closed-loop body + neural viewer, but it is **not canonical evidence**: v240/v960/v966/v1704 belong to older lineages with different provenance and, in some cases, different semantics. The full video and raw playback are intended to be attached to a GitHub Release with explicit historical labeling rather than committed as large Git blobs.
+
+Release asset provenance and hashes are documented in [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json).
+
+## What is implemented
+
+The current production path is:
 
 ```text
 Flyppy physical world
-      ↓
-FlyBody eye sensors
-      ↓
-released MaleCNS R1-R6 body-ID current
-      ↓
-whole MaleCNS neural dynamics + local plasticity
-      ↓
-individual released wing motor-neuron spikes
-      ↓
-WingMusclePeriphery
-      ↓
-individual motor-unit / muscle activation state
-      ↓
-FlyBodyMuscleAdapter physical wing torque
-      ↓
-FlyBody / MuJoCo
-      ↓
+        ↓
+FlyBody compound-eye geometry + local direct rays
+        ↓
+released MaleCNS R1-R6 body-ID currents
+        ↓
+whole-MaleCNS neural dynamics
+        ↓
+local eligibility + class-DAN-mediated plasticity
+        ↓
+individual released motor-neuron spikes
+        ↓
+whole-body peripheral muscle state
+        ↓
+FlyBody / MuJoCo physical actuation
+        ↓
 Flyppy physical world
 ```
 
-ゲート通過時は実際のreward DAN候補群へ電流を与え、衝突時はaversive DAN候補群へ電流を与えます。外部からscalar reward、Q値、target action、policy lossなどは与えません。
+Task events do not directly write weights. A gate passage or collision can trigger current injection into selected real DAN populations; subsequent synaptic changes are computed locally inside the neural runtime.
 
-旧試作の **DNg02 population average → wing amplitude** 経路は現在の学習・評価には使いません。`scripts/embodiment/flybody_adapter.py` は旧診断用のlegacy adapterであり、現行 `FlyBodyMuscleAdapter` の親クラスではありません。共通のFlyBody/MuJoCo物理層は `scripts/embodiment/flybody_runtime.py` に分離されています。
+Important current boundaries:
 
-## 設計原則
+- the MaleCNS source snapshot is immutable;
+- visual input preserves local retinotopic R1-R6 identity rather than injecting an external obstacle classifier;
+- motor output stays at individual released motor-neuron IDs rather than a population-average action decoder;
+- the viewer is observer-only and does not feed state back into training;
+- population training shares one global weight state, but episode-local membrane/spike/refractory/trace/modulation/eligibility state is reset between episodes;
+- current population checkpoints persist global weights, not a complete persistent biological individual state.
 
-- MaleCNS snapshotは初期状態として扱い、学習中の可塑状態は別に保持する。
-- 外部ANN、Transformer、policy、action decoderを神経系へ付加しない。
-- 視覚入力はreleased R1-R6 body IDへ局所電流として与える。
-- 運動境界は個別wing motor neuron body IDを維持し、population averageで行動へ変換しない。
-- 報酬・嫌悪はDANへの神経刺激としてのみ与える。
-- episode resetでは学習済みweightを残し、膜電位・spike・refractory・trace・modulation・eligibilityなど短期状態を消す。
-- 未知の生物学を「飛ばすため」に推測で埋めない。
-- 実測・文献・推定・仮定・calibrationを区別する。
-- 3D viewerは観察専用で、学習プロセスへ状態を返さない。
+For implementation details, see [`docs/architecture.md`](docs/architecture.md) and [`docs/code-structure.md`](docs/code-structure.md).
 
-詳細な開発規約は [`AGENTS.md`](AGENTS.md) を参照してください。
+## What this project does not claim
 
-## 初回セットアップ
+`virtual-fly` is a biologically grounded computational reconstruction, not a claim that the current simulator is already a complete biological replica of a fly.
+
+In particular, canonical v1 does **not** establish:
+
+- categorical behavioral improvement after the six training episodes;
+- task generalization;
+- long-term learning stability;
+- complete biophysical fidelity of every neuron, synapse, sensory organ, or flight muscle;
+- equivalence between historical v240/v960/v966/v1704 results and the current canonical semantics.
+
+Observed upstream data, literature-derived choices, inferred mappings, engineering assumptions, and calibrated parameters are kept distinct where possible.
+
+## Installation
+
+### Requirements
+
+- Python `>=3.12,<3.15`
+- [`uv`](https://docs.astral.sh/uv/)
+- a Rust toolchain with Cargo
+- MuJoCo-compatible local graphics/compute support
+
+The current canonical reference was produced on macOS / Apple Metal GPU. Static source-derived artifacts are hash-checked; async GPU/MuJoCo trajectories are not promised to be bit-identical across hardware.
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
 cd virtual-fly
-uv sync
-bash scripts/dev/bootstrap.sh
+uv sync --frozen
 ```
 
-MaleCNSデータや生成済みartifactが存在する場合は可能な範囲で再利用します。
+Large upstream datasets and generated experiment artifacts are intentionally not stored in Git.
 
-## 通常のFlyppy v3学習
+## Reproduce canonical v1
 
-現行production launcherは、shared-weight population、個別MN→筋肉境界、direct-ray視覚を使うFlyppy v3経路です。
+The canonical reproducer acquires fresh official sources, reconstructs the snapshot and derived artifacts, runs the six-episode canonical training, validates the initial/final checkpoints, performs frozen evaluation, and emits a provenance manifest.
 
 ```bash
-bash scripts/dev/train_flyppy_v3_population.sh
+bash canonical/canonical-v1/reproduce.sh
 ```
 
-既定では次を使います。
-
-- population: 4
-- episodes: 24
-- curriculum: `boundary-band`
-- launch mode: `async`
-- vision: `direct-ray`, 13 rays/ommatidium
-- body runtime: packed/process-isolated
-
-実験ディレクトリの既定値は次です。
+By default, its large output bundle is written **outside the repository**:
 
 ```text
-artifacts/experiments/flyppy-v3/
-├── checkpoint/
-├── curriculum-state.json
-├── population-state.json
-├── trajectory.jsonl
-├── commit-log.jsonl
-├── summary.json
-└── live/
+${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/
 ```
 
-`artifacts/` は巨大・高頻度データ用でGitには含めません。小さい結果は `reports/flyppy/` へ出力します。
+Use `VF_CANONICAL_OUTPUT_ROOT=/path/to/output` to choose another location. The script always executes the scientific workload in an isolated clean worktree pinned to `7fa464a`.
+
+## Development training path
+
+For current development runs, the generic production entry point is:
+
+```bash
+bash scripts/dev/train_flyppy_population.sh
+```
+
+`scripts/dev/train_flyppy_v3_population.sh` remains as a compatibility wrapper. Development runs and their continuously updated reports are **not** automatically canonical results.
+
+## Repository layout
 
 ```text
-reports/flyppy/latest.md
-reports/flyppy/latest.csv
-reports/flyppy/population_latest.md
-reports/flyppy/history.csv
+canonical/      pinned canonical experiment package and reference provenance
+crates/         Rust neural runtime and runners
+docs/           architecture, scientific contracts, reproducibility and history
+reports/        small tracked diagnostics and historical development reports
+scripts/        data preparation, analysis, compatibility CLIs and launchers
+src/            current Python package (`virtual_fly`)
+tests/          semantic, scheduling, runtime and reproducibility tests
+visualization/  observer-only neural viewers
+artifacts/      local large data/checkpoints/videos; gitignored
+release/        release-asset manifests; large release files remain outside Git
 ```
 
-checkpointが存在する場合は自動で継続します。中断時はpersist済みglobal weight versionを確定点として、未保存commit/trajectoryをresume時に整合させます。
+See [`docs/README.md`](docs/README.md) for the documentation map.
 
-### curriculum / scheduler
+## Results, provenance, and large data
 
-`boundary-band` は24 attemptを固定したまま評価し、batch境界でのみ難易度を更新します。非同期slotの終了順がcurriculum自体を動かさないようにするためです。
+Historical development results remain available because they are useful provenance, but they must not be silently relabeled as canonical. The distinction is documented in [`docs/results.md`](docs/results.md).
 
-production既定は `async` です。`wave` は同一launch roundを同一CNS weight versionから開始する比較・診断用schedulerで、既存experimentの途中で `async ↔ wave` を切り替えることはできません。比較するときは同じcheckpointから別experimentへforkします。
+Large files such as MaleCNS raw downloads, normalized snapshots, checkpoints, trajectories, rendered videos, and build caches are excluded from Git. Small manifests, hashes, and reports are tracked instead. See [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md).
 
-```bash
-bash scripts/dev/run_flyppy_scheduler_ab.sh
-```
+## Citation
 
-現在の詳細な実行条件とA/B結果は [`docs/flyppy/README.md`](docs/flyppy/README.md) を参照してください。
+Citation metadata is provided in [`CITATION.cff`](CITATION.cff). A GitHub Release intended for archival should be tagged from the publication branch and archived with Zenodo; see [`docs/release-and-zenodo.md`](docs/release-and-zenodo.md).
 
-## 3D学習viewer
+## License
 
-viewerは学習とは別プロセスで、production trainingへ状態を返さないobserverです。telemetryはviewer接続時だけ生成します。
-
-```bash
-bash scripts/dev/view_flyppy_v3.sh
-```
-
-別experimentへ接続する場合:
-
-```bash
-VF_EXPERIMENT_DIR=artifacts/experiments/<name> bash scripts/dev/view_flyppy_v3.sh
-```
-
-- FlyBody: メイン表示。ドラッグで回転、ホイールでズーム。
-- MaleCNS: neural activity / propagationをobserverとして表示。
-- viewer接続・切断によって学習意味論は変えません。
-
-## 固定評価
-
-学習済みCNSを固定条件で比較する評価器も、productionと同じ個別MN→筋肉経路を使います。評価では各neural stepを `plasticity=false` にし、weightを変更しません。
-
-```bash
-bash scripts/dev/evaluate_flyppy_v3_fixed.sh
-```
-
-現行結果は `reports/flyppy/fixed_evaluation_latest.md`、過去checkpointの固定評価は `reports/flyppy/evaluations/history/` に保存します。
-
-## Pythonコード構成
-
-再利用する純粋ロジックは段階的に `src/virtual_fly/` packageへ移しています。現在、curriculum policyは次にあります。
-
-```text
-src/virtual_fly/training/curriculum.py
-```
-
-`scripts/` は最終的にCLI・データ生成・開発launcher中心へ薄くしていきます。現時点ではFlyGym/MuJoCo統合コードの一部がまだ `scripts/embodiment/` に残っています。
-
-## Rust neural core
-
-神経系コアはRustです。大規模疎グラフ、CPU/GPU time evolution、局所可塑性、checkpointを担当します。GPUは計算基盤として使用しますが、GPU上に別の学習policyを置くことはありません。
-
-現行GPU synapse scaleはwhole-CNS stability calibrationから取得し、launcherがartifactから読み込みます。
-
-## 主なドキュメント
-
-- [`docs/README.md`](docs/README.md) — ドキュメント全体の案内
-- [`docs/flyppy/README.md`](docs/flyppy/README.md) — 現行Flyppy v3の実行・検証状態
-- [`docs/requirements.md`](docs/requirements.md) — 要件定義
-- [`docs/architecture.md`](docs/architecture.md) — システム設計
-- [`docs/scientific-model.md`](docs/scientific-model.md) — 神経系・可塑性モデル
-- [`docs/experiments.md`](docs/experiments.md) — 実験設計
-- [`docs/data-and-reproducibility.md`](docs/data-and-reproducibility.md) — データ来歴・再現性
-- [`docs/roadmap.md`](docs/roadmap.md) — 開発ロードマップ
-- [`docs/references.md`](docs/references.md) — 基礎資料・外部資産
-- [`AGENTS.md`](AGENTS.md) — 開発エージェント向け規約
-
-## ライセンス
-
-現時点ではプロジェクト本体のライセンスを確定していません。外部データセット・モデル・ソフトウェアはそれぞれのライセンス・利用条件に従います。
+Original `virtual-fly` source code and documentation are released under the [MIT License](LICENSE). Upstream datasets, software, model assets, and generated media that incorporate third-party material remain subject to their own terms; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

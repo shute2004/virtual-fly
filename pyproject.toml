@@ -5,7 +5,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "virtual-fly-tools"
 version = "0.1.0"
-description = "Data preparation, embodiment, and analysis tools for virtual-fly"
+description = "Research tools for the connectome-initialized virtual-fly project"
+readme = "README.md"
+authors = [{ name = "shute2004" }]
+keywords = ["Drosophila", "connectome", "computational-neuroscience", "synaptic-plasticity", "MuJoCo"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+]
 requires-python = ">=3.12,<3.15"
 dependencies = [
     "flygym==2.1.0",
@@ -13,6 +23,11 @@ dependencies = [
     "pandas>=3.0,<4.0",
     "pyarrow>=18.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/shute2004/virtual-fly"
+Repository = "https://github.com/shute2004/virtual-fly"
+Documentation = "https://github.com/shute2004/virtual-fly/tree/main/docs"
 
 [tool.setuptools.packages.find]
 where = ["src"]
