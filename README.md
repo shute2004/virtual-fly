@@ -14,7 +14,9 @@ It is **not** an artificial neural network trained on the fly connectome. The pr
 
 ![Historical v240 to v966 Before/After visualization](docs/assets/historical-v240-v966-before-after.gif)
 
-This animated comparison is derived from the publication master `before-after-neural.mp4` and is shown at **1.5× speed** for README viewing. It visualizes the historical `v240 → v966` Before/After lineage and the body + neural viewer together. It is intentionally placed near the top because it provides the clearest visual overview of the project, but it is **not canonical evidence**: v240/v960/v966/v1704 belong to older lineages with different provenance and, in some cases, different semantics. Release asset provenance and hashes are recorded in [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json).
+This animated comparison is derived from a README-specific source rendering of the historical `v240 → v966` Before/After comparison and is shown at **1.5× speed**. It is intentionally placed near the top because it provides the clearest visual overview of the project, but it is **not canonical evidence**. The Before state (v240) was already a historical checkpoint after 240 training episodes, not an untrained MaleCNS initial state. Historical playback disabled plasticity, but task-triggered PAM stimulation remained enabled, and the comparison was not a held-out evaluation. The v966 state also belongs to an older mixed lineage with semantics that differ from canonical v1.
+
+The X-post video, the source rendering used to make this README GIF, and the planned GitHub Release MP4 are separate renderings of the same historical v240/v966 comparison; they are not identical files. Their roles, dimensions, and hashes are recorded separately in [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json).
 
 ## Canonical result
 
@@ -37,7 +39,7 @@ The publication-facing reference is [`canonical/canonical-v1/`](canonical/canoni
 
 Frozen evaluation disables both plasticity and task-triggered DAN stimulation (`reward_current=0`, `aversive_current=0`). The short canonical run therefore establishes **weight change under the current local-plasticity semantics**, not improved behavior, generalization, or long-term learning stability.
 
-The end-to-end reproducer was independently rerun from a clean `7fa464a` checkout on 2026-09-19. All source-derived static artifact hashes matched the recorded reference, training reached global v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and both frozen outcomes matched the recorded reference.
+The end-to-end reproducer was rerun from beginning to end in a clean isolated `7fa464a` checkout on 2026-09-19. All source-derived static artifact hashes matched the recorded reference, training reached global v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and both frozen outcomes matched the recorded reference.
 
 See:
 
@@ -104,9 +106,10 @@ Observed upstream data, literature-derived choices, inferred mappings, engineeri
 - Python `>=3.12,<3.15`
 - [`uv`](https://docs.astral.sh/uv/)
 - a Rust toolchain with Cargo
-- MuJoCo-compatible local graphics/compute support
+- MuJoCo-compatible local graphics support
+- for the **full canonical reproduction**: a wgpu-compatible GPU backend for the neural runtime
 
-The current canonical reference was produced on macOS / Apple Metal GPU. Static source-derived artifacts are hash-checked; async GPU/MuJoCo trajectories are not promised to be bit-identical across hardware.
+Basic installation and the validation commands below do not run the canonical experiment. The full `canonical/canonical-v1/reproduce.sh` path does: its neural calibration explicitly uses the GPU backend, and the recorded canonical reference was produced on macOS / Apple Metal GPU. Static source-derived artifacts are hash-checked; async GPU/MuJoCo trajectories are not promised to be bit-identical across hardware.
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
@@ -128,13 +131,13 @@ bash -n canonical/canonical-v1/reproduce.sh
 
 The first two commands exercise the Python semantic/orchestration tests and Rust neural-runtime tests. The final command checks the canonical reproducer shell entry point without executing the experiment.
 
-## Checkpoints and large artifacts
+## Checkpoint distribution
 
-Large checkpoints are distributed separately from the GitHub source repository through the Hugging Face project hub:
+Checkpoint payloads are intentionally kept out of the GitHub source repository. The Hugging Face project overview is already prepared here:
 
 - [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
 
-The publication layout separates four checkpoint repositories:
+The publication contents for the four checkpoint repositories below are prepared, but **the repositories themselves have not yet been created or published**. They will be created and hash-verified before the GitHub repository is made public:
 
 - `virtual-fly-initial-YYYYMMDD` — canonical v1 initial checkpoint;
 - `virtual-fly-trained-YYYYMMDD` — canonical v1 checkpoint after the six canonical training episodes;
@@ -196,7 +199,7 @@ Large files such as MaleCNS raw downloads, normalized snapshots, checkpoints, tr
 
 ## Citation
 
-Citation metadata is provided in [`CITATION.cff`](CITATION.cff). A GitHub Release intended for archival should be tagged from the publication branch and archived with Zenodo; see [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md).
+Citation metadata is provided in [`CITATION.cff`](CITATION.cff). The initial v0.1.0 publication uses GitHub and Hugging Face; Zenodo/DOI archival is intentionally deferred and may be considered later if a fixed scholarly archive is needed. See [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md).
 
 ## License
 

@@ -80,12 +80,14 @@ The publication-oriented historical comparison uses:
 - body/environment: v7/v7;
 - gate 2 center: 13.703125 mm;
 - evaluation plasticity: off;
+- task-triggered PAM stimulation during playback: on;
+- held-out evaluation: no;
 - before outcome: 1 gate;
 - after outcome: 2 gates.
 
-This media is useful as a visualization of a historical learned-state comparison, not as the canonical behavioral result.
+The Before state is **not an untrained MaleCNS initial state**: v240 had already undergone 240 historical training episodes. The lineage through v960 used the older dopamine-source definition, and v966 combines conditions from more than one historical stage. This media is therefore useful as a visualization of a historical learned-state comparison, not as the canonical behavioral result or as evidence for a simple untrained-to-trained improvement.
 
-The Git repository tracks only a small representative image and a release-asset manifest. The full MP4 and raw playback JSON are kept out of Git and should be distributed as explicitly labeled GitHub Release assets. See [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json).
+Three separate video renderings are associated with this comparison: the video posted to X, the higher-resolution source used to generate the README GIF, and the planned GitHub Release MP4. They share the historical v240/v966 comparison but are not identical files. The Git repository tracks the README GIF and a manifest that records all three video roles and hashes; the MP4s and raw playback JSON remain outside Git. See [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json).
 
 ## 5. Claiming rules for README, releases, papers, and posts
 

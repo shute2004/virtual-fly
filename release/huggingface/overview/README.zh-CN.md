@@ -4,7 +4,7 @@
 
 `virtual-fly` 是一个研究项目：以成年雄性果蝇公开的 MaleCNS 连接组作为初始状态，让神经活动、神经调制和局部突触可塑性随时间演化，并与 FlyBody / MuJoCo 身体及物理环境形成闭环。
 
-这个 Hugging Face 仓库用于介绍 `virtual-fly`，并说明各个检查点仓库的发布结构。源代码、科学说明、canonical 实验清单以及完整复现脚本位于 GitHub：
+这个 Hugging Face 仓库用于介绍 `virtual-fly`，并说明首次发布前已经准备好的检查点仓库结构。源代码、科学说明、canonical 实验清单以及完整复现脚本位于 GitHub：
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - 英文文档: https://github.com/shute2004/virtual-fly/tree/main/docs/en
@@ -13,7 +13,7 @@
 
 ## 检查点仓库结构
 
-公开的检查点分为两个明确不同的系谱。**不要把视频用 Before / After 检查点当作 canonical v1 的初始 / 学习后检查点。**
+准备发布的检查点分为两个明确不同的系谱。下面四个检查点仓库目前尚未创建或公开。**不要把视频用 Before / After 检查点当作 canonical v1 的初始 / 学习后检查点。**
 
 ### Canonical v1
 
@@ -35,11 +35,11 @@ canonical v1 的科学计算部分固定在 Git commit `7fa464aad7269d34f46f1171
 | Before | `shute2004/virtual-fly-video-before` | 公开 Before / After 对比视频中 Before 一侧实际使用的历史检查点 |
 | After | `shute2004/virtual-fly-video-after` | 同一视频中 After 一侧实际使用的历史检查点 |
 
-这些检查点的内部开发版本分别是 `v240` 和 `v966`，但这些编号不会出现在公开仓库名中，只保留在来源记录里。它们来自更早的实验系谱，与当前 canonical v1 的来源链和部分运行定义不同，因此**不是 canonical v1 的实验依据**。
+这些检查点的内部开发版本分别是 `v240` 和 `v966`，但这些编号不会出现在公开仓库名中，只保留在来源记录里。Before 一侧的 v240 不是未经学习的初始状态，而是已经经历 240 个历史训练回合的检查点；回放不是留出评估，而且在关闭可塑性时仍保留了任务事件触发的 PAM 刺激。v966 也来自混合了多个早期条件的开发系。因此，它们**不是 canonical v1 的实验依据**。
 
 ## Hugging Face 中保存什么
 
-每个检查点仓库只保存检查点本体，以及直接需要的来源记录、哈希值、归属信息和模型卡。它们不会复制整个研究工作区。
+正式发布后，每个检查点仓库只保存检查点本体，以及直接需要的来源记录、哈希值、归属信息和模型卡。它们不会复制整个研究工作区。
 
 默认不保存：
 

@@ -14,7 +14,11 @@
   "malecns_license": "CC-BY-4.0",
   "checkpoint_neural_step": 26224,
   "checkpoint_semantics": "legacy-unspecified-in-manifest",
+  "historical_training_episodes_completed": 240,
+  "not_untrained_initial_state": true,
   "video_playback_source": "artifacts/experiments/flyppy-post-compare-final/before/playback.json",
   "video_evaluation_plasticity": false,
+  "video_evaluation_task_triggered_pam_stimulation": true,
+  "video_evaluation_is_holdout": false,
   "video_passed_gates": 1
 }

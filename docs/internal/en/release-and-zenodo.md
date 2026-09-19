@@ -1,6 +1,6 @@
-# GitHub Release and Zenodo publication plan
+# GitHub Release plan and optional future Zenodo archival
 
-This document describes the publication path for the first research-OSS release. It does not create a DOI by itself.
+This document describes the publication path for the first research-OSS release. The initial v0.1.0 publication uses GitHub and Hugging Face; Zenodo/DOI is deliberately deferred and is not part of the initial release checklist.
 
 ## 1. Publication branch and tag
 
@@ -14,6 +14,8 @@ Before the first public archival release:
 6. create the GitHub Release from exactly that tag.
 
 Do not tag an older `main` commit while the canonical/publication work exists only on a development branch.
+
+The long-lived development checkout may contain unrelated modified historical reports or untracked diagnostics. Publication-day edits, tagging, and release assembly must therefore be done from a clean isolated worktree or dedicated clean release checkout. Do not use broad staging such as `git add -A` from a dirty development checkout.
 
 ## 2. What belongs in Git
 
@@ -33,7 +35,7 @@ Do not add large raw scientific artifacts to Git merely to make a release self-c
 
 ## 3. GitHub Release assets
 
-The GitHub source archive already contains the canonical package, so canonical raw source/snapshots/checkpoints are not duplicated as GitHub Release attachments. Large checkpoint distribution is handled separately through Hugging Face as described below.
+The GitHub source archive already contains the canonical package, so canonical raw source/snapshots/checkpoints are not duplicated as GitHub Release attachments. Checkpoint distribution is handled separately through Hugging Face as described below.
 
 For `v0.1.0`, attach the historical presentation media only if it remains useful for communicating the project:
 
@@ -63,11 +65,11 @@ If a future archival requirement needs a large immutable non-checkpoint data bun
 
 ## 5. Hugging Face checkpoint distribution
 
-Large checkpoint artifacts are distributed separately from GitHub through the Hugging Face project overview repository:
+Checkpoint payloads are kept separate from GitHub. The private Hugging Face project overview repository is already prepared at:
 
 - https://huggingface.co/shute2004/virtual-fly
 
-The planned model repositories are:
+The four checkpoint repositories prepared for publication, but not yet created or uploaded, are:
 
 - `shute2004/virtual-fly-initial-YYYYMMDD` — canonical v1 initial checkpoint;
 - `shute2004/virtual-fly-trained-YYYYMMDD` — canonical v1 trained checkpoint;
@@ -82,7 +84,7 @@ The official MaleCNS download page licenses `male-cns:v1.0` under CC BY 4.0. Bec
 
 The complete prepared layout, model-card templates, exact checkpoint file sizes/hashes, and publication procedure are tracked in [`../../../release/huggingface/`](../../../release/huggingface/README.md).
 
-Hugging Face repository creation/upload is a publication action and is deliberately not performed during Phase 4 preparation.
+Creation/upload of the four checkpoint repositories is a publication action and remains deliberately deferred until the publication date. Updating the already-private `shute2004/virtual-fly` overview card is allowed during preparation.
 
 ## 6. Canonical reproduction statement for release notes
 
@@ -92,52 +94,33 @@ Recommended factual summary:
 
 Do not shorten this to "the fly learned Flyppy" or similar.
 
-## 7. Zenodo GitHub integration
+## 7. Optional future Zenodo archival
 
-Current Zenodo documentation describes the GitHub integration as follows:
+Zenodo is **not used for the initial v0.1.0 publication**. The repository keeps `.zenodo.json` only as prepared metadata for a possible future fixed scholarly archive; its presence does not mean that a Zenodo record or DOI is planned for this release.
 
-1. connect the GitHub account to Zenodo;
-2. enable the repository in Zenodo's GitHub integration;
-3. create a GitHub Release;
-4. let Zenodo ingest/archive that release and mint the record DOI.
+If a future project decision requires a fixed archival record, re-check the then-current Zenodo workflow before acting. At that point, keep `CITATION.cff` and `.zenodo.json` semantically synchronized and add a DOI to public metadata only after a real DOI exists.
 
-Official documentation:
+Current documentation retained for that future decision:
 
 - https://help.zenodo.org/docs/github/
-- https://help.zenodo.org/docs/github/enable-repository/
-- https://help.zenodo.org/docs/github/archive-software/github-upload/
-
-Zenodo supports both `CITATION.cff` and `.zenodo.json`. When both files are present, Zenodo uses `.zenodo.json` for GitHub-release archival metadata; `CITATION.cff` remains useful for GitHub's **Cite this repository** UI. Therefore the two files in this repository should remain semantically synchronized.
-
-Official metadata documentation:
-
 - https://help.zenodo.org/docs/github/describe-software/
 - https://help.zenodo.org/docs/github/describe-software/zenodo-json/
 
 ## 8. DOI handling
 
-Do not invent a DOI in README or `CITATION.cff` before one exists.
-
-For the normal GitHub integration path, create the GitHub Release and allow Zenodo to mint the DOI. After the DOI exists:
-
-1. verify the Zenodo metadata and archived files;
-2. update `CITATION.cff` with the release version, date, and DOI if desired;
-3. add a DOI badge/link to README;
-4. make any metadata-only follow-up release/version decision explicitly rather than rewriting the already archived release.
-
-If a DOI must be known before publication, use a manual Zenodo deposition and reserve a DOI there instead of pretending the GitHub integration has already assigned one.
+There is no DOI for v0.1.0 and none should be implied in README, `CITATION.cff`, release notes, or badges. DOI work is outside the initial publication procedure. If a fixed scholarly archive is created later, record the real DOI only after the archival service has actually assigned it.
 
 ## 9. Creator metadata
 
-For `v0.1.0`, the creator identity is intentionally the established Git/GitHub project identity `shute2004`. No legal name, ORCID, or affiliation is inferred from local machine/account information. Those optional fields may be added before the DOI-bearing release only if the project owner explicitly wants them in the permanent citation record.
+For `v0.1.0`, the creator identity is intentionally the established Git/GitHub project identity `shute2004`. No legal name, ORCID, or affiliation is inferred from local machine/account information. Those optional fields may be added before any future DOI-bearing archive only if the project owner explicitly wants them in the permanent citation record.
 
-`CITATION.cff` and `.zenodo.json` are kept semantically synchronized for title, version, license, creator identity, repository identity, and project description. Because both files are present, current Zenodo GitHub integration uses `.zenodo.json` for archival metadata; `CITATION.cff` remains for GitHub and other citation tooling.
+`CITATION.cff` and `.zenodo.json` are kept semantically synchronized for title, version, license, creator identity, repository identity, and project description. `CITATION.cff` is the active citation metadata for the initial release; `.zenodo.json` is retained only as optional future archival metadata and its handling must be revalidated against Zenodo's current behavior if archival is later enabled.
 
 ## 10. Pre-publication privacy/provenance audit
 
 The 2026-09-19 tracked-file scan found no high-confidence credential-shaped strings and no personal email addresses in tracked files. It found absolute local filesystem paths in exactly 14 historical provenance files: one archived development note and 13 tracked reports/logs/JSON records.
 
-The decision for `v0.1.0` is to preserve those 14 originals unchanged. Their paths record the machine context of historical runs, tracebacks, or generated reports; rewriting them would alter the original provenance record. Current public READMEs and current multilingual documentation contain no `/Users/<local-user>/...` path. [`../../../reports/README.md`](../../../reports/README.md) and [`../../archive/README.md`](../../archive/README.md) explicitly explain that such historical paths are provenance rather than installation instructions.
+The decision for `v0.1.0` is to preserve those 14 originals unchanged. Their paths record the machine context of historical runs, tracebacks, or generated reports; rewriting them would alter the original provenance record. The fixed canonical scientific commit `7fa464a` already contains these historical strings, so removing them from published Git history would require a history rewrite and would invalidate that exact canonical SHA. The resulting privacy/provenance tradeoff is therefore explicitly accepted for v0.1.0. Current public READMEs and current multilingual documentation contain no `/Users/<local-user>/...` path. [`../../../reports/README.md`](../../../reports/README.md) and [`../../archive/README.md`](../../archive/README.md) explicitly explain that such historical paths are provenance rather than installation instructions.
 
 ## 11. Third-party fresh-clone preflight
 
@@ -157,7 +140,7 @@ The full canonical experiment was deliberately not rerun as part of this publica
 
 A release candidate bundle was assembled locally without creating a Git tag or GitHub Release. The rehearsal generated a source archive from the clean publication candidate, copied the four planned historical attachments under their release filenames, and verified every attachment size and SHA-256 against `release/release-assets-v0.1.0.json`.
 
-The source archive contained the README, license, citation/Zenodo metadata, canonical reproducer package, multilingual documentation, and prepared release notes. It contained no `.git`, `.venv`, Cargo `target`, or local `artifacts/` directory. The rehearsal passed.
+The source archive contained the README, license, citation and optional archival metadata, canonical reproducer package, multilingual documentation, and prepared release notes. It contained no `.git`, `.venv`, Cargo `target`, or local `artifacts/` directory. The rehearsal passed.
 
 A read-only GitHub check on 2026-09-19 confirmed that the repository remained **private**, `main` was the default branch, and no tags or GitHub Releases existed. No publication action was performed by this preflight.
 
@@ -170,7 +153,7 @@ The four prepared Hugging Face repository templates were also assembled locally 
 - historical video Before: 207,997,939 bytes;
 - historical video After: 207,997,940 bytes.
 
-The existing `shute2004/virtual-fly` Hugging Face overview repository was not modified. An unauthenticated read-only Git probe could not verify its current contents, so Phase 4 treats the project owner's existing repository as the destination and prepares the exact overview card locally under `release/huggingface/overview/README.md`.
+The existing private `shute2004/virtual-fly` Hugging Face overview repository has since been updated with the prepared multilingual overview cards. The four checkpoint repositories themselves remain uncreated/unpublished.
 
 ## 13. Release checklist
 
@@ -196,6 +179,5 @@ The existing `shute2004/virtual-fly` Hugging Face overview repository was not mo
 - [ ] replace placeholder canonical Hugging Face names/links in GitHub docs after the repositories exist
 - [ ] tag `v0.1.0`
 - [ ] GitHub Release created
-- [ ] Zenodo repository integration enabled
-- [ ] Zenodo record/DOI verified
-- [ ] citation metadata updated with real DOI only after minting
+- [x] Zenodo/DOI explicitly excluded from the initial v0.1.0 publication procedure
+- [ ] optional future Zenodo archival only if a later project decision requires a fixed scholarly record

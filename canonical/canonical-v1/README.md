@@ -16,6 +16,8 @@ Recorded reference provenance and result are stored in `reference-manifest.json`
 
 ## End-to-end verification
 
+A full `reproduce.sh` run requires a wgpu-compatible GPU backend for the neural runtime in addition to the normal MuJoCo/runtime dependencies. The reproducer's neural calibration step explicitly selects the GPU backend; the recorded reference run used Apple Metal.
+
 On 2026-09-19, `reproduce.sh` was run from beginning to end against a clean isolated `7fa464a` checkout. All recorded static artifact hashes matched byte-for-byte, training completed global v0 → v6, exactly 2,163,179 stored edges changed, both checkpoints reloaded successfully, and the initial/final frozen outcomes matched the recorded reference.
 
 `reproduce.sh` writes each end-to-end verification run outside the repository by default, under `${XDG_CACHE_HOME:-$HOME/.cache}/virtual-fly/reproductions/`. Set `VF_CANONICAL_OUTPUT_ROOT` to choose a different output directory. This changes only storage placement; the pinned scientific commit and canonical experiment conditions are unchanged.

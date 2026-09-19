@@ -21,7 +21,17 @@ The physical fly body and related measured flight material are derived from/upst
 
 - Repository: https://github.com/TuragaLab/flybody
 
-The FlyBody repository is distributed under the Apache License 2.0. FlyBody source, assets, and separately distributed datasets remain governed by their applicable upstream terms. `virtual-fly` does not relicense them under the repository MIT License and does not copy FlyBody body assets into the planned Hugging Face checkpoint repositories.
+The FlyBody **source/model repository** is distributed under the Apache License 2.0.
+
+Canonical v1 also acquires a separately distributed FlyBody supporting dataset:
+
+- Janelia Figshare article: https://janelia.figshare.com/articles/dataset/25309105
+- DOI: https://doi.org/10.25378/janelia.25309105
+- Version used by canonical v1: 4
+- Upstream dataset license shown by Janelia Figshare: **GPL 3.0+**
+- Canonical use: `scripts/dev/prefetch_flybody_flight_data.py` obtains the flight-imitation material needed to extract `wing_pattern_fmech.npy`, the measured baseline wing-beat pattern.
+
+The Apache-2.0 license of the FlyBody code repository and the GPL-3.0+ license of this supporting dataset are therefore separate license boundaries. `virtual-fly` does not relicense either under the repository MIT License. The raw supporting dataset is not committed to Git and is not copied into the planned Hugging Face checkpoint repositories; the reproducer obtains it from the official Figshare source.
 
 ## FlyGym / NeuroMechFly
 

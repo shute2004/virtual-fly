@@ -27,7 +27,9 @@ This checkpoint predates the explicit current population-checkpoint contract: it
 
 ## Video relationship
 
-The recorded Before playback used body v7 / environment v7, plasticity disabled during playback, and passed one gate under its historical evaluation condition. This is not equivalent to canonical v1 frozen evaluation.
+The recorded Before playback used body v7 / environment v7, plasticity disabled during playback, and passed one gate under its historical evaluation condition. **This is not an untrained initial MaleCNS state:** v240 had already undergone 240 historical training episodes. The playback was not a held-out evaluation, and task-triggered PAM stimulation remained enabled even though plasticity was off. The historical lineage through v960 also used the older dopamine-source definition.
+
+These conditions are not equivalent to canonical v1 frozen evaluation, which disables both plasticity and task-triggered DAN stimulation.
 
 The paired historical After repository is `shute2004/virtual-fly-video-after`.
 

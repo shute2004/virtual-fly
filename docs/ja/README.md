@@ -13,7 +13,7 @@
 
 ## 再現性と来歴
 
-- [`data-and-reproducibility.md`](data-and-reproducibility.md) — データ層、来歴区分、大容量成果物の扱い、再現性の段階
+- [`data-and-reproducibility.md`](data-and-reproducibility.md) — データ層、来歴区分、大容量ファイルの扱い、再現性の段階
 - [`reproducibility-fixes-2026-09-19.md`](reproducibility-fixes-2026-09-19.md) — 研究OSS公開前の再現性・仕様契約監査と修正
 - [`code-structure.md`](code-structure.md) — 現在のモジュール責務とPython / Rustの境界
 

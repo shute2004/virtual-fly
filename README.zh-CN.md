@@ -14,9 +14,11 @@
 
 ![历史开发系 v240 到 v966 的 Before/After 对比](docs/assets/historical-v240-v966-before-after.gif)
 
-这段动画由公开展示用的原始视频 `before-after-neural.mp4` 转制而来。为了便于在 README 中观看，播放速度提高到了 **1.5 倍**。它同时展示了 `v240 → v966` 的 Before/After、身体运动以及神经活动可视化，因此被放在页面靠前的位置，作为理解项目的直观入口。
+这段动画来自历史 `v240 → v966` 对比的 README 专用渲染版本，并以 **1.5 倍**速度播放。它把身体运动和神经活动可视化放在同一画面中，因此被放在页面靠前的位置，用来直观展示项目内容。
 
-但它**不是 canonical v1 的实验依据**。v240 / v960 / v966 / v1704 属于早期开发系，与当前基准实验的来源记录不同，部分运行定义也不同。原始视频、转换后的 GIF 及其哈希值记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) 中。
+但它**不是 canonical v1 的实验依据**。Before 一侧的 v240 并不是未经学习的 MaleCNS 初始状态，而是已经经历 240 个训练回合的历史检查点。历史回放期间关闭了可塑性，但任务事件触发的 PAM 刺激仍然启用，而且这不是留出评估。After 一侧的 v966 也来自混合了多个早期条件的开发系，与 canonical v1 的来源和部分运行条件不同。
+
+发布到 X 的视频、生成 README GIF 所用的源视频，以及计划附在 GitHub Release 中的 MP4，是同一 v240/v966 历史对比的不同渲染或转码文件，并不是同一个二进制文件。它们各自的用途、分辨率和哈希值分别记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) 中。
 
 ## 基准实验（canonical v1）
 
@@ -107,8 +109,9 @@ Flyppy 物理环境
 - [`uv`](https://docs.astral.sh/uv/)
 - Rust 开发环境 / Cargo
 - 能够运行 MuJoCo 的本地环境
+- **完整复现 canonical v1 时：** 神经运行系统可使用的 wgpu 兼容 GPU
 
-当前基准结果在 macOS / Apple Metal GPU 上生成。由源数据确定性生成的静态产物会通过哈希值核对，但我们不保证包含异步执行的 GPU / MuJoCo 轨迹在不同硬件之间逐位完全一致。
+下面的基本验证不会执行 canonical 实验本身；完整运行 `canonical/canonical-v1/reproduce.sh` 时，神经运行系统的校准步骤会明确使用 GPU 后端。当前基准结果在 macOS / Apple Metal GPU 上生成。由源数据确定性生成的静态文件会通过哈希值核对，但我们不保证包含异步执行的 GPU / MuJoCo 轨迹在不同硬件之间逐位完全一致。
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
@@ -130,13 +133,13 @@ bash -n canonical/canonical-v1/reproduce.sh
 
 前两条命令分别运行 Python 侧的运行定义与调度测试，以及 Rust 神经运行系统测试。最后一条命令不会执行 canonical 实验，只检查复现脚本的 shell 入口是否具有有效语法。
 
-## 检查点与大型成果物
+## 检查点发布
 
-大型检查点不会放入 GitHub 源码仓库，而是通过 Hugging Face 上的 virtual-fly 入口分开发布。
+检查点文件不会放入 GitHub 源码仓库。Hugging Face 上已经准备了 virtual-fly 的项目概览页面：
 
 - [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
 
-正式发布时按用途拆分为四个仓库：
+下面四个检查点仓库要发布的内容已经准备完成，但**仓库本身尚未创建或公开**。在 GitHub 仓库公开之前，会先创建这些仓库并核对文件和哈希值：
 
 - `virtual-fly-initial-YYYYMMDD` — canonical v1 的初始检查点
 - `virtual-fly-trained-YYYYMMDD` — canonical v1 完成 6 个训练回合后的检查点
@@ -198,7 +201,7 @@ MaleCNS 生数据、快照、检查点、轨迹数据、渲染视频、构建缓
 
 ## 引用
 
-引用信息见 [`CITATION.cff`](CITATION.cff)。用于长期存档的 GitHub 发布版本将从公开分支上的标签创建，并计划与 Zenodo 联动。详细流程见 [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md)。
+引用信息见 [`CITATION.cff`](CITATION.cff)。v0.1.0 首次发布只使用 GitHub 和 Hugging Face，不使用 Zenodo / DOI。将来如果需要固定的学术存档版本，再另行考虑 Zenodo。详情见 [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md)。
 
 ## 许可证
 

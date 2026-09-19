@@ -14,9 +14,11 @@
 
 ![v240からv966までの過去系統のBefore/After比較](docs/assets/historical-v240-v966-before-after.gif)
 
-このアニメーションは公開用の元動画`before-after-neural.mp4`から作成し、READMEでは見やすさのため**1.5倍速**にしています。`v240 → v966`のBefore/Afterと、身体・神経活動の可視化を同時に確認できるため、このプロジェクトの内容を直感的に把握する入口として上部に置いています。
+このアニメーションは、過去の`v240 → v966`比較をREADME向けに描画した元動画から作成し、見やすさのため**1.5倍速**にしています。身体運動と神経活動を同時に確認できるため、プロジェクトの内容を視覚的に示す資料として上部に置いています。
 
-ただし、これは**canonical v1の証拠ではありません**。v240 / v960 / v966 / v1704は過去の開発系統であり、現在の基準実験とは来歴が異なり、一部では実行時の意味づけも異なります。元動画と変換後GIFの来歴・ハッシュ値は [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に記録しています。
+ただし、これは**canonical v1の証拠ではありません**。Before側のv240は未学習のMaleCNS初期状態ではなく、すでに240エピソードの学習を経た過去系統のチェックポイントです。再生時は可塑性を停止していましたが、課題イベントに伴うPAM刺激は有効で、ホールドアウト評価でもありません。After側のv966も複数の過去条件が混在した系統であり、canonical v1とは来歴と一部の実行条件が異なります。
+
+Xへ投稿した動画、README GIFの生成に使った元動画、GitHub Releaseに添付予定のMP4は、同じv240/v966比較を別々に描画・変換したファイルであり、同一バイナリではありません。それぞれの役割、解像度、ハッシュ値は [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に分けて記録しています。
 
 ## 基準実験（canonical v1）
 
@@ -107,8 +109,9 @@ Flyppyの物理環境
 - [`uv`](https://docs.astral.sh/uv/)
 - Rustの開発環境 / Cargo
 - MuJoCoを実行できる環境
+- **canonical v1を最初から最後まで再現する場合:** 神経実行系で利用できるwgpu対応GPU
 
-現在の基準結果はmacOS / Apple Metal GPU上で生成しています。元データから決定論的に生成される静的成果物はハッシュ値で照合しますが、非同期実行を含むGPU / MuJoCoの軌跡が異なるハードウェア間でビット単位に一致することは保証していません。
+下記の基本検証ではcanonical実験そのものを実行しません。一方、`canonical/canonical-v1/reproduce.sh`による完全再現では、神経実行系の較正処理がGPUを明示的に使用します。現在の基準結果はmacOS / Apple Metal GPU上で生成しています。元データから決定論的に生成される静的生成物はハッシュ値で照合しますが、非同期実行を含むGPU / MuJoCoの軌跡が異なるハードウェア間でビット単位に一致することは保証していません。
 
 ```bash
 git clone https://github.com/shute2004/virtual-fly.git
@@ -130,13 +133,13 @@ bash -n canonical/canonical-v1/reproduce.sh
 
 最初の2つはPython側の意味づけ・実行制御に関する試験と、Rust製神経実行系の試験です。最後のコマンドはcanonical再現スクリプトを実行せず、シェルの入口が構文上有効であることだけを確認します。
 
-## チェックポイントと大容量成果物
+## チェックポイントの配布
 
-大容量のチェックポイントはGitHubリポジトリ本体へ入れず、Hugging Face側のvirtual-fly入口から分離して配布します。
+チェックポイント本体はGitHubのソースリポジトリには含めません。Hugging Faceには、virtual-flyの概要ページをすでに用意しています。
 
 - [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
 
-公開時は、用途ごとに次の4リポジトリへ分けます。
+以下の4つについては公開する内容まで準備済みですが、**リポジトリ自体はまだ作成・公開していません**。GitHubを公開する前に作成し、ファイルとハッシュ値を確認します。
 
 - `virtual-fly-initial-YYYYMMDD` — canonical v1の初期チェックポイント
 - `virtual-fly-trained-YYYYMMDD` — canonical v1で6エピソードの学習処理を経たチェックポイント
@@ -198,7 +201,7 @@ MaleCNSの生データ、スナップショット、チェックポイント、�
 
 ## 引用方法
 
-引用情報は [`CITATION.cff`](CITATION.cff) に記載しています。長期保存用のGitHubリリースは公開用ブランチのタグから作成し、Zenodoと連携する設計です。手順は [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md) を参照してください。
+引用情報は [`CITATION.cff`](CITATION.cff) に記載しています。v0.1.0の初回公開ではGitHubとHugging Faceを使用し、Zenodo / DOIは使用しません。将来、固定された学術アーカイブが必要になった場合に改めて検討します。詳細は [`docs/internal/en/release-and-zenodo.md`](docs/internal/en/release-and-zenodo.md) を参照してください。
 
 ## ライセンス
 

@@ -125,10 +125,11 @@ T4/T5の方向選択性が視葉の局所回路上で形成されることを示
 
 - DOI: https://doi.org/10.1038/s41586-025-09029-4
 - 論文: https://www.nature.com/articles/s41586-025-09029-4
-- FlyBodyリポジトリ: https://github.com/TuragaLab/flybody
+- FlyBodyリポジトリ: https://github.com/TuragaLab/flybody — Apache-2.0
+- 付属データセット: https://janelia.figshare.com/articles/dataset/25309105 — version 4、GPL 3.0+
 - MuJoCo Menagerie内のFlyBody: https://github.com/google-deepmind/mujoco_menagerie/tree/main/flybody
 
-解剖学的なFlyBody全身モデルと、MuJoCoによる身体物理の主要な根拠です。論文内では歩行・飛翔の実演に強化学習も使われていますが、`virtual-fly`ではその方策を神経系の代わりには使わず、身体形状・物理・駆動系を利用します。
+解剖学的なFlyBody全身モデルと、MuJoCoによる身体物理の主要な根拠です。論文内では歩行・飛翔の実演に強化学習も使われていますが、`virtual-fly`ではその方策を神経系の代わりには使わず、身体形状・物理・駆動系を利用します。canonical v1では、基準となる実測翼運動をFigshareの付属データセットから別途取得します。このデータセットのGPL 3.0+と、FlyBodyコード本体のApache-2.0は別の利用条件です。
 
 ## 5. 主要な公式データ・外部ソフトウェア
 

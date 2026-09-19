@@ -27,7 +27,9 @@ This checkpoint predates the explicit current population-checkpoint contract: it
 
 ## Video relationship
 
-The recorded After playback used body v7 / environment v7, plasticity disabled during playback, and passed two gates under its historical evaluation condition. This is a historical visualization result and is not canonical v1 evidence.
+The recorded After playback used body v7 / environment v7, plasticity disabled during playback, and passed two gates under its historical evaluation condition. The playback was not a held-out evaluation, and task-triggered PAM stimulation remained enabled even though plasticity was off. The v966 checkpoint belongs to a mixed historical lineage assembled across more than one earlier development condition.
+
+This is a historical visualization result, not canonical v1 evidence. Canonical v1 frozen evaluation disables both plasticity and task-triggered DAN stimulation.
 
 The paired historical Before repository is `shute2004/virtual-fly-video-before`.
 

@@ -8,6 +8,7 @@
   "policy": {
     "large_assets_in_git": false,
     "historical_media_is_canonical_evidence": false,
+    "historical_video_renderings_are_distinct_files": true,
     "notes": "The assets below are historical visualization/provenance material. Canonical v1 results are defined by canonical/canonical-v1 and docs/en/results.md."
   },
   "tracked_preview": {
@@ -27,13 +28,52 @@
     "role": "historical-v240-v966-readme-animation",
     "canonical": false
   },
+  "historical_video_renderings": [
+    {
+      "role": "x_post_video",
+      "publication_platform": "X",
+      "published": true,
+      "source_artifact_path": "artifacts/experiments/flyppy-post-final-video-liveviewer/before-after-neural.mp4",
+      "sha256": "775b46c48207196d61df19d17dcbbf8179038628d0a4a3c1d6ffb0862bef186c",
+      "size_bytes": 8540254,
+      "duration_seconds": 14.016667,
+      "dimensions": [1440, 1080],
+      "frames": 841,
+      "lineage": "historical-v240-v966",
+      "canonical": false
+    },
+    {
+      "role": "readme_gif_source",
+      "source_label": "before-after-neural.mp4",
+      "sha256": "e5d685018a3babd62c0c345d95298049d15445ebd0dc7f8a0d24317ff906e0c8",
+      "size_bytes": 28301386,
+      "duration_seconds": 14.016667,
+      "dimensions": [2880, 2160],
+      "frames": 841,
+      "lineage": "historical-v240-v966",
+      "canonical": false
+    },
+    {
+      "role": "github_release_video",
+      "source_artifact_path": "artifacts/experiments/flyppy-post-final-video/before-after-neural.mp4",
+      "release_name": "historical-before-after-v240-v966.mp4",
+      "sha256": "b5e7ef2dc484768ac18cad2e803e896fdf0fc6667292b7f590ea0fc55a297adb",
+      "size_bytes": 6009813,
+      "duration_seconds": 14.016667,
+      "dimensions": [1920, 1080],
+      "frames": 841,
+      "lineage": "historical-v240-v966",
+      "canonical": false
+    }
+  ],
   "release_assets": [
     {
       "release_name": "historical-before-after-v240-v966.mp4",
       "source_artifact_path": "artifacts/experiments/flyppy-post-final-video/before-after-neural.mp4",
       "sha256": "b5e7ef2dc484768ac18cad2e803e896fdf0fc6667292b7f590ea0fc55a297adb",
       "size_bytes": 6009813,
-      "role": "historical-visualization",
+      "role": "github-release-historical-visualization",
+      "rendering_role": "github_release_video",
       "before_global_weight_version": 240,
       "after_global_weight_version": 966,
       "canonical": false

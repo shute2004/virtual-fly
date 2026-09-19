@@ -125,10 +125,11 @@
 
 - DOI: https://doi.org/10.1038/s41586-025-09029-4
 - 论文: https://www.nature.com/articles/s41586-025-09029-4
-- FlyBody仓库: https://github.com/TuragaLab/flybody
+- FlyBody仓库: https://github.com/TuragaLab/flybody — Apache-2.0
+- 配套数据集: https://janelia.figshare.com/articles/dataset/25309105 — version 4，GPL 3.0+
 - MuJoCo Menagerie中的FlyBody: https://github.com/google-deepmind/mujoco_menagerie/tree/main/flybody
 
-这是解剖学详细的FlyBody全身模型与MuJoCo身体物理的主要科学依据。原论文为了展示步行和飞行使用了强化学习，但`virtual-fly`只采用身体几何、物理和执行结构，不把论文中的强化学习策略当作虚拟CNS。
+这是解剖学详细的FlyBody全身模型与MuJoCo身体物理的主要科学依据。原论文为了展示步行和飞行使用了强化学习，但`virtual-fly`只采用身体几何、物理和执行结构，不把论文中的强化学习策略当作虚拟CNS。canonical v1 还会从 Figshare 配套数据集中单独获取实测基准翼拍模式；该数据集的 GPL 3.0+ 与 FlyBody 代码仓库的 Apache-2.0 是两个不同的许可边界。
 
 ## 5. 主要官方数据与外部软件
 

@@ -20,7 +20,7 @@ tags:
 
 `virtual-fly` is a research project that starts from the released adult male Drosophila MaleCNS connectome and evolves neural activity, neuromodulation, and local synaptic plasticity in closed loop with a FlyBody / MuJoCo body and a physical environment.
 
-This Hugging Face repository provides an overview of `virtual-fly` and describes the checkpoint repositories used to distribute its released checkpoints. Source code, scientific documentation, canonical manifests, and the end-to-end reproducer live on GitHub:
+This Hugging Face repository provides an overview of `virtual-fly` and describes the checkpoint repositories prepared for the first public checkpoint release. Source code, scientific documentation, canonical manifests, and the end-to-end reproducer live on GitHub:
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - English documentation: https://github.com/shute2004/virtual-fly/tree/main/docs/en
@@ -29,7 +29,7 @@ This Hugging Face repository provides an overview of `virtual-fly` and describes
 
 ## Checkpoint repositories
 
-Two distinct lineages are published. **Do not treat the historical video pair as the canonical initial/trained pair.**
+The prepared checkpoint release has two distinct lineages. The four checkpoint repositories listed below are not created or public yet. **Do not treat the historical video pair as the canonical initial/trained pair.**
 
 ### Canonical v1
 
@@ -49,11 +49,11 @@ Canonical v1 is pinned to scientific Git commit `7fa464aad7269d34f46f1171080b51e
 | Before | `shute2004/virtual-fly-video-before` | Exact historical checkpoint used for the Before side of the published comparison video |
 | After | `shute2004/virtual-fly-video-after` | Exact historical checkpoint used for the After side of the published comparison video |
 
-The historical cards record their internal development versions (`v240` and `v966`) as provenance, but those numbers are intentionally not used in the public repository names. These checkpoints come from older experiment lineages and are **not canonical v1 evidence**.
+The historical cards record their internal development versions (`v240` and `v966`) as provenance, but those numbers are intentionally not used in the public repository names. The Before checkpoint is already a historically trained v240 state, not an untrained initial state; the playback was not held out and retained task-triggered PAM stimulation while plasticity was off. The v966 checkpoint belongs to a mixed older lineage. These checkpoints are **not canonical v1 evidence**.
 
 ## What is hosted here
 
-The checkpoint repositories contain checkpoint files plus lightweight provenance, hashes, attribution, and a model card. They do not mirror the full research workspace.
+When published, the checkpoint repositories will contain checkpoint files plus lightweight provenance, hashes, attribution, and a model card. They do not mirror the full research workspace.
 
 Not hosted here by default:
 

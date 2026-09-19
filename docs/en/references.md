@@ -125,10 +125,11 @@ This preprint is used when interpreting tp1 as an indirect steering/tension musc
 
 - DOI: https://doi.org/10.1038/s41586-025-09029-4
 - Article: https://www.nature.com/articles/s41586-025-09029-4
-- FlyBody repository: https://github.com/TuragaLab/flybody
+- FlyBody repository: https://github.com/TuragaLab/flybody — Apache-2.0
+- Supporting dataset: https://janelia.figshare.com/articles/dataset/25309105 — version 4, GPL 3.0+
 - MuJoCo Menagerie copy: https://github.com/google-deepmind/mujoco_menagerie/tree/main/flybody
 
-This is the primary scientific reference for the anatomically detailed FlyBody model and its MuJoCo-based whole-body physics. `virtual-fly` uses the body and physics infrastructure, not the reinforcement-learning policies used in the paper to demonstrate locomotion.
+This is the primary scientific reference for the anatomically detailed FlyBody model and its MuJoCo-based whole-body physics. `virtual-fly` uses the body and physics infrastructure, not the reinforcement-learning policies used in the paper to demonstrate locomotion. Canonical v1 separately obtains the measured baseline wing-beat pattern from the Figshare supporting dataset; its GPL-3.0+ dataset license is distinct from the FlyBody code repository's Apache-2.0 license.
 
 ## 5. Major upstream software and official resources
 

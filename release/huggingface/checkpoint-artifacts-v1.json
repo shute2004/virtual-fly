@@ -81,7 +81,11 @@
       "global_weight_version": 240,
       "checkpoint_neural_step": 26224,
       "checkpoint_semantics": "legacy-unspecified-in-manifest",
+      "historical_training_episodes_completed": 240,
+      "not_untrained_initial_state": true,
       "video_evaluation_plasticity": false,
+      "video_evaluation_task_triggered_pam_stimulation": true,
+      "video_evaluation_is_holdout": false,
       "video_passed_gates": 1,
       "total_bytes": 207997939,
       "files": [
@@ -108,7 +112,10 @@
       "global_weight_version": 966,
       "checkpoint_neural_step": 164754,
       "checkpoint_semantics": "legacy-unspecified-in-manifest",
+      "mixed_historical_lineage": true,
       "video_evaluation_plasticity": false,
+      "video_evaluation_task_triggered_pam_stimulation": true,
+      "video_evaluation_is_holdout": false,
       "video_passed_gates": 2,
       "total_bytes": 207997940,
       "files": [

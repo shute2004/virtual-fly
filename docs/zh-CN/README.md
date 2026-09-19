@@ -13,7 +13,7 @@
 
 ## 可重现性与来源
 
-- [`data-and-reproducibility.md`](data-and-reproducibility.md) — 数据分层、来源类别、大型成果物策略和可重现性等级
+- [`data-and-reproducibility.md`](data-and-reproducibility.md) — 数据分层、来源类别、大型文件管理方式和可重现性等级
 - [`reproducibility-fixes-2026-09-19.md`](reproducibility-fixes-2026-09-19.md) — 研究开源发布前的可重现性与规则契约审计、修复
 - [`code-structure.md`](code-structure.md) — 当前模块职责以及 Python / Rust 边界
 

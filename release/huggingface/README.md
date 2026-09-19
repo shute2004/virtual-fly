@@ -1,6 +1,6 @@
 # Hugging Face publication layout
 
-This directory prepares the large-artifact publication surface for `virtual-fly`. It does **not** upload anything to Hugging Face by itself.
+This directory prepares the Hugging Face checkpoint publication structure for `virtual-fly`. It does **not** upload anything to Hugging Face by itself.
 
 ## Publication boundary
 
@@ -13,13 +13,13 @@ GitHub remains the source of truth for:
 - architecture and scientific descriptions;
 - citation and release metadata.
 
-Hugging Face is used for large checkpoint artifacts that should not live in the GitHub source repository.
+Hugging Face is used to distribute checkpoint payloads separately from the GitHub source repository.
 
 The existing overview repository is:
 
 - https://huggingface.co/shute2004/virtual-fly
 
-Its model-card source is prepared in [`overview/README.md`](overview/README.md).
+Its English, Japanese, and Simplified Chinese overview-card sources are prepared under [`overview/`](overview/README.md).
 
 ## Planned checkpoint repositories
 
@@ -63,7 +63,7 @@ release/huggingface/
         └── SHA256SUMS
 ```
 
-The large `checkpoint/` directory is deliberately absent from Git. At publication time it is copied from the verified local source identified in `checkpoint-artifacts-v1.json`, then checked against the prepared SHA-256 list before upload.
+The binary `checkpoint/` directory is deliberately absent from Git. At publication time it is copied from the verified local source identified in `checkpoint-artifacts-v1.json`, then checked against the prepared SHA-256 list before upload.
 
 ## Files to upload to each checkpoint repository
 
@@ -91,7 +91,7 @@ Do not add full trajectories, frame directories, raw MaleCNS downloads, normaliz
 
 Canonical population checkpoints are serialized in the full checkpoint file layout for loader compatibility, but declare `checkpoint_semantics=global-weights-only-v1`. The persistent state between canonical episodes is the global synaptic weight vector. Membrane, spike, refractory, activity-trace, modulation, eligibility, body, and peripheral state are reset between episodes and must not be interpreted as one continuously persistent biological individual.
 
-The historical video checkpoints predate that explicit manifest contract. They are distributed only for intentional historical replay and video provenance, not as canonical training checkpoints.
+The historical video checkpoints predate that explicit manifest contract. When published, they are for intentional historical replay and video provenance only, not canonical training checkpoints.
 
 ## Upstream data and licensing
 
@@ -103,7 +103,7 @@ FlyBody, FlyGym, and MuJoCo are not bundled into the checkpoint repositories. Th
 
 See [`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) and [`../../docs/en/data-and-reproducibility.md`](../../docs/en/data-and-reproducibility.md).
 
-## Large-file transport
+## Checkpoint-file transport
 
 Hugging Face model repositories use Xet-backed large-file storage. At upload time use the current Hugging Face CLI / Xet workflow rather than committing these binaries to the GitHub source repository.
 
@@ -125,4 +125,4 @@ Official Hugging Face documentation:
 7. Update `overview/README.md` with the final dated canonical links and publish it to `shute2004/virtual-fly`.
 8. Replace the placeholder canonical links in the GitHub README only after those repositories exist.
 
-No repository creation, upload, visibility change, GitHub tag, GitHub Release, or Zenodo DOI is performed by this preparation directory.
+This preparation directory does not create the four checkpoint repositories, upload checkpoint payloads, change repository visibility, create a GitHub tag/Release, or create a DOI. The already-private `shute2004/virtual-fly` overview repository may be updated during preparation.
