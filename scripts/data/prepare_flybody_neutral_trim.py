@@ -8,6 +8,7 @@ this calibration.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import math
 from pathlib import Path
@@ -18,6 +19,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/embodiment"))
 from flybody_measured_wingbeat import DEFAULT_PATTERN, MeasuredWingbeatCycle
+from virtual_fly.paths import PRODUCTION_NEUTRAL_TRIM_PATTERN
 from virtual_fly.reproducibility import (
     NEUTRAL_TRIM_KIND,
     NEUTRAL_TRIM_SEMANTICS,
@@ -26,8 +28,7 @@ from virtual_fly.reproducibility import (
 )
 
 
-OUTPUT_PATTERN = ROOT / "artifacts/embodiment/wing-pattern-neutral-trim-v1.npy"
-OUTPUT_METADATA = ROOT / "artifacts/embodiment/wing-pattern-neutral-trim-v1.json"
+OUTPUT_PATTERN = PRODUCTION_NEUTRAL_TRIM_PATTERN
 OFFSETS_RAD = np.asarray(
     [-0.11274463928429765, 0.08681837949639278, -0.10731191762522763],
     dtype=np.float64,
@@ -42,7 +43,36 @@ PHASE_SHIFTS_RAD = np.asarray(
 )
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate the provenance-validated neutral trim used by production body v7/v8."
+    )
+    parser.add_argument("--output-pattern", type=Path, default=OUTPUT_PATTERN)
+    parser.add_argument(
+        "--output-metadata",
+        type=Path,
+        default=None,
+        help="defaults to --output-pattern with a .json suffix",
+    )
+    return parser.parse_args()
+
+
+def _display_path(path: Path) -> str:
+    path = Path(path).resolve()
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
 def main() -> int:
+    args = parse_args()
+    output_pattern = Path(args.output_pattern).resolve()
+    output_metadata = (
+        Path(args.output_metadata).resolve()
+        if args.output_metadata is not None
+        else output_pattern.with_suffix(".json")
+    )
     source = ROOT / DEFAULT_PATTERN
     cycle = MeasuredWingbeatCycle(source)
     trimmed = np.empty_like(cycle.pattern, dtype=np.float64)
@@ -57,16 +87,17 @@ def main() -> int:
                 + float(OFFSETS_RAD[axis])
             )
 
-    OUTPUT_PATTERN.parent.mkdir(parents=True, exist_ok=True)
-    np.save(OUTPUT_PATTERN, trimmed, allow_pickle=False)
+    output_pattern.parent.mkdir(parents=True, exist_ok=True)
+    output_metadata.parent.mkdir(parents=True, exist_ok=True)
+    np.save(output_pattern, trimmed, allow_pickle=False)
     payload = {
         "schema_version": 1,
         "kind": NEUTRAL_TRIM_KIND,
         "runtime_semantics": NEUTRAL_TRIM_SEMANTICS,
         "source_pattern": str(source.relative_to(ROOT)),
-        "output_pattern": str(OUTPUT_PATTERN.relative_to(ROOT)),
+        "output_pattern": _display_path(output_pattern),
         "source_sha256": sha256_file(source),
-        "output_sha256": sha256_file(OUTPUT_PATTERN),
+        "output_sha256": sha256_file(output_pattern),
         "axes": ["yaw", "roll", "pitch"],
         "offsets_rad": OFFSETS_RAD.tolist(),
         "amplitude_scales": AMPLITUDE_SCALES.tolist(),
@@ -90,8 +121,11 @@ def main() -> int:
             },
         },
     }
-    OUTPUT_METADATA.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    print(f"neutral_trim=PASS samples={cycle.samples} pattern={OUTPUT_PATTERN} metadata={OUTPUT_METADATA}")
+    output_metadata.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(
+        f"neutral_trim=PASS samples={cycle.samples} "
+        f"pattern={output_pattern} metadata={output_metadata}"
+    )
     return 0
 
 

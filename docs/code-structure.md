@@ -80,3 +80,12 @@ The DLM/DVM aggregate and other calibrated/handwritten peripheral mechanics that
 ## Python / Rust boundary
 
 Python owns experiment orchestration, physical embodiment, sensory transduction, curriculum and provenance. Rust owns the large MaleCNS neural runtime, including neural dynamics, modulation, eligibility and weight updates. Communication is by body-ID currents/events and explicit checkpoint/transaction protocols; the viewer is read-only.
+
+## Derived embodiment artifacts
+
+Current production-generated embodiment artifacts must not overwrite historical artifacts that were used by earlier experiments. In particular:
+
+- historical v7 neutral trim: `artifacts/embodiment/wing-pattern-neutral-trim-v1.*`;
+- current provenance-validated production neutral trim: `artifacts/derived/wing-pattern-neutral-trim-v1.*`.
+
+`train_flyppy_population.sh` generates the current artifact only when the current pair is absent and passes its path explicitly through the typed body configuration. Historical replay may still name the historical artifact explicitly, subject to the legacy provenance opt-in. The numeric v7 trim itself is unchanged; the path separation protects provenance rather than changing body mechanics.

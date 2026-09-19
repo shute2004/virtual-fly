@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from virtual_fly.playback.capture import capture_playback
+from virtual_fly.paths import PRODUCTION_NEUTRAL_TRIM_PATTERN
 from virtual_fly.playback.config import (
     DEFAULT_CALIBRATION,
     DEFAULT_COURSE_SEED,
@@ -44,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vertical-steering-gain", type=float, default=1.0)
     parser.add_argument("--measured-steering-gain", type=float, default=1.0)
     parser.add_argument("--neutral-trim-strength", type=float, default=1.0)
+    parser.add_argument("--neutral-trim-pattern", type=Path, default=PRODUCTION_NEUTRAL_TRIM_PATTERN)
     parser.add_argument("--steering-tau-ms", type=float, default=12.0)
     parser.add_argument("--steering-spike-increment", type=float, default=0.85)
     parser.add_argument("--course-seed", type=int, default=DEFAULT_COURSE_SEED)

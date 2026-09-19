@@ -18,5 +18,12 @@ class ProductionImportTests(unittest.TestCase):
         self.assertTrue(hasattr(neural_bridge, "PopulationNeuralBridgeClient"))
 
 
+    def test_process_slot_state_is_constructible(self) -> None:
+        from virtual_fly.training.population_slot import ProcessSlotState
+
+        slot = ProcessSlotState(slot=3)
+        self.assertEqual(slot.slot, 3)
+        self.assertFalse(slot.active)
+
 if __name__ == "__main__":
     unittest.main()

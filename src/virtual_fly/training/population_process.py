@@ -213,13 +213,6 @@ def main(*, spawn_factory=spawn_body_processes) -> int:
     viewer_ids = load_viewer_body_ids(args.viewer_graph)
     publisher = LiveTelemetryPublisher(output, enabled=bool(args.telemetry))
 
-    workers = spawn_factory(
-        population=args.population,
-        physics_steps=args.physics_steps,
-        timeout_s=timeout_s,
-        config=worker_config(args),
-    )
-    by_slot = {worker.slot_index: worker for worker in workers}
     slots = [ProcessSlotState(slot=index) for index in range(args.population)]
     fixed_course_seed = getattr(args, "fixed_course_seed", None)
     course_models = {
@@ -235,12 +228,26 @@ def main(*, spawn_factory=spawn_body_processes) -> int:
         for slot in slots
     }
 
-    control_dts = {round(worker.control_dt_s, 15) for worker in workers}
-    if len(control_dts) != 1:
+    workers = []
+    try:
+        workers = spawn_factory(
+            population=args.population,
+            physics_steps=args.physics_steps,
+            timeout_s=timeout_s,
+            config=worker_config(args),
+        )
+        by_slot = {worker.slot_index: worker for worker in workers}
+        control_dts = {round(worker.control_dt_s, 15) for worker in workers}
+        if len(control_dts) != 1:
+            raise RuntimeError(f"body workers disagree on control dt: {control_dts}")
+        control_dt_s = float(workers[0].control_dt_s)
+    except Exception:
         for worker in workers:
-            worker.close()
-        raise RuntimeError(f"body workers disagree on control dt: {control_dts}")
-    control_dt_s = float(workers[0].control_dt_s)
+            try:
+                worker.close()
+            except Exception:
+                pass
+        raise
 
     telemetry_mode = "always" if args.telemetry else "viewer-demand"
     print(

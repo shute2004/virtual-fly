@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from virtual_fly.paths import REPO_ROOT
+from virtual_fly.paths import PRODUCTION_NEUTRAL_TRIM_PATTERN, REPO_ROOT
 from virtual_fly.runtime.vision import VisionRuntimeConfig
 from virtual_fly.semantics import (
     BODY_VERSIONS,
@@ -28,6 +28,7 @@ from virtual_fly.reproducibility import (
     compatibility_warnings,
     validate_derived_artifact,
     validate_haltere_map,
+    validate_neutral_trim,
     validate_production_snapshot,
 )
 from virtual_fly.training.curriculum import (
@@ -71,8 +72,9 @@ def run_reproducibility_metadata(
     if calibration:
         artifacts["neural_calibration"] = Path(calibration)
     if body_version in {"v7", "v8"}:
-        artifacts["neutral_trim_pattern"] = Path("artifacts/embodiment/wing-pattern-neutral-trim-v1.npy")
-        artifacts["neutral_trim_metadata"] = Path("artifacts/embodiment/wing-pattern-neutral-trim-v1.json")
+        neutral_pattern = Path(args.neutral_trim_pattern)
+        artifacts["neutral_trim_pattern"] = neutral_pattern
+        artifacts["neutral_trim_metadata"] = neutral_pattern.with_suffix(".json")
     if body_version == "v5":
         artifacts["measured_vertical_steering"] = Path("artifacts/embodiment/wing-steering-vertical-mode-v1.json")
     if body_version in {"v6", "v8"}:
@@ -194,6 +196,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steering-tau-ms", type=float, default=12.0)
     parser.add_argument("--steering-spike-increment", type=float, default=0.85)
     parser.add_argument("--neutral-trim-strength", type=float, default=1.0)
+    parser.add_argument(
+        "--neutral-trim-pattern",
+        type=Path,
+        default=PRODUCTION_NEUTRAL_TRIM_PATTERN,
+        help="current provenance-validated neutral-trim artifact used by body v7/v8",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--fixed-course-seed",
@@ -416,6 +424,8 @@ def validate(args: argparse.Namespace, first_gate) -> None:
     ]
     if float(args.haltere_current_gain) > 0.0:
         required.append(args.haltere_sensory_map)
+    if str(args.flight_body_version) in {"v7", "v8"}:
+        required.extend([Path(args.neutral_trim_pattern), Path(args.neutral_trim_pattern).with_suffix(".json")])
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise SystemExit("missing population training inputs:\n  " + "\n  ".join(missing))
@@ -428,6 +438,8 @@ def validate(args: argparse.Namespace, first_gate) -> None:
             args.haltere_sensory_kind,
             snapshot=args.snapshot,
         )
+        if str(args.flight_body_version) in {"v7", "v8"}:
+            validate_neutral_trim(Path(args.neutral_trim_pattern))
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
     positive = [

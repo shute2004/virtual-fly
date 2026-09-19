@@ -67,6 +67,7 @@ def build_flyppy_stack(config: FlyppyBodyConfig, slot_id: int) -> FlyppyBodyStac
         body_kwargs["measured_steering_gain"] = config.measured_steering_gain
     if body_version in {"v7", "v8"}:
         body_kwargs["neutral_trim_strength"] = config.neutral_trim_strength
+        body_kwargs["measured_wing_pattern"] = config.neutral_trim_pattern
     body = body_cls(**body_kwargs)
     return FlyppyBodyStack(
         course=course,

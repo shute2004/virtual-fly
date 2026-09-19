@@ -18,6 +18,7 @@ from virtual_fly.reproducibility import (
     git_provenance,
     run_semantics,
     validate_haltere_map,
+    validate_neutral_trim,
     validate_production_snapshot,
 )
 from virtual_fly.runtime.neural_bridge import PopulationNeuralBridgeClient
@@ -36,6 +37,7 @@ def capture_playback(args: Any) -> dict[str, object]:
     viewer_graph = absolute(args.viewer_graph)
     calibration = absolute(args.calibration)
     haltere_map = absolute(args.haltere_sensory_map)
+    neutral_trim_pattern = absolute(args.neutral_trim_pattern)
     if min(args.physics_steps, args.physics_substep_stride, args.neural_telemetry_stride) <= 0:
         raise SystemExit("positive step/fps values required")
     if args.playback_fps <= 0:
@@ -44,6 +46,11 @@ def capture_playback(args: Any) -> dict[str, object]:
     snapshot_meta = validate_production_snapshot(snapshot)
     haltere_meta = validate_haltere_map(
         haltere_map, args.haltere_sensory_kind, snapshot=snapshot
+    )
+    neutral_trim_meta = (
+        validate_neutral_trim(neutral_trim_pattern)
+        if args.flight_body_version in {"v7", "v8"}
+        else None
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     ensure_runtime_environment(calibration)
@@ -69,6 +76,7 @@ def capture_playback(args: Any) -> dict[str, object]:
         "vertical_steering_gain": args.vertical_steering_gain,
         "measured_steering_gain": args.measured_steering_gain,
         "neutral_trim_strength": args.neutral_trim_strength,
+        "neutral_trim_pattern": str(neutral_trim_pattern),
         "steering_tau_ms": args.steering_tau_ms,
         "steering_spike_increment": args.steering_spike_increment,
         "wing_motor_map": str(snapshot / "wing-motor-neurons-v0.json"),
@@ -245,6 +253,8 @@ def capture_playback(args: Any) -> dict[str, object]:
                 "flight_body_version": args.flight_body_version,
                 "vertical_steering_gain": args.vertical_steering_gain,
                 "neutral_trim_strength": args.neutral_trim_strength,
+                "neutral_trim_pattern": str(neutral_trim_pattern),
+                "neutral_trim_provenance": neutral_trim_meta,
                 "steering_tau_ms": args.steering_tau_ms,
                 "steering_spike_increment": args.steering_spike_increment,
                 "haltere_current_gain": args.haltere_current_gain,

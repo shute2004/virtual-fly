@@ -13,6 +13,7 @@ from virtual_fly.embodiment.config import FlyppyBodyConfig
 from virtual_fly.runtime.body_worker import FlyppyBodyProcess
 from virtual_fly.training.curriculum import SpawnCondition
 
+@dataclass
 class ProcessSlotState:
     slot: int
     active: bool = False

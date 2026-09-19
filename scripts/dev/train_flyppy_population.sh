@@ -173,11 +173,13 @@ fi
   --wing-motor-map "$WING_MOTOR_MAP" \
   --body-motor-map "$BODY_MOTOR_MAP"
 
+NEUTRAL_PATTERN="${VF_NEUTRAL_TRIM_PATTERN:-$ROOT/artifacts/derived/wing-pattern-neutral-trim-v1.npy}"
+NEUTRAL_METADATA="${VF_NEUTRAL_TRIM_METADATA:-${NEUTRAL_PATTERN%.npy}.json}"
 if [ "$FLIGHT_BODY_VERSION" = "v7" ] || [ "$FLIGHT_BODY_VERSION" = "v8" ]; then
-  NEUTRAL_PATTERN="$ROOT/artifacts/embodiment/wing-pattern-neutral-trim-v1.npy"
-  NEUTRAL_METADATA="$ROOT/artifacts/embodiment/wing-pattern-neutral-trim-v1.json"
   if [ ! -e "$NEUTRAL_PATTERN" ] && [ ! -e "$NEUTRAL_METADATA" ]; then
-    "${PYTHON_RUNNER[@]}" scripts/data/prepare_flybody_neutral_trim.py
+    "${PYTHON_RUNNER[@]}" scripts/data/prepare_flybody_neutral_trim.py \
+      --output-pattern "$NEUTRAL_PATTERN" \
+      --output-metadata "$NEUTRAL_METADATA"
   fi
   "${PYTHON_RUNNER[@]}" - "$NEUTRAL_PATTERN" "$NEUTRAL_METADATA" <<'PY'
 from pathlib import Path
@@ -271,6 +273,7 @@ TRAIN_ARGS=(
   --output-dir "$EXPERIMENT"
   --environment-version "$ENVIRONMENT_VERSION"
   --flight-body-version "$FLIGHT_BODY_VERSION"
+  --neutral-trim-pattern "$NEUTRAL_PATTERN"
   --haltere-sensory-map "$HALTERE_SENSORY_MAP"
   --haltere-sensory-kind "$HALTERE_SENSORY_KIND"
   --haltere-current-gain "$HALTERE_CURRENT_GAIN"

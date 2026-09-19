@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from virtual_fly.reproducibility import HALTERE_FULL_KIND
+from virtual_fly.paths import PRODUCTION_NEUTRAL_TRIM_PATTERN
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class FlyppyBodyConfig:
     vertical_steering_gain: float
     measured_steering_gain: float
     neutral_trim_strength: float
+    neutral_trim_pattern: Path
     steering_tau_ms: float
     steering_spike_increment: float
     wing_motor_map: Path
@@ -50,6 +52,7 @@ class FlyppyBodyConfig:
             vertical_steering_gain=float(getattr(args, "vertical_steering_gain", 1.0)),
             measured_steering_gain=float(getattr(args, "measured_steering_gain", 1.0)),
             neutral_trim_strength=float(getattr(args, "neutral_trim_strength", 1.0)),
+            neutral_trim_pattern=Path(getattr(args, "neutral_trim_pattern", PRODUCTION_NEUTRAL_TRIM_PATTERN)),
             steering_tau_ms=float(getattr(args, "steering_tau_ms", 12.0)),
             steering_spike_increment=float(getattr(args, "steering_spike_increment", 0.85)),
             wing_motor_map=Path(args.wing_motor_map),
@@ -85,6 +88,7 @@ class FlyppyBodyConfig:
             "vertical_steering_gain": 1.0,
             "measured_steering_gain": 1.0,
             "neutral_trim_strength": 1.0,
+            "neutral_trim_pattern": PRODUCTION_NEUTRAL_TRIM_PATTERN,
             "steering_tau_ms": 12.0,
             "steering_spike_increment": 0.85,
             "haltere_sensory_map": "artifacts/malecns-v1.0/haltere-campaniform-sensory-v1.json",
@@ -104,6 +108,7 @@ class FlyppyBodyConfig:
             "body_motor_map",
             "retinotopic_map",
             "haltere_sensory_map",
+            "neutral_trim_pattern",
         ):
             payload[key] = str(payload[key])
         return payload
