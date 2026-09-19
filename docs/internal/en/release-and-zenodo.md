@@ -130,17 +130,26 @@ Verified from README-level instructions:
 
 The full canonical experiment was deliberately not rerun as part of this publication preflight.
 
-## 11. Release checklist
+## 11. Local release rehearsal
+
+A release candidate bundle was assembled locally without creating a Git tag or GitHub Release. The rehearsal generated a source archive from the clean publication candidate, copied the four planned historical attachments under their release filenames, and verified every attachment size and SHA-256 against `release/release-assets-v0.1.0.json`.
+
+The source archive contained the README, license, citation/Zenodo metadata, canonical reproducer package, multilingual documentation, and prepared release notes. It contained no `.git`, `.venv`, Cargo `target`, or local `artifacts/` directory. The rehearsal passed.
+
+A read-only GitHub check on 2026-09-19 confirmed that the repository remained **private**, `main` was the default branch, and no tags or GitHub Releases existed. No publication action was performed by this preflight.
+
+## 12. Release checklist
 
 - [x] publication changes are on default `main`
 - [ ] repository visibility is intentionally set for public release
 - [x] historical absolute local paths deliberately accepted as preserved provenance, with public explanation
 - [x] third-party fresh-clone install/basic validation passed
-- [ ] clean release checkout at the final publication commit
+- [x] clean release checkout validated for the publication candidate
 - [x] documentation links / JSON / CFF / package metadata validated
 - [x] canonical scientific reference files unchanged
 - [x] canonical vs. historical distinction visible in README and release notes
 - [x] release assets recorded with SHA-256 hashes and reverified locally
+- [x] local release-bundle rehearsal passed without creating a tag or Release
 - [x] third-party attribution included
 - [x] creator identity for `v0.1.0` intentionally set to `shute2004`; ORCID/affiliation omitted unless explicitly supplied
 - [ ] tag `v0.1.0`
