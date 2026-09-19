@@ -8,6 +8,12 @@
 
 > **项目状态：** canonical experiment v1 以及 end-to-end reproducer 已完成。canonical run 证明了当前代码下完整可追踪的执行链，并确认局部可塑性能够改变存储的 MaleCNS 权重；但这个短 canonical run **没有显示出类别意义上的行为改善**。
 
+## Historical visualization
+
+![Historical v240 to v966 Before/After visualization](docs/assets/historical-v240-v966-before-after.gif)
+
+这个动画由发布用母版 `before-after-neural.mp4` 生成，并为了 README 浏览采用 **1.5 倍速**。它同时展示 historical `v240 → v966` Before/After 以及身体 + 神经 viewer，因此放在页面上方作为项目最直观的视觉入口。但它**不是 canonical experiment 的证据**：v240/v960/v966/v1704 属于较早 lineage，其 provenance 不同，部分语义也不同。asset 的 provenance 与 hash 记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json)。
+
 ## Canonical result
 
 对外公开时的基准结果位于 [`canonical/canonical-v1/`](canonical/canonical-v1/README.md)，并刻意与早期开发 lineage 分离。
@@ -37,14 +43,6 @@ Frozen evaluation 同时关闭 plasticity 和任务事件触发的 DAN stimulati
 - [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完整 provenance
 - [`docs/results.zh-CN.md`](docs/results.zh-CN.md) — canonical 与 historical result 的边界
 - [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — provenance / semantics 审计与修复
-
-## Historical visualization
-
-![Historical v240 to v966 comparison](docs/assets/historical-v240-v966-before-after.jpg)
-
-上图来自用于发布展示的**历史** Before/After 可视化（`v240 → v966`）。它适合直观展示身体和神经 viewer 的闭环，但它**不是 canonical experiment 的证据**。v240/v960/v966/v1704 属于较早的 lineage，其 provenance 不同，部分语义也不同。
-
-完整视频与 raw playback 不作为大型 Git blob 提交，而应作为带有明确 historical 标签的 GitHub Release asset 发布。其 hash 与 provenance 记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json)。
 
 ## 当前实际实现的内容
 

@@ -8,6 +8,12 @@ It is **not** an artificial neural network trained on the fly connectome. The pr
 
 > **Project status:** canonical experiment v1 and its end-to-end reproducer are complete. The canonical run demonstrates a fully traceable current-code execution chain and measurable local-plasticity-driven changes to stored MaleCNS weights. It did **not** show categorical behavioral improvement in the short canonical run.
 
+## Historical visualization
+
+![Historical v240 to v966 Before/After visualization](docs/assets/historical-v240-v966-before-after.gif)
+
+This animated comparison is derived from the publication master `before-after-neural.mp4` and is shown at **1.5× speed** for README viewing. It visualizes the historical `v240 → v966` Before/After lineage and the body + neural viewer together. It is intentionally placed near the top because it provides the clearest visual overview of the project, but it is **not canonical evidence**: v240/v960/v966/v1704 belong to older lineages with different provenance and, in some cases, different semantics. Release asset provenance and hashes are recorded in [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json).
+
 ## Canonical result
 
 The publication-facing reference is [`canonical/canonical-v1/`](canonical/canonical-v1/README.md). It is intentionally separate from older development lineages.
@@ -37,14 +43,6 @@ See:
 - [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — complete provenance
 - [`docs/results.md`](docs/results.md) — canonical vs. historical result boundary
 - [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — provenance/semantics audit and fixes
-
-## Historical visualization
-
-![Historical v240 to v966 comparison](docs/assets/historical-v240-v966-before-after.jpg)
-
-The image above is a frame from the posting-oriented **historical** Before/After visualization (`v240 → v966`). It is useful for showing the closed-loop body + neural viewer, but it is **not canonical evidence**: v240/v960/v966/v1704 belong to older lineages with different provenance and, in some cases, different semantics. The full video and raw playback are intended to be attached to a GitHub Release with explicit historical labeling rather than committed as large Git blobs.
-
-Release asset provenance and hashes are documented in [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json).
 
 ## What is implemented
 

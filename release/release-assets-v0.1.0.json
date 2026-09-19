@@ -11,11 +11,21 @@
     "notes": "The assets below are historical visualization/provenance material. Canonical v1 results are defined by canonical/canonical-v1 and docs/results.md."
   },
   "tracked_preview": {
-    "path": "docs/assets/historical-v240-v966-before-after.jpg",
-    "source_frame": "artifacts/experiments/flyppy-post-final-video/frames/frame-00420.jpg",
-    "sha256": "dab166c835ef9dafa262cf3b4f1fbbb403be82fadf2d83f47b73f91e9c806cce",
-    "size_bytes": 161903,
-    "role": "historical-v240-v966-readme-preview"
+    "path": "docs/assets/historical-v240-v966-before-after.gif",
+    "source_master": "before-after-neural.mp4",
+    "source_master_sha256": "e5d685018a3babd62c0c345d95298049d15445ebd0dc7f8a0d24317ff906e0c8",
+    "source_master_duration_seconds": 14.016667,
+    "source_master_dimensions": [2880, 2160],
+    "transform": {
+      "speed": 1.5,
+      "fps": 10,
+      "dimensions": [960, 720],
+      "palette_colors": 128
+    },
+    "sha256": "786cbdfef1b0018d0081339736e9d6a1033b140618c145afb3001d19eff408d1",
+    "size_bytes": 9843969,
+    "role": "historical-v240-v966-readme-animation",
+    "canonical": false
   },
   "release_assets": [
     {

@@ -8,6 +8,12 @@
 
 > **現在の状態:** canonical experiment v1とend-to-end再現スクリプトは完成済みです。canonical runでは、現行コードの完全な来歴を持つ実行経路と、局所可塑性によるMaleCNS保存weightの変化を確認しました。一方、この短いcanonical runでは**カテゴリカルな行動改善は確認されませんでした**。
 
+## Historical visualization
+
+![Historical v240 to v966 Before/After visualization](docs/assets/historical-v240-v966-before-after.gif)
+
+このアニメーションは公開用マスター`before-after-neural.mp4`から生成し、READMEでは見やすさのため**1.5倍速**にしています。historicalな`v240 → v966` Before/Afterと、身体＋神経viewerを同時に示すため、このプロジェクトを視覚的に理解する入口として上部に配置しています。ただし、これは**canonical experimentの証拠ではありません**。v240/v960/v966/v1704は現在のcanonicalとは来歴が異なり、一部は意味論も異なります。assetのprovenanceとhashは [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に記録しています。
+
 ## Canonical result
 
 公開時の基準結果は [`canonical/canonical-v1/`](canonical/canonical-v1/README.md) です。過去の開発系統とは意図的に分離されています。
@@ -37,14 +43,6 @@ Frozen evaluationではplasticityと課題イベント由来のDAN刺激を両�
 - [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完全なprovenance
 - [`docs/results.ja.md`](docs/results.ja.md) — canonicalとhistorical resultの境界
 - [`docs/reproducibility-fixes-2026-09-19.md`](docs/reproducibility-fixes-2026-09-19.md) — provenance / semantics監査と修正
-
-## Historical visualization
-
-![Historical v240 to v966 comparison](docs/assets/historical-v240-v966-before-after.jpg)
-
-上の画像は投稿用に作成した**historical** Before/After可視化（`v240 → v966`）の1フレームです。身体と神経viewerの閉ループを視覚的に示すには有用ですが、**canonical experimentの証拠ではありません**。v240/v960/v966/v1704は現在のcanonicalとは来歴が異なり、一部は意味論も異なります。
-
-完全な動画とraw playbackは巨大Git blobとしてcommitせず、明示的にhistoricalとラベル付けしたGitHub Release assetとして配布する設計です。assetのhashとprovenanceは [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に記録します。
 
 ## 現在実装されているもの
 
