@@ -2,6 +2,8 @@
 license: mit
 language:
   - en
+  - ja
+  - zh
 tags:
   - drosophila
   - connectome
@@ -13,6 +15,8 @@ tags:
 ---
 
 # virtual-fly
+
+[English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
 
 `virtual-fly` is a research project that starts from the released adult male Drosophila MaleCNS connectome and evolves neural activity, neuromodulation, and local synaptic plasticity in closed loop with a FlyBody / MuJoCo body and a physical environment.
 
