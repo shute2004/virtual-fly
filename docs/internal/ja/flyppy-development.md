@@ -97,7 +97,3 @@ bash scripts/dev/run_flyppy_scheduler_ab.sh
 したがって、終了順序や開始時の重み世代による偏りは実際に存在する。ただし、それを取り除いただけでは、現在の固定評価で見られる能力停滞は解消しなかった。
 
 確定レポートは`reports/flyppy/experiments/scheduler-ab/episode255-v184/comparison.md`に保存する。
-
-## 過去資料
-
-2026年9月15日の設計レビュー、作業引き継ぎ、可視化調査、非同期並列学習の設計詳細は`docs/archive/2026-09-15/`を参照する。

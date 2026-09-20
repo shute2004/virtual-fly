@@ -109,7 +109,7 @@ Track small manifests, hashes, configs, and reports instead. See [`docs/en/data-
 
 Publication-facing research documentation is English-first and lives in `docs/en/`, `docs/ja/`, and `docs/zh-CN/` with matching filenames across the three language directories. Adding a public document means maintaining the same document in all three languages.
 
-Internal research/development notes belong under `docs/internal/<language>/`; historical records belong under `docs/archive/`. These categories are intentionally not required to be mirrored into every language. Do not mass-translate historical records merely for cosmetic consistency.
+Internal research/development notes belong under `docs/internal/<language>/`. These notes are intentionally not required to be mirrored into every language. Do not mass-translate internal records merely for cosmetic consistency.
 
 ## Pull requests / commits
 
