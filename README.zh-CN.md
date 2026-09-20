@@ -139,14 +139,14 @@ bash -n canonical/canonical-v1/reproduce.sh
 
 - [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
 
-下面四个检查点仓库要发布的内容已经准备完成，但**仓库本身尚未创建或公开**。在 GitHub 仓库公开之前，会先创建这些仓库并核对文件和哈希值：
+四个已验证的检查点仓库分别在 Hugging Face 上发布：
 
-- `virtual-fly-initial-YYYYMMDD` — canonical v1 的初始检查点
-- `virtual-fly-trained-YYYYMMDD` — canonical v1 完成 6 个训练回合后的检查点
-- `virtual-fly-video-before` — 已公开 Before / After 视频中 Before 一侧实际使用的历史检查点
-- `virtual-fly-video-after` — 同一视频中 After 一侧实际使用的历史检查点
+- [`virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920) — canonical v1 的初始检查点
+- [`virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920) — canonical v1 完成 6 个训练回合后的检查点
+- [`virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before) — 已公开 Before / After 视频中 Before 一侧实际使用的历史检查点
+- [`virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after) — 同一视频中 After 一侧实际使用的历史检查点
 
-前两个带日期的仓库名只在实际发布日期确定后才替换 `YYYYMMDD`。视频用 Before / After 与 **canonical v1 的初始检查点和训练后检查点属于不同历史系**。v240 / v966 等内部版本号不会出现在公开仓库名中，只保留在来源记录里。MaleCNS 原始数据、FlyBody 资源、完整轨迹、全部视频帧以及无关的开发中间产物，不会仅因为本地存在就复制到 Hugging Face。
+canonical 系列的发布日期为 2026 年 9 月 20 日。视频用 Before / After 与 **canonical v1 的初始检查点和训练后检查点属于不同历史系**。v240 / v966 等内部版本号不会出现在公开仓库名中，只保留在来源记录里。MaleCNS 原始数据、FlyBody 资源、完整轨迹、全部视频帧以及无关的开发中间产物，不会仅因为本地存在就复制到 Hugging Face。
 
 发布结构、模型卡模板、必要文件清单、归属信息和检查点哈希统一记录在 [`release/huggingface/`](release/huggingface/README.md)。
 

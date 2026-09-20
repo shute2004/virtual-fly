@@ -31,7 +31,7 @@ The recorded Before playback used body v7 / environment v7, plasticity disabled 
 
 These conditions are not equivalent to canonical v1 frozen evaluation, which disables both plasticity and task-triggered DAN stimulation.
 
-The paired historical After repository is `shute2004/virtual-fly-video-after`.
+The paired historical After repository is [`shute2004/virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after).
 
 ## Source code and reproducibility
 

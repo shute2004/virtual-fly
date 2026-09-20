@@ -139,14 +139,14 @@ bash -n canonical/canonical-v1/reproduce.sh
 
 - [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
 
-以下の4つについては公開する内容まで準備済みですが、**リポジトリ自体はまだ作成・公開していません**。GitHubを公開する前に作成し、ファイルとハッシュ値を確認します。
+検証済みの4つのチェックポイントリポジトリは、Hugging Faceで分けて公開します。
 
-- `virtual-fly-initial-YYYYMMDD` — canonical v1の初期チェックポイント
-- `virtual-fly-trained-YYYYMMDD` — canonical v1で6エピソードの学習処理を経たチェックポイント
-- `virtual-fly-video-before` — 公開Before / After動画のBefore側に実際に使用した過去系統のチェックポイント
-- `virtual-fly-video-after` — 同じ動画のAfter側に実際に使用した過去系統のチェックポイント
+- [`virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920) — canonical v1の初期チェックポイント
+- [`virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920) — canonical v1で6エピソードの学習処理を経たチェックポイント
+- [`virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before) — 公開Before / After動画のBefore側に実際に使用した過去系統のチェックポイント
+- [`virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after) — 同じ動画のAfter側に実際に使用した過去系統のチェックポイント
 
-日付付きの2リポジトリ名は、実際の公開日にのみ`YYYYMMDD`を確定します。動画用Before / Afterは**canonical v1の初期・学習後チェックポイントとは別系統**です。v240 / v966などの内部番号はリポジトリ名には出さず、来歴情報としてのみ保持します。MaleCNSの生データ、FlyBodyの資産、軌跡一式、全フレーム、無関係な開発途中の成果物は、単に存在するという理由ではHugging Faceへ複製しません。
+canonical側の公開日は2026年9月20日です。動画用Before / Afterは**canonical v1の初期・学習後チェックポイントとは別系統**です。v240 / v966などの内部番号はリポジトリ名には出さず、来歴情報としてのみ保持します。MaleCNSの生データ、FlyBodyの資産、軌跡一式、全フレーム、無関係な開発途中の成果物は、単に存在するという理由ではHugging Faceへ複製しません。
 
 公開構造、モデルカード雛形、必要ファイル一覧、帰属情報、チェックポイントのハッシュ値は [`release/huggingface/`](release/huggingface/README.md) にまとめています。
 

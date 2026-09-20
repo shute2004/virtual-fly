@@ -21,16 +21,16 @@ The existing overview repository is:
 
 Its English, Japanese, and Simplified Chinese overview-card sources are prepared under [`overview/`](overview/README.md).
 
-## Planned checkpoint repositories
+## Checkpoint repositories
 
-The canonical repository date is chosen only on the actual publication day. Do **not** replace `YYYYMMDD` before that day.
+The canonical repository date is 2026-09-20.
 
 | Repository | Lineage | Meaning |
 |---|---|---|
-| `shute2004/virtual-fly-initial-YYYYMMDD` | canonical v1 | Initial checkpoint of the current canonical experiment |
-| `shute2004/virtual-fly-trained-YYYYMMDD` | canonical v1 | Checkpoint after the six canonical training episodes |
-| `shute2004/virtual-fly-video-before` | historical | Checkpoint actually used for the Before side of the published Before/After video |
-| `shute2004/virtual-fly-video-after` | historical | Checkpoint actually used for the After side of the published Before/After video |
+| [`shute2004/virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920) | canonical v1 | Initial checkpoint of the current canonical experiment |
+| [`shute2004/virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920) | canonical v1 | Checkpoint after the six canonical training episodes |
+| [`shute2004/virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before) | historical | Checkpoint actually used for the Before side of the published Before/After video |
+| [`shute2004/virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after) | historical | Checkpoint actually used for the After side of the published Before/After video |
 
 The historical video repositories must never be presented as the initial/trained pair of canonical v1. Their internal global-weight versions are provenance only and intentionally do not appear in the public repository names.
 
@@ -41,12 +41,12 @@ release/huggingface/
 ├── overview/README.md
 ├── checkpoint-artifacts-v1.json
 └── repositories/
-    ├── virtual-fly-initial-YYYYMMDD/
+    ├── virtual-fly-initial-20260920/
     │   ├── README.md
     │   ├── ATTRIBUTION.md
     │   ├── provenance.json
     │   └── SHA256SUMS
-    ├── virtual-fly-trained-YYYYMMDD/
+    ├── virtual-fly-trained-20260920/
     │   ├── README.md
     │   ├── ATTRIBUTION.md
     │   ├── provenance.json
@@ -114,15 +114,8 @@ Official Hugging Face documentation:
 - Xet large-file storage: https://huggingface.co/docs/hub/xet/index
 - repository licenses: https://huggingface.co/docs/hub/repositories-licenses
 
-## Publication-day procedure
+## Publication record
 
-1. Choose the real publication date and replace `YYYYMMDD` in the two canonical repository names and cards.
-2. Create the two dated canonical model repositories and the two fixed historical-video model repositories.
-3. Copy each verified checkpoint directory from the source described in `checkpoint-artifacts-v1.json`.
-4. Add the prepared card, attribution, provenance, and SHA-256 files.
-5. Verify every checkpoint file against `SHA256SUMS` before upload.
-6. Upload with Hugging Face's large-file storage path.
-7. Update `overview/README.md` with the final dated canonical links and publish it to `shute2004/virtual-fly`.
-8. Replace the placeholder canonical links in the GitHub README only after those repositories exist.
+The four checkpoint repositories were created privately on 2026-09-20, populated from the sources recorded in `checkpoint-artifacts-v1.json`, and checked against the prepared `SHA256SUMS` before public release. The overview and source repository use the final dated links above.
 
-This preparation directory does not create the four checkpoint repositories, upload checkpoint payloads, change repository visibility, create a GitHub tag/Release, or create a DOI. The already-private `shute2004/virtual-fly` overview repository may be updated during preparation.
+Zenodo / DOI is not part of v0.1.0.

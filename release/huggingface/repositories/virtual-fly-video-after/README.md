@@ -31,7 +31,7 @@ The recorded After playback used body v7 / environment v7, plasticity disabled d
 
 This is a historical visualization result, not canonical v1 evidence. Canonical v1 frozen evaluation disables both plasticity and task-triggered DAN stimulation.
 
-The paired historical Before repository is `shute2004/virtual-fly-video-before`.
+The paired historical Before repository is [`shute2004/virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before).
 
 ## Source code and reproducibility
 

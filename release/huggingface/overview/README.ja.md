@@ -13,16 +13,16 @@
 
 ## チェックポイントの配布構成
 
-公開準備中のチェックポイントには、明確に異なる2つの系統があります。以下の4リポジトリはまだ作成・公開していません。**動画用のBefore / Afterをcanonical v1の初期・学習後チェックポイントとして扱わないでください。**
+公開チェックポイントには、明確に異なる2つの系統があります。**動画用のBefore / Afterをcanonical v1の初期・学習後チェックポイントとして扱わないでください。**
 
 ### Canonical v1
 
-canonical系のリポジトリ名の日付は、実際の公開日にのみ確定します。
+canonical系の公開日は2026年9月20日です。
 
 | チェックポイント | リポジトリ | 意味 |
 |---|---|---|
-| 初期 | `shute2004/virtual-fly-initial-YYYYMMDD` | canonical v1の初期チェックポイント。global weight version 0 |
-| 学習後 | `shute2004/virtual-fly-trained-YYYYMMDD` | canonical v1で6エピソードの学習処理を経たチェックポイント。global weight version 6 |
+| 初期 | [`shute2004/virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920) | canonical v1の初期チェックポイント。global weight version 0 |
+| 学習後 | [`shute2004/virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920) | canonical v1で6エピソードの学習処理を経たチェックポイント。global weight version 6 |
 
 記録済みのcanonical v1実験は、実際にはGit commit `7fa464aad7269d34f46f1171080b51e095d1d811`で実行しました。公開前のprivacy-onlyな履歴書き換え後、公開用の科学コード相当commitは`f9c86c904d67ff974f3c43d37aab3619bc93fc1b`です。変更はhistorical absolute path内のローカルOSユーザー名だけで、実行コードやcanonical条件は変わっていません。この短いcanonical実験では、保存された25,582,938本の辺のうち2,163,179本で重みが変化しました。一方、可塑性とタスク由来のDAN刺激を無効化した固定評価では、初期・学習後とも同じ分類上の結果でした。
 
@@ -32,14 +32,14 @@ canonical系のリポジトリ名の日付は、実際の公開日にのみ確�
 
 | チェックポイント | リポジトリ | 来歴上の役割 |
 |---|---|---|
-| Before | `shute2004/virtual-fly-video-before` | 公開したBefore / After比較動画のBefore側で実際に使用した過去系統のチェックポイント |
-| After | `shute2004/virtual-fly-video-after` | 同じ動画のAfter側で実際に使用した過去系統のチェックポイント |
+| Before | [`shute2004/virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before) | 公開したBefore / After比較動画のBefore側で実際に使用した過去系統のチェックポイント |
+| After | [`shute2004/virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after) | 同じ動画のAfter側で実際に使用した過去系統のチェックポイント |
 
 これらの内部開発版は来歴情報として`v240`と`v966`ですが、公開リポジトリ名には出しません。Before側のv240は未学習の初期状態ではなく、すでに240エピソードの過去学習を経ています。再生はホールドアウト評価ではなく、可塑性を停止した状態でも課題イベントによるPAM刺激は有効でした。v966も複数の過去条件が混在した系統です。したがって、これらは**canonical v1の証拠ではありません**。
 
 ## Hugging Faceに置くもの
 
-公開時には、各チェックポイント用リポジトリにチェックポイント本体と、必要最小限の来歴情報、ハッシュ値、帰属情報、モデルカードを置きます。研究用作業環境全体を複製するものではありません。
+各チェックポイント用リポジトリには、チェックポイント本体と、必要最小限の来歴情報、ハッシュ値、帰属情報、モデルカードを置きます。研究用作業環境全体を複製するものではありません。
 
 原則として置かないもの:
 

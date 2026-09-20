@@ -17,7 +17,7 @@ tags:
 
 > **Lineage:** Canonical v1 post-training state
 
-This is the checkpoint produced after the six training episodes of the current `virtual-fly` canonical experiment. It is part of the same canonical lineage as `virtual-fly-initial-YYYYMMDD`, not the historical Before/After video lineage.
+This is the checkpoint produced after the six training episodes of the current `virtual-fly` canonical experiment. It is part of the same canonical lineage as [`virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920), not the historical Before/After video lineage.
 
 This checkpoint was produced by the recorded canonical v1 experiment at original Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`. Its privacy-redacted public scientific equivalent is `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`; the rewrite changed only historical local-path usernames, not executable source or canonical conditions. This checkpoint is global weight version **6** at aggregate neural step **484**. Exactly **2,163,179 / 25,582,938** stored edges differ from the canonical initial checkpoint.
 

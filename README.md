@@ -137,14 +137,14 @@ Checkpoint payloads are intentionally kept out of the GitHub source repository. 
 
 - [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
 
-The publication contents for the four checkpoint repositories below are prepared, but **the repositories themselves have not yet been created or published**. They will be created and hash-verified before the GitHub repository is made public:
+The four verified checkpoint repositories are published separately on Hugging Face:
 
-- `virtual-fly-initial-YYYYMMDD` — canonical v1 initial checkpoint;
-- `virtual-fly-trained-YYYYMMDD` — canonical v1 checkpoint after the six canonical training episodes;
-- `virtual-fly-video-before` — historical checkpoint actually used for the Before side of the published comparison video;
-- `virtual-fly-video-after` — historical checkpoint actually used for the After side of the published comparison video.
+- [`virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920) — canonical v1 initial checkpoint;
+- [`virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920) — canonical v1 checkpoint after the six canonical training episodes;
+- [`virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before) — historical checkpoint actually used for the Before side of the published comparison video;
+- [`virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after) — historical checkpoint actually used for the After side of the published comparison video.
 
-The two dated canonical names are finalized only on the actual publication day. The historical video pair is **not** the canonical initial/trained pair; internal versions such as v240/v966 are retained only in artifact provenance. Raw MaleCNS data, FlyBody assets, trajectories, frame directories, and unrelated development artifacts are not mirrored merely for completeness.
+The canonical repository date is 2026-09-20. The historical video pair is **not** the canonical initial/trained pair; internal versions such as v240/v966 are retained only in artifact provenance. Raw MaleCNS data, FlyBody assets, trajectories, frame directories, and unrelated development artifacts are not mirrored merely for completeness.
 
 The exact publication structure, model-card templates, required file lists, attribution, and prepared checkpoint hashes are tracked in [`release/huggingface/`](release/huggingface/README.md).
 

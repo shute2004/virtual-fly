@@ -1,21 +1,21 @@
 {
   "schema_version": 1,
-  "artifact_id": "canonical-trained",
-  "planned_repository": "shute2004/virtual-fly-trained-YYYYMMDD",
+  "artifact_id": "canonical-initial",
   "lineage": "canonical-v1",
   "historical": false,
   "dataset": "male-cns:v1.0",
   "neuron_count": 166700,
   "edge_count": 25582938,
-  "global_weight_version": 6,
-  "source_locator": "external-reference:canonical-v1-reference/artifacts/canonical-experiment-v1/training/checkpoint",
+  "global_weight_version": 0,
+  "source_locator": "external-reference:canonical-v1-reference/artifacts/canonical-experiment-v1/initial/checkpoint",
   "source_hash_manifest": "https://github.com/shute2004/virtual-fly/blob/v0.1.0/release/huggingface/checkpoint-artifacts-v1.json",
   "malecns_official_source": "https://male-cns.janelia.org/download/",
   "malecns_license": "CC-BY-4.0",
   "original_experiment_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
   "public_equivalent_git_sha": "f9c86c904d67ff974f3c43d37aab3619bc93fc1b",
-  "aggregate_neural_step": 484,
+  "aggregate_neural_step": 0,
   "checkpoint_semantics": "global-weights-only-v1",
   "step_semantics": "aggregate-slot-neural-step-count-v1",
-  "changed_edges_from_canonical_initial": 2163179
+  "repository": "shute2004/virtual-fly-initial-20260920",
+  "repository_url": "https://huggingface.co/shute2004/virtual-fly-initial-20260920"
 }

@@ -154,18 +154,18 @@ Instead, Git tracks the small provenance records, configuration, hashes, and sum
 
 ## 9. Hugging Face checkpoint distribution
 
-Checkpoint payloads intended for third-party download are kept separate from the GitHub source repository. The `shute2004/virtual-fly` Hugging Face project overview is prepared; publication contents for the four checkpoint repositories below are prepared locally, but the repositories themselves are not yet created or published.
+Checkpoint payloads intended for third-party download are kept separate from the GitHub source repository. The `shute2004/virtual-fly` Hugging Face project overview links to four verified checkpoint repositories.
 
-The planned publication structure deliberately separates:
+The publication structure deliberately separates:
 
-- canonical v1 initial checkpoint: `virtual-fly-initial-YYYYMMDD`;
-- canonical v1 trained checkpoint: `virtual-fly-trained-YYYYMMDD`;
-- historical Before-video checkpoint: `virtual-fly-video-before`;
-- historical After-video checkpoint: `virtual-fly-video-after`.
+- canonical v1 initial checkpoint: [`virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920);
+- canonical v1 trained checkpoint: [`virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920);
+- historical Before-video checkpoint: [`virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before);
+- historical After-video checkpoint: [`virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after).
 
-The `YYYYMMDD` suffix is selected only on the actual publication day. Historical video checkpoints are not canonical initial/trained checkpoints, even when the same runtime can inspect their files.
+The canonical repository date is 2026-09-20. Historical video checkpoints are not canonical initial/trained checkpoints, even when the same runtime can inspect their files.
 
-When published, each checkpoint repository will contain the native checkpoint directory plus lightweight `README.md`, attribution, provenance, and SHA-256 records. Full trajectories, frame directories, raw source datasets, unrelated checkpoints, and build artifacts are excluded unless they become directly necessary for using or verifying that checkpoint.
+Each checkpoint repository contains the native checkpoint directory plus lightweight `README.md`, attribution, provenance, and SHA-256 records. Full trajectories, frame directories, raw source datasets, unrelated checkpoints, and build artifacts are excluded unless they become directly necessary for using or verifying that checkpoint.
 
 The checkpoint weights derive from MaleCNS `male-cns:v1.0`, licensed by the official source under CC BY 4.0. The raw MaleCNS dataset is not mirrored on Hugging Face; users obtain it from the official source or through the canonical acquisition/reproduction path. FlyBody, FlyGym, and MuJoCo assets are likewise not copied into checkpoint repositories merely for convenience.
 

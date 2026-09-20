@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "artifact_id": "historical-video-before",
-  "planned_repository": "shute2004/virtual-fly-video-before",
   "lineage": "historical-video",
   "historical": true,
   "dataset": "male-cns:v1.0",
@@ -20,5 +19,7 @@
   "video_evaluation_plasticity": false,
   "video_evaluation_task_triggered_pam_stimulation": true,
   "video_evaluation_is_holdout": false,
-  "video_passed_gates": 1
+  "video_passed_gates": 1,
+  "repository": "shute2004/virtual-fly-video-before",
+  "repository_url": "https://huggingface.co/shute2004/virtual-fly-video-before"
 }

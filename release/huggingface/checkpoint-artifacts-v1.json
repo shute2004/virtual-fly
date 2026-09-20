@@ -5,7 +5,7 @@
     "github_contains_large_checkpoints": false,
     "huggingface_contains_raw_malecns": false,
     "huggingface_contains_flybody_assets": false,
-    "canonical_repository_date_placeholder": "YYYYMMDD",
+    "canonical_repository_date": "20260920",
     "canonical_and_historical_video_lineages_are_distinct": true
   },
   "upstream": {
@@ -17,7 +17,8 @@
   "artifacts": [
     {
       "id": "canonical-initial",
-      "planned_repository": "shute2004/virtual-fly-initial-YYYYMMDD",
+      "repository": "shute2004/virtual-fly-initial-20260920",
+      "repository_url": "https://huggingface.co/shute2004/virtual-fly-initial-20260920",
       "lineage": "canonical-v1",
       "historical": false,
       "source_locator": "external-reference:canonical-v1-reference/artifacts/canonical-experiment-v1/initial/checkpoint",
@@ -44,7 +45,8 @@
     },
     {
       "id": "canonical-trained",
-      "planned_repository": "shute2004/virtual-fly-trained-YYYYMMDD",
+      "repository": "shute2004/virtual-fly-trained-20260920",
+      "repository_url": "https://huggingface.co/shute2004/virtual-fly-trained-20260920",
       "lineage": "canonical-v1",
       "historical": false,
       "source_locator": "external-reference:canonical-v1-reference/artifacts/canonical-experiment-v1/training/checkpoint",
@@ -72,7 +74,8 @@
     },
     {
       "id": "historical-video-before",
-      "planned_repository": "shute2004/virtual-fly-video-before",
+      "repository": "shute2004/virtual-fly-video-before",
+      "repository_url": "https://huggingface.co/shute2004/virtual-fly-video-before",
       "lineage": "historical-video",
       "historical": true,
       "source_locator": "artifacts/experiments/flyppy-v7-envv7-frontier/checkpoint",
@@ -103,7 +106,8 @@
     },
     {
       "id": "historical-video-after",
-      "planned_repository": "shute2004/virtual-fly-video-after",
+      "repository": "shute2004/virtual-fly-video-after",
+      "repository_url": "https://huggingface.co/shute2004/virtual-fly-video-after",
       "lineage": "historical-video",
       "historical": true,
       "source_locator": "artifacts/experiments/flyppy-v7h-online-video-v966/checkpoint",

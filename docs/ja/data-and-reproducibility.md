@@ -160,18 +160,18 @@ CPU / GPU / WebGPUなど異なる実行方式でも、許容誤差内で同等�
 
 ## 9. Hugging Faceでのチェックポイント配布
 
-第三者向けのチェックポイント本体はGitHubのソースリポジトリとは分けて配布する。Hugging Faceの`shute2004/virtual-fly`には概要ページを準備済みだが、以下の4つのチェックポイント用リポジトリはまだ作成・公開していない。
+第三者向けのチェックポイント本体はGitHubのソースリポジトリとは分けて配布する。Hugging Faceの`shute2004/virtual-fly`概要ページから、検証済みの4つのチェックポイントリポジトリへリンクする。
 
-公開時は次の4系統を明確に分離する。
+公開構成では次の4系統を明確に分離する。
 
-- canonical v1の初期チェックポイント: `virtual-fly-initial-YYYYMMDD`
-- canonical v1の学習後チェックポイント: `virtual-fly-trained-YYYYMMDD`
-- 公開動画Before側の過去チェックポイント: `virtual-fly-video-before`
-- 公開動画After側の過去チェックポイント: `virtual-fly-video-after`
+- canonical v1の初期チェックポイント: [`virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920)
+- canonical v1の学習後チェックポイント: [`virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920)
+- 公開動画Before側の過去チェックポイント: [`virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before)
+- 公開動画After側の過去チェックポイント: [`virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after)
 
-`YYYYMMDD`は実際の公開日にのみ確定する。動画用の過去チェックポイントは、同じ実行系から読み込める場合でもcanonical v1の初期・学習後チェックポイントとして扱わない。
+canonical側の公開日は2026年9月20日である。動画用の過去チェックポイントは、同じ実行系から読み込める場合でもcanonical v1の初期・学習後チェックポイントとして扱わない。
 
-公開時、各チェックポイントリポジトリには、ネイティブ形式のチェックポイント一式と、`README.md`、帰属情報、来歴記録、SHA-256一覧だけを置く。モデル利用や検証に直接必要でない全軌跡、フレーム群、生データ、無関係なチェックポイント、ビルド生成物は含めない。
+各チェックポイントリポジトリには、ネイティブ形式のチェックポイント一式と、`README.md`、帰属情報、来歴記録、SHA-256一覧だけを置く。モデル利用や検証に直接必要でない全軌跡、フレーム群、生データ、無関係なチェックポイント、ビルド生成物は含めない。
 
 チェックポイントの重みはMaleCNS `male-cns:v1.0`に由来し、公式配布元ではCC BY 4.0で公開されている。MaleCNSの生データ自体はHugging Faceへ複製せず、公式配布元またはcanonicalの取得・再現経路から取得する。FlyBody / FlyGym / MuJoCoの資産も、利便性だけを理由にチェックポイントリポジトリへ複製しない。
 

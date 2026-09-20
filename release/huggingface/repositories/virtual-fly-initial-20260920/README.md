@@ -27,7 +27,7 @@ The manifest declares `checkpoint_semantics=global-weights-only-v1` and `step_se
 
 ## Relationship to the trained checkpoint
 
-The corresponding canonical trained checkpoint will be published as `shute2004/virtual-fly-trained-YYYYMMDD` using the same actual publication date. The short canonical run changed exactly **2,163,179** stored edges. Its frozen initial and final evaluations had the same categorical outcome, so the pair demonstrates current-semantics weight change rather than established behavioral improvement.
+The corresponding canonical trained checkpoint is [`shute2004/virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920). The short canonical run changed exactly **2,163,179** stored edges. Its frozen initial and final evaluations had the same categorical outcome, so the pair demonstrates current-semantics weight change rather than established behavioral improvement.
 
 ## Source code and reproducibility
 

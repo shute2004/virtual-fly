@@ -13,16 +13,16 @@
 
 ## 检查点仓库结构
 
-准备发布的检查点分为两个明确不同的系谱。下面四个检查点仓库目前尚未创建或公开。**不要把视频用 Before / After 检查点当作 canonical v1 的初始 / 学习后检查点。**
+公开检查点分为两个明确不同的系谱。**不要把视频用 Before / After 检查点当作 canonical v1 的初始 / 学习后检查点。**
 
 ### Canonical v1
 
-canonical 系列仓库名中的日期只在实际发布日期确定后填写。
+canonical 系列的发布日期为 2026 年 9 月 20 日。
 
 | 检查点 | 仓库 | 含义 |
 |---|---|---|
-| 初始 | `shute2004/virtual-fly-initial-YYYYMMDD` | canonical v1 的初始检查点，global weight version 0 |
-| 学习后 | `shute2004/virtual-fly-trained-YYYYMMDD` | canonical v1 完成 6 个训练回合后的检查点，global weight version 6 |
+| 初始 | [`shute2004/virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920) | canonical v1 的初始检查点，global weight version 0 |
+| 学习后 | [`shute2004/virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920) | canonical v1 完成 6 个训练回合后的检查点，global weight version 6 |
 
 已记录的 canonical v1 实验实际运行于 Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`。公开前只针对隐私进行历史重写后，公开使用的科学代码等价提交为 `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`；变化仅限于历史绝对路径中的本地 OS 用户名，可执行源码和 canonical 条件均未改变。这次较短的 canonical 实验中，25,582,938 条存储边里有 2,163,179 条发生了权重变化。但在关闭可塑性和任务触发 DAN 刺激的固定评估中，初始状态和学习后状态的分类结果相同。
 
@@ -32,8 +32,8 @@ canonical 系列仓库名中的日期只在实际发布日期确定后填写。
 
 | 检查点 | 仓库 | 来源角色 |
 |---|---|---|
-| Before | `shute2004/virtual-fly-video-before` | 公开 Before / After 对比视频中 Before 一侧实际使用的历史检查点 |
-| After | `shute2004/virtual-fly-video-after` | 同一视频中 After 一侧实际使用的历史检查点 |
+| Before | [`shute2004/virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before) | 公开 Before / After 对比视频中 Before 一侧实际使用的历史检查点 |
+| After | [`shute2004/virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after) | 同一视频中 After 一侧实际使用的历史检查点 |
 
 这些检查点的内部开发版本分别是 `v240` 和 `v966`，但这些编号不会出现在公开仓库名中，只保留在来源记录里。Before 一侧的 v240 不是未经学习的初始状态，而是已经经历 240 个历史训练回合的检查点；回放不是留出评估，而且在关闭可塑性时仍保留了任务事件触发的 PAM 刺激。v966 也来自混合了多个早期条件的开发系。因此，它们**不是 canonical v1 的实验依据**。
 

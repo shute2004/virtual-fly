@@ -65,18 +65,18 @@ If a future archival requirement needs a large immutable non-checkpoint data bun
 
 ## 5. Hugging Face checkpoint distribution
 
-Checkpoint payloads are kept separate from GitHub. The private Hugging Face project overview repository is already prepared at:
+Checkpoint payloads are kept separate from GitHub. The Hugging Face project overview repository is:
 
 - https://huggingface.co/shute2004/virtual-fly
 
-The four checkpoint repositories prepared for publication, but not yet created or uploaded, are:
+The four checkpoint repositories are:
 
-- `shute2004/virtual-fly-initial-YYYYMMDD` — canonical v1 initial checkpoint;
-- `shute2004/virtual-fly-trained-YYYYMMDD` — canonical v1 trained checkpoint;
-- `shute2004/virtual-fly-video-before` — exact historical checkpoint used for the Before side of the published comparison video;
-- `shute2004/virtual-fly-video-after` — exact historical checkpoint used for the After side of the published comparison video.
+- https://huggingface.co/shute2004/virtual-fly-initial-20260920 — canonical v1 initial checkpoint;
+- https://huggingface.co/shute2004/virtual-fly-trained-20260920 — canonical v1 trained checkpoint;
+- https://huggingface.co/shute2004/virtual-fly-video-before — exact historical checkpoint used for the Before side of the published comparison video;
+- https://huggingface.co/shute2004/virtual-fly-video-after — exact historical checkpoint used for the After side of the published comparison video.
 
-`YYYYMMDD` is not chosen until the actual publication day. The historical video repositories are never described as the canonical initial/trained pair. Internal versions v240/v966 remain provenance fields only.
+The canonical repository date is 2026-09-20. The historical video repositories are never described as the canonical initial/trained pair. Internal versions v240/v966 remain provenance fields only.
 
 Each checkpoint repository contains the native checkpoint files plus a model card, attribution notice, machine-readable provenance, and SHA-256 list. Full trajectories, frame directories, raw MaleCNS data, normalized snapshots, FlyBody assets, unrelated development checkpoints, and build artifacts are excluded unless they are directly necessary to use the checkpoint.
 
@@ -84,7 +84,7 @@ The official MaleCNS download page licenses `male-cns:v1.0` under CC BY 4.0. Bec
 
 The complete prepared layout, model-card templates, exact checkpoint file sizes/hashes, and publication procedure are tracked in [`../../../release/huggingface/`](../../../release/huggingface/README.md).
 
-Creation/upload of the four checkpoint repositories is a publication action and remains deliberately deferred until the publication date. Updating the already-private `shute2004/virtual-fly` overview card is allowed during preparation.
+The four repositories were created privately on 2026-09-20, uploaded, and checked against the recorded checkpoint hashes before public release.
 
 ## 6. Canonical reproduction statement for release notes
 
@@ -153,7 +153,7 @@ The four prepared Hugging Face repository templates were also assembled locally 
 - historical video Before: 207,997,939 bytes;
 - historical video After: 207,997,940 bytes.
 
-The existing private `shute2004/virtual-fly` Hugging Face overview repository has since been updated with the prepared multilingual overview cards. The four checkpoint repositories themselves remain uncreated/unpublished.
+The four checkpoint repositories were subsequently created privately, uploaded, and remotely verified against the recorded file sizes and SHA-256 values before public release.
 
 ## 13. Release checklist
 
@@ -174,10 +174,10 @@ The existing private `shute2004/virtual-fly` Hugging Face overview repository ha
 - [x] raw MaleCNS and FlyBody/FlyGym/MuJoCo assets excluded from checkpoint upload plan; official acquisition paths retained
 - [x] creator identity for `v0.1.0` intentionally set to `shute2004`; ORCID/affiliation omitted unless explicitly supplied
 - [x] pre-publication history privacy rewrite completed; local OS username removed from all reachable public history and canonical old→public SHA mapping recorded
-- [ ] choose actual publication date and finalize the two canonical Hugging Face repository names
-- [ ] create/upload the four Hugging Face checkpoint repositories
-- [ ] publish/update `shute2004/virtual-fly` overview card with final four links
-- [ ] replace placeholder canonical Hugging Face names/links in GitHub docs after the repositories exist
+- [x] choose actual publication date and finalize the two canonical Hugging Face repository names
+- [x] create/upload the four Hugging Face checkpoint repositories
+- [x] publish/update `shute2004/virtual-fly` overview card with final four links
+- [x] replace placeholder canonical Hugging Face names/links in GitHub docs after the repositories exist
 - [ ] tag `v0.1.0`
 - [ ] GitHub Release created
 - [x] Zenodo/DOI explicitly excluded from the initial v0.1.0 publication procedure

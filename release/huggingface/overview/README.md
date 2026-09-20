@@ -29,16 +29,16 @@ This Hugging Face repository provides an overview of `virtual-fly` and describes
 
 ## Checkpoint repositories
 
-The prepared checkpoint release has two distinct lineages. The four checkpoint repositories listed below are not created or public yet. **Do not treat the historical video pair as the canonical initial/trained pair.**
+The checkpoint release has two distinct lineages. **Do not treat the historical video pair as the canonical initial/trained pair.**
 
 ### Canonical v1
 
-The canonical repository names receive their date only on the actual publication day.
+The canonical repository date is 2026-09-20.
 
 | Checkpoint | Repository | Meaning |
 |---|---|---|
-| Initial | `shute2004/virtual-fly-initial-YYYYMMDD` | Initial checkpoint of canonical v1, global weight version 0 |
-| Trained | `shute2004/virtual-fly-trained-YYYYMMDD` | Canonical v1 after six training episodes, global weight version 6 |
+| Initial | [`shute2004/virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920) | Initial checkpoint of canonical v1, global weight version 0 |
+| Trained | [`shute2004/virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920) | Canonical v1 after six training episodes, global weight version 6 |
 
 The recorded canonical v1 experiment was actually run at Git commit `7fa464aad7269d34f46f1171080b51e095d1d811`. Before public release, a privacy-only history rewrite produced public scientific equivalent `f9c86c904d67ff974f3c43d37aab3619bc93fc1b`; only historical absolute-path usernames changed, not executable source or canonical conditions. The short canonical run changed exactly 2,163,179 stored edges, but its frozen initial and final evaluations had the same categorical outcome. It therefore demonstrates current-semantics local-plasticity weight change, not established behavioral improvement.
 
@@ -46,14 +46,14 @@ The recorded canonical v1 experiment was actually run at Git commit `7fa464aad72
 
 | Checkpoint | Repository | Provenance role |
 |---|---|---|
-| Before | `shute2004/virtual-fly-video-before` | Exact historical checkpoint used for the Before side of the published comparison video |
-| After | `shute2004/virtual-fly-video-after` | Exact historical checkpoint used for the After side of the published comparison video |
+| Before | [`shute2004/virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before) | Exact historical checkpoint used for the Before side of the published comparison video |
+| After | [`shute2004/virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after) | Exact historical checkpoint used for the After side of the published comparison video |
 
 The historical cards record their internal development versions (`v240` and `v966`) as provenance, but those numbers are intentionally not used in the public repository names. The Before checkpoint is already a historically trained v240 state, not an untrained initial state; the playback was not held out and retained task-triggered PAM stimulation while plasticity was off. The v966 checkpoint belongs to a mixed older lineage. These checkpoints are **not canonical v1 evidence**.
 
 ## What is hosted here
 
-When published, the checkpoint repositories will contain checkpoint files plus lightweight provenance, hashes, attribution, and a model card. They do not mirror the full research workspace.
+The checkpoint repositories contain checkpoint files plus lightweight provenance, hashes, attribution, and a model card. They do not mirror the full research workspace.
 
 Not hosted here by default:
 

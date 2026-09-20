@@ -154,18 +154,18 @@ Git 中只保留重新获取或重新生成所需的小型来源记录、配置�
 
 ## 9. Hugging Face 检查点发布
 
-供第三方下载的检查点文件与 GitHub 源码仓库分开发布。Hugging Face 的 `shute2004/virtual-fly` 项目概览页面已经准备完成，但下面四个检查点仓库尚未创建或公开。
+供第三方下载的检查点文件与 GitHub 源码仓库分开发布。Hugging Face 的 `shute2004/virtual-fly` 项目概览页面链接到四个已验证的检查点仓库。
 
-正式发布时明确区分四类仓库：
+发布结构明确区分四类仓库：
 
-- canonical v1 初始检查点：`virtual-fly-initial-YYYYMMDD`
-- canonical v1 训练后检查点：`virtual-fly-trained-YYYYMMDD`
-- 公开视频 Before 一侧的历史检查点：`virtual-fly-video-before`
-- 公开视频 After 一侧的历史检查点：`virtual-fly-video-after`
+- canonical v1 初始检查点：[`virtual-fly-initial-20260920`](https://huggingface.co/shute2004/virtual-fly-initial-20260920)
+- canonical v1 训练后检查点：[`virtual-fly-trained-20260920`](https://huggingface.co/shute2004/virtual-fly-trained-20260920)
+- 公开视频 Before 一侧的历史检查点：[`virtual-fly-video-before`](https://huggingface.co/shute2004/virtual-fly-video-before)
+- 公开视频 After 一侧的历史检查点：[`virtual-fly-video-after`](https://huggingface.co/shute2004/virtual-fly-video-after)
 
-`YYYYMMDD` 只在实际发布日期确定。视频用历史检查点即使能被同一运行系统读取，也不能解释为 canonical v1 的初始检查点或训练后检查点。
+canonical 系列的发布日期为 2026 年 9 月 20 日。视频用历史检查点即使能被同一运行系统读取，也不能解释为 canonical v1 的初始检查点或训练后检查点。
 
-正式发布后，每个检查点仓库只包含原生检查点目录，以及 `README.md`、归属说明、来源记录和 SHA-256 列表。除非直接用于使用或验证该检查点，否则不上传完整轨迹、全部视频帧、原始数据、无关检查点或构建产物。
+每个检查点仓库只包含原生检查点目录，以及 `README.md`、归属说明、来源记录和 SHA-256 列表。除非直接用于使用或验证该检查点，否则不上传完整轨迹、全部视频帧、原始数据、无关检查点或构建产物。
 
 检查点权重来源于 MaleCNS `male-cns:v1.0`，官方来源以 CC BY 4.0 发布。MaleCNS 原始数据不会复制到 Hugging Face，而是从官方来源或 canonical 获取／复现流程中取得。FlyBody / FlyGym / MuJoCo 资源也不会仅为了方便而复制进检查点仓库。
 
