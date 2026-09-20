@@ -10,7 +10,7 @@ The table below is an **evidence map**: it records not only what was read, but w
 
 | Reference | Status | Area | What it informs in `virtual-fly` |
 |---|---|---|---|
-| Bates et al. (2026), *Distributed control circuits across a brain-and-cord connectome*, Nature | Peer-reviewed | MaleCNS | Adult male brain-and-cord connectome as the structural starting point; CNS-wide connectivity and annotations |
+| Berg et al. (2026), *Sexual dimorphism in the complete Drosophila male central nervous system connectome*, Cell | Peer-reviewed | MaleCNS | Adult male brain-and-cord connectome as the structural starting point; CNS-wide connectivity and annotations |
 | Nern et al. (2025), *Connectome-driven neural inventory of a complete visual system*, Nature | Peer-reviewed | Vision | Optic-lobe organization; limitations of reconstructed lamina/R1-R6 coverage; avoiding invented missing photoreceptors |
 | Langen et al. (2015), *The Developmental Rules of Neural Superposition in Drosophila*, Cell | Peer-reviewed | Vision | Neural superposition and the relationship between neighboring ommatidia, R1-R6, and lamina cartridges |
 | Juusola et al. (2016), *Electrophysiological Method for Recording Intracellular Voltage Responses of Drosophila Photoreceptors and Interneurons to Light Stimuli In Vivo*, JoVE | Peer-reviewed | Vision / electrophysiology | R1-R6 and lamina physiology; local photoreceptor/interneuron responses to light |
@@ -23,12 +23,12 @@ The table below is an **evidence map**: it records not only what was read, but w
 
 ## 1. MaleCNS and the adult male CNS connectome
 
-### Bates et al. (2026)
+### Berg et al. (2026)
 
-**Bates, A. S., Phelps, J. S., Kim, M. et al.** *Distributed control circuits across a brain-and-cord connectome*. Nature 656, 957–970 (2026).
+**Berg, S., Beckett, I. R., Costa, M. et al.** *Sexual dimorphism in the complete Drosophila male central nervous system connectome*. Cell 189(18), 5504–5526.e15 (2026).
 
-- DOI: https://doi.org/10.1038/s41586-026-10735-w
-- Article: https://www.nature.com/articles/s41586-026-10735-w
+- DOI: https://doi.org/10.1016/j.cell.2026.08.015
+- Article: https://www.cell.com/cell/fulltext/S0092-8674(26)00942-6
 - Project: https://male-cns.janelia.org/
 - Download / programmatic access: https://male-cns.janelia.org/download/
 - Dataset used by this project: `male-cns:v1.0`

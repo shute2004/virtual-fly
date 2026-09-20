@@ -10,7 +10,7 @@
 
 | 文献 | 状态 | 领域 | 在virtual-fly中主要提供的依据 |
 |---|---|---|---|
-| Bates et al. (2026), *Distributed control circuits across a brain-and-cord connectome*, Nature | 已同行评审 | MaleCNS | 将成年雄性果蝇脑与腹神经索作为连续CNS连接组处理；全CNS连接与注释 |
+| Berg et al. (2026), *Sexual dimorphism in the complete Drosophila male central nervous system connectome*, Cell | 已同行评审 | MaleCNS | 将成年雄性果蝇脑与腹神经索作为连续CNS连接组处理；全CNS连接与注释 |
 | Nern et al. (2025), *Connectome-driven neural inventory of a complete visual system*, Nature | 已同行评审 | 视觉 | 视叶组织、lamina与R1-R6重建范围的限制，以及不凭空补造缺失光感受器的判断 |
 | Langen et al. (2015), *The Developmental Rules of Neural Superposition in Drosophila*, Cell | 已同行评审 | 视觉 | 神经叠加，以及相邻小眼的R1-R6与lamina cartridge之间的对应关系 |
 | Juusola et al. (2016), *Electrophysiological Method for Recording Intracellular Voltage Responses of Drosophila Photoreceptors and Interneurons to Light Stimuli In Vivo*, JoVE | 已同行评审 | 视觉 / 电生理 | R1-R6和lamina中间神经元对局部光刺激的生理响应 |
@@ -23,12 +23,12 @@
 
 ## 1. MaleCNS与成年雄性CNS连接组
 
-### Bates et al. (2026)
+### Berg et al. (2026)
 
-**Bates, A. S., Phelps, J. S., Kim, M. et al.** *Distributed control circuits across a brain-and-cord connectome*. Nature 656, 957–970 (2026).
+**Berg, S., Beckett, I. R., Costa, M. et al.** *Sexual dimorphism in the complete Drosophila male central nervous system connectome*. Cell 189(18), 5504–5526.e15 (2026).
 
-- DOI: https://doi.org/10.1038/s41586-026-10735-w
-- 论文: https://www.nature.com/articles/s41586-026-10735-w
+- DOI: https://doi.org/10.1016/j.cell.2026.08.015
+- 论文: https://www.cell.com/cell/fulltext/S0092-8674(26)00942-6
 - MaleCNS官方项目: https://male-cns.janelia.org/
 - 下载与程序访问: https://male-cns.janelia.org/download/
 - 本项目使用的数据集: `male-cns:v1.0`

@@ -10,7 +10,7 @@
 
 | 文献 | 状態 | 分野 | virtual-flyで主に使った根拠 |
 |---|---|---|---|
-| Bates et al. (2026), *Distributed control circuits across a brain-and-cord connectome*, Nature | 査読済み | MaleCNS | 成体オスの脳と腹神経索を一体のCNSコネクトームとして扱うこと、全CNSの接続・注釈 |
+| Berg et al. (2026), *Sexual dimorphism in the complete Drosophila male central nervous system connectome*, Cell | 査読済み | MaleCNS | 成体オスの脳と腹神経索を一体のCNSコネクトームとして扱うこと、全CNSの接続・注釈 |
 | Nern et al. (2025), *Connectome-driven neural inventory of a complete visual system*, Nature | 査読済み | 視覚 | 視葉の構成、laminaやR1-R6の再構築範囲の限界、不足細胞を勝手に補わない判断 |
 | Langen et al. (2015), *The Developmental Rules of Neural Superposition in Drosophila*, Cell | 査読済み | 視覚 | neural superposition、近傍個眼のR1-R6とラミナカートリッジの対応 |
 | Juusola et al. (2016), *Electrophysiological Method for Recording Intracellular Voltage Responses of Drosophila Photoreceptors and Interneurons to Light Stimuli In Vivo*, JoVE | 査読済み | 視覚・電気生理 | R1-R6とlamina介在ニューロンの光刺激応答、生理学的な局所視覚応答 |
@@ -23,12 +23,12 @@
 
 ## 1. MaleCNSと成体オスCNSコネクトーム
 
-### Bates et al. (2026)
+### Berg et al. (2026)
 
-**Bates, A. S., Phelps, J. S., Kim, M. et al.** *Distributed control circuits across a brain-and-cord connectome*. Nature 656, 957–970 (2026).
+**Berg, S., Beckett, I. R., Costa, M. et al.** *Sexual dimorphism in the complete Drosophila male central nervous system connectome*. Cell 189(18), 5504–5526.e15 (2026).
 
-- DOI: https://doi.org/10.1038/s41586-026-10735-w
-- 論文: https://www.nature.com/articles/s41586-026-10735-w
+- DOI: https://doi.org/10.1016/j.cell.2026.08.015
+- 論文: https://www.cell.com/cell/fulltext/S0092-8674(26)00942-6
 - MaleCNS公式サイト: https://male-cns.janelia.org/
 - ダウンロード・プログラムからの取得: https://male-cns.janelia.org/download/
 - このプロジェクトで使うデータセット: `male-cns:v1.0`
