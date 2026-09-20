@@ -1,17 +1,10 @@
-# GitHub Release plan and optional future Zenodo archival
+# GitHub Release record and optional future Zenodo archival
 
-This document describes the publication path for the first research-OSS release. The initial v0.1.0 publication uses GitHub and Hugging Face; Zenodo/DOI is deliberately deferred and is not part of the initial release checklist.
+This document records the publication path used for the first research-OSS release. The initial v0.1.0 publication uses GitHub and Hugging Face; Zenodo/DOI is deliberately deferred and is not part of the initial release checklist.
 
 ## 1. Publication branch and tag
 
-Before the first public archival release:
-
-1. ensure the publication commit is integrated into the repository's default `main` branch;
-2. verify the working tree used to create the release is clean;
-3. verify canonical v1 files are present and unchanged;
-4. run lightweight documentation/metadata validation;
-5. create an annotated release tag, planned as `v0.1.0`;
-6. create the GitHub Release from exactly that tag.
+For the first public archival release, the publication commit was integrated into `main`, the release worktree and canonical v1 package were checked, lightweight documentation/metadata validation was run, and annotated tag `v0.1.0` was used for the GitHub Release.
 
 Do not tag an older `main` commit while the canonical/publication work exists only on a development branch.
 
@@ -80,9 +73,9 @@ The canonical repository date is 2026-09-20. The historical video repositories a
 
 Each checkpoint repository contains the native checkpoint files plus a model card, attribution notice, machine-readable provenance, and SHA-256 list. Full trajectories, frame directories, raw MaleCNS data, normalized snapshots, FlyBody assets, unrelated development checkpoints, and build artifacts are excluded unless they are directly necessary to use the checkpoint.
 
-The official MaleCNS download page licenses `male-cns:v1.0` under CC BY 4.0. Because the published weights are derived numerical states based on that connectome, the prepared checkpoint repositories use `cc-by-4.0` metadata and explicit MaleCNS attribution. Raw MaleCNS is not mirrored; users obtain it from the official source or the canonical acquisition/reproduction path. FlyBody, FlyGym, and MuJoCo assets are likewise not copied into checkpoint repositories.
+The official MaleCNS download page licenses `male-cns:v1.0` under CC BY 4.0. Because the published weights are derived numerical states based on that connectome, the published checkpoint repositories use `cc-by-4.0` metadata and explicit MaleCNS attribution. Raw MaleCNS is not mirrored; users obtain it from the official source or the canonical acquisition/reproduction path. FlyBody, FlyGym, and MuJoCo assets are likewise not copied into checkpoint repositories.
 
-The complete prepared layout, model-card templates, exact checkpoint file sizes/hashes, and publication procedure are tracked in [`../../../release/huggingface/`](../../../release/huggingface/README.md).
+The published layout, model-card sources, exact checkpoint file sizes/hashes, and publication record are tracked in [`../../../release/huggingface/`](../../../release/huggingface/README.md).
 
 The four repositories were created privately on 2026-09-20, uploaded, and checked against the recorded checkpoint hashes before public release.
 

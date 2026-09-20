@@ -103,7 +103,7 @@ The publication-oriented historical comparison uses:
 
 The Before state is **not an untrained MaleCNS initial state**: v240 had already undergone 240 historical training episodes. The lineage through v960 used the older dopamine-source definition, and v966 combines conditions from more than one historical stage. This media is therefore useful as a visualization of a historical learned-state comparison, not as the canonical behavioral result or as evidence for a simple untrained-to-trained improvement.
 
-Three separate video renderings are associated with this comparison: the video posted to X, the higher-resolution source used to generate the README GIF, and the planned GitHub Release MP4. They share the historical v240/v966 comparison but are not identical files. The Git repository tracks the README GIF and a manifest that records all three video roles and hashes; the MP4s and raw playback JSON remain outside Git. See [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json).
+Three separate video renderings are associated with this comparison: the video posted to X, the higher-resolution source used to generate the README GIF, and the GitHub Release MP4. They share the historical v240/v966 comparison but are not identical files. The Git repository tracks the README GIF and a manifest that records all three video roles and hashes; the MP4s and raw playback JSON remain outside Git. See [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json).
 
 ## 5. Claiming rules for README, releases, papers, and posts
 

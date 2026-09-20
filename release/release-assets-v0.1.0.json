@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "planned_release": "v0.1.0",
+  "release": "v0.1.0",
   "canonical_reference": {
     "original_experiment_git_sha": "7fa464aad7269d34f46f1171080b51e095d1d811",
     "public_equivalent_git_sha": "f9c86c904d67ff974f3c43d37aab3619bc93fc1b",

@@ -1,6 +1,6 @@
 # Hugging Face publication layout
 
-This directory prepares the Hugging Face checkpoint publication structure for `virtual-fly`. It does **not** upload anything to Hugging Face by itself.
+This directory records the Hugging Face checkpoint publication structure for `virtual-fly`. The tracked files mirror the metadata used for the published repositories; checkpoint binaries remain outside Git.
 
 ## Publication boundary
 
@@ -19,7 +19,7 @@ The existing overview repository is:
 
 - https://huggingface.co/shute2004/virtual-fly
 
-Its English, Japanese, and Simplified Chinese overview-card sources are prepared under [`overview/`](overview/README.md).
+Its English, Japanese, and Simplified Chinese overview-card sources are tracked under [`overview/`](overview/README.md).
 
 ## Checkpoint repositories
 
@@ -34,7 +34,7 @@ The canonical repository date is 2026-09-20.
 
 The historical video repositories must never be presented as the initial/trained pair of canonical v1. Their internal global-weight versions are provenance only and intentionally do not appear in the public repository names.
 
-## Prepared repository templates
+## Published repository metadata
 
 ```text
 release/huggingface/
@@ -63,7 +63,7 @@ release/huggingface/
         └── SHA256SUMS
 ```
 
-The binary `checkpoint/` directory is deliberately absent from Git. At publication time it is copied from the verified local source identified in `checkpoint-artifacts-v1.json`, then checked against the prepared SHA-256 list before upload.
+The binary `checkpoint/` directory is deliberately absent from Git. For the published repositories it was copied from the verified local source identified in `checkpoint-artifacts-v1.json` and checked against the recorded SHA-256 list before upload.
 
 ## Files to upload to each checkpoint repository
 
@@ -91,7 +91,7 @@ Do not add full trajectories, frame directories, raw MaleCNS downloads, normaliz
 
 Canonical population checkpoints are serialized in the full checkpoint file layout for loader compatibility, but declare `checkpoint_semantics=global-weights-only-v1`. The persistent state between canonical episodes is the global synaptic weight vector. Membrane, spike, refractory, activity-trace, modulation, eligibility, body, and peripheral state are reset between episodes and must not be interpreted as one continuously persistent biological individual.
 
-The historical video checkpoints predate that explicit manifest contract. When published, they are for intentional historical replay and video provenance only, not canonical training checkpoints.
+The historical video checkpoints predate that explicit manifest contract. They are published for intentional historical replay and video provenance only, not as canonical training checkpoints.
 
 ## Upstream data and licensing
 
@@ -105,7 +105,7 @@ See [`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) and [`../../d
 
 ## Checkpoint-file transport
 
-Hugging Face model repositories use Xet-backed large-file storage. At upload time use the current Hugging Face CLI / Xet workflow rather than committing these binaries to the GitHub source repository.
+Hugging Face model repositories use Xet-backed large-file storage. Checkpoint binaries are uploaded through the Hugging Face CLI / Xet workflow rather than committed to the GitHub source repository.
 
 Official Hugging Face documentation:
 
@@ -116,6 +116,6 @@ Official Hugging Face documentation:
 
 ## Publication record
 
-The four checkpoint repositories were created privately on 2026-09-20, populated from the sources recorded in `checkpoint-artifacts-v1.json`, and checked against the prepared `SHA256SUMS` before public release. The overview and source repository use the final dated links above.
+The four checkpoint repositories were created privately on 2026-09-20, populated from the sources recorded in `checkpoint-artifacts-v1.json`, and checked against the recorded `SHA256SUMS` before public release. The overview and source repository use the final dated links above.
 
 Zenodo / DOI is not part of v0.1.0.

@@ -175,7 +175,7 @@ canonical側の公開日は2026年9月20日である。動画用の過去チェ�
 
 チェックポイントの重みはMaleCNS `male-cns:v1.0`に由来し、公式配布元ではCC BY 4.0で公開されている。MaleCNSの生データ自体はHugging Faceへ複製せず、公式配布元またはcanonicalの取得・再現経路から取得する。FlyBody / FlyGym / MuJoCoの資産も、利便性だけを理由にチェックポイントリポジトリへ複製しない。
 
-準備済みのモデルカード、正確なチェックポイントハッシュ、必要ファイル一覧は [`../../release/huggingface/`](../../release/huggingface/README.md) に記録する。
+公開済みのモデルカード、正確なチェックポイントハッシュ、必要ファイル一覧は [`../../release/huggingface/`](../../release/huggingface/README.md) に記録する。
 
 ## 10. 過去資料に残るローカルパス
 

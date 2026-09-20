@@ -20,7 +20,7 @@ tags:
 
 `virtual-fly` is a research project that starts from the released adult male Drosophila MaleCNS connectome and evolves neural activity, neuromodulation, and local synaptic plasticity in closed loop with a FlyBody / MuJoCo body and a physical environment.
 
-This Hugging Face repository provides an overview of `virtual-fly` and describes the checkpoint repositories prepared for the first public checkpoint release. Source code, scientific documentation, canonical manifests, and the end-to-end reproducer live on GitHub:
+This Hugging Face repository provides an overview of `virtual-fly` and describes the checkpoint repositories published with the first public checkpoint release. Source code, scientific documentation, canonical manifests, and the end-to-end reproducer live on GitHub:
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - English documentation: https://github.com/shute2004/virtual-fly/tree/main/docs/en

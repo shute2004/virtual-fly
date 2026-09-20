@@ -103,7 +103,7 @@ v240、v960、v966、v1704 以及相关的公开展示和诊断运行结果，�
 
 Before 一侧**不是未经学习的 MaleCNS 初始状态**；v240 已经经历了 240 个历史训练回合。到 v960 为止仍使用早期的多巴胺来源定义，而 v966 混合了多个历史开发阶段的条件。因此，这段动画适合直观比较两个历史已学习状态，但它既不是 canonical v1 的行为结果，也不能作为简单“未学习→学习后”改善的证据。
 
-这一历史对比对应三个不同的视频文件：发布到 X 的视频、生成 README GIF 所用的高分辨率源视频，以及计划附在 GitHub Release 中的 MP4。三者都展示 v240/v966 对比，但不是相同的渲染文件或二进制文件。Git 只追踪 README GIF，以及记录三者用途和哈希值的 manifest；MP4 本体和原始回放记录保留在 Git 之外。详见 [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json)。
+这一历史对比对应三个不同的视频文件：发布到 X 的视频、生成 README GIF 所用的高分辨率源视频，以及 GitHub Release 中的 MP4。三者都展示 v240/v966 对比，但不是相同的渲染文件或二进制文件。Git 只追踪 README GIF，以及记录三者用途和哈希值的 manifest；MP4 本体和原始回放记录保留在 Git 之外。详见 [`../../release/release-assets-v0.1.0.json`](../../release/release-assets-v0.1.0.json)。
 
 ## 5. README、发布版本、论文和公开帖子中的表述范围
 

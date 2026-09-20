@@ -169,7 +169,7 @@ Each checkpoint repository contains the native checkpoint directory plus lightwe
 
 The checkpoint weights derive from MaleCNS `male-cns:v1.0`, licensed by the official source under CC BY 4.0. The raw MaleCNS dataset is not mirrored on Hugging Face; users obtain it from the official source or through the canonical acquisition/reproduction path. FlyBody, FlyGym, and MuJoCo assets are likewise not copied into checkpoint repositories merely for convenience.
 
-The prepared repository cards, exact checkpoint hashes, and required file lists are tracked in [`../../release/huggingface/`](../../release/huggingface/README.md).
+The published repository cards, exact checkpoint hashes, and required file lists are tracked in [`../../release/huggingface/`](../../release/huggingface/README.md).
 
 ## 10. Historical provenance paths
 

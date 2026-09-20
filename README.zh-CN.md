@@ -18,7 +18,7 @@
 
 但它**不是 canonical v1 的实验依据**。Before 一侧的 v240 并不是未经学习的 MaleCNS 初始状态，而是已经经历 240 个训练回合的历史检查点。历史回放期间关闭了可塑性，但任务事件触发的 PAM 刺激仍然启用，而且这不是留出评估。After 一侧的 v966 也来自混合了多个早期条件的开发系，与 canonical v1 的来源和部分运行条件不同。
 
-发布到 X 的视频、生成 README GIF 所用的源视频，以及计划附在 GitHub Release 中的 MP4，是同一 v240/v966 历史对比的不同渲染或转码文件，并不是同一个二进制文件。它们各自的用途、分辨率和哈希值分别记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) 中。
+发布到 X 的视频、生成 README GIF 所用的源视频，以及 GitHub Release 中的 MP4，是同一 v240/v966 历史对比的不同渲染或转码文件，并不是同一个二进制文件。它们各自的用途、分辨率和哈希值分别记录在 [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) 中。
 
 ## 基准实验（canonical v1）
 

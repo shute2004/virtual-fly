@@ -16,7 +16,7 @@ It is **not** an artificial neural network trained on the fly connectome. The pr
 
 This animated comparison is derived from a README-specific source rendering of the historical `v240 → v966` Before/After comparison and is shown at **1.5× speed**. It is intentionally placed near the top because it provides the clearest visual overview of the project, but it is **not canonical evidence**. The Before state (v240) was already a historical checkpoint after 240 training episodes, not an untrained MaleCNS initial state. Historical playback disabled plasticity, but task-triggered PAM stimulation remained enabled, and the comparison was not a held-out evaluation. The v966 state also belongs to an older mixed lineage with semantics that differ from canonical v1.
 
-The X-post video, the source rendering used to make this README GIF, and the planned GitHub Release MP4 are separate renderings of the same historical v240/v966 comparison; they are not identical files. Their roles, dimensions, and hashes are recorded separately in [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json).
+The X-post video, the source rendering used to make this README GIF, and the GitHub Release MP4 are separate renderings of the same historical v240/v966 comparison; they are not identical files. Their roles, dimensions, and hashes are recorded separately in [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json).
 
 ## Canonical result
 
@@ -133,7 +133,7 @@ The first two commands exercise the Python semantic/orchestration tests and Rust
 
 ## Checkpoint distribution
 
-Checkpoint payloads are intentionally kept out of the GitHub source repository. The Hugging Face project overview is already prepared here:
+Checkpoint payloads are intentionally kept out of the GitHub source repository. The Hugging Face project overview is available here:
 
 - [Hugging Face: `shute2004/virtual-fly`](https://huggingface.co/shute2004/virtual-fly)
 
@@ -146,7 +146,7 @@ The four verified checkpoint repositories are published separately on Hugging Fa
 
 The canonical repository date is 2026-09-20. The historical video pair is **not** the canonical initial/trained pair; internal versions such as v240/v966 are retained only in artifact provenance. Raw MaleCNS data, FlyBody assets, trajectories, frame directories, and unrelated development artifacts are not mirrored merely for completeness.
 
-The exact publication structure, model-card templates, required file lists, attribution, and prepared checkpoint hashes are tracked in [`release/huggingface/`](release/huggingface/README.md).
+The exact publication structure, model-card templates, required file lists, attribution, and published checkpoint hashes are tracked in [`release/huggingface/`](release/huggingface/README.md).
 
 ## Reproduce canonical v1
 
