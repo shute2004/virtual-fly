@@ -4,7 +4,7 @@
 
 `virtual-fly`は、成体オスのショウジョウバエの公開MaleCNSコネクトームを初期状態として、神経活動・神経修飾・局所シナプス可塑性を時間発展させ、FlyBody / MuJoCoの身体と物理環境に閉ループ接続する研究プロジェクトです。
 
-このHugging Faceリポジトリでは、`virtual-fly`の概要と、初回公開に向けて準備しているチェックポイントリポジトリの構成をまとめています。ソースコード、科学的な説明、canonical実験のmanifest、一連の再現スクリプトはGitHubにあります。
+このHugging Faceリポジトリでは、`virtual-fly`の概要と、初回公開で公開したチェックポイントリポジトリの構成をまとめています。ソースコード、科学的な説明、canonical実験のmanifest、一連の再現スクリプトはGitHubにあります。
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - 英語文書: https://github.com/shute2004/virtual-fly/tree/main/docs/en

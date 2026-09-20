@@ -18,7 +18,7 @@
 
 ただし、これは**canonical v1の証拠ではありません**。Before側のv240は未学習のMaleCNS初期状態ではなく、すでに240エピソードの学習を経た過去系統のチェックポイントです。再生時は可塑性を停止していましたが、課題イベントに伴うPAM刺激は有効で、ホールドアウト評価でもありません。After側のv966も複数の過去条件が混在した系統であり、canonical v1とは来歴と一部の実行条件が異なります。
 
-Xへ投稿した動画、README GIFの生成に使った元動画、GitHub Releaseに添付予定のMP4は、同じv240/v966比較を別々に描画・変換したファイルであり、同一バイナリではありません。それぞれの役割、解像度、ハッシュ値は [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に分けて記録しています。
+Xへ投稿した動画、README GIFの生成に使った元動画、GitHub Releaseに添付したMP4は、同じv240/v966比較を別々に描画・変換したファイルであり、同一バイナリではありません。それぞれの役割、解像度、ハッシュ値は [`release/release-assets-v0.1.0.json`](release/release-assets-v0.1.0.json) に分けて記録しています。
 
 ## 基準実験（canonical v1）
 

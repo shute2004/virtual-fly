@@ -4,7 +4,7 @@
 
 `virtual-fly` 是一个研究项目：以成年雄性果蝇公开的 MaleCNS 连接组作为初始状态，让神经活动、神经调制和局部突触可塑性随时间演化，并与 FlyBody / MuJoCo 身体及物理环境形成闭环。
 
-这个 Hugging Face 仓库用于介绍 `virtual-fly`，并说明首次发布前已经准备好的检查点仓库结构。源代码、科学说明、canonical 实验清单以及完整复现脚本位于 GitHub：
+这个 Hugging Face 仓库用于介绍 `virtual-fly`，并说明首次发布时公开的检查点仓库结构。源代码、科学说明、canonical 实验清单以及完整复现脚本位于 GitHub：
 
 - GitHub: https://github.com/shute2004/virtual-fly
 - 英文文档: https://github.com/shute2004/virtual-fly/tree/main/docs/en
