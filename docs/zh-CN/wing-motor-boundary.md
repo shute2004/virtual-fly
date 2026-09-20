@@ -132,7 +132,7 @@ PAM01 内部也可能具有生理异质性，因此项目不会声称所有 PAM0
 
 ## 5. 学习开始前的检查
 
-`scripts/dev/train_flyppy.sh` 在启动前重新生成并检查：
+当前 production launcher `scripts/dev/train_flyppy_population.sh` 会在训练前执行现行的 preflight 和输入检查。`scripts/dev/train_flyppy_v3_population.sh` 是该 launcher 的历史兼容入口，`scripts/dev/train_flyppy.sh` 则是旧的 serial 路径。production 路径会检查：
 
 1. 奖赏、厌恶刺激及诊断用神经群；
 2. 单个翼运动神经元映射；

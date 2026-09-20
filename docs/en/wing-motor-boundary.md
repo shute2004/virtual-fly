@@ -132,7 +132,7 @@ With PPL101 alone, some observed collision trajectories produced no additional p
 
 ## 5. Preflight checks before learning
 
-`scripts/dev/train_flyppy.sh` regenerates and validates:
+The production launcher, `scripts/dev/train_flyppy_population.sh`, runs the current preflight/input validation path before learning. `scripts/dev/train_flyppy_v3_population.sh` is a compatibility wrapper for that launcher; `scripts/dev/train_flyppy.sh` is the legacy serial path. The production path validates:
 
 1. reward/aversion and diagnostic neural groups;
 2. the individual wing-motor-neuron map;

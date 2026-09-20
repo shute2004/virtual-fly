@@ -2,10 +2,12 @@
 
 開発・検証用のlauncherを置く。現行production入口と履歴用launcherを混在させない。
 
-## Flyppy v3 現行入口
+## Flyppy 現行入口
 
 - `preflight_flyppy_v3.sh` — FlyBody/Flyppy v3物理preflight
-- `train_flyppy_v3_population.sh` — production shared-weight population学習
+- `train_flyppy_population.sh` — production shared-weight population学習
+- `train_flyppy_v3_population.sh` — 上記production launcherへの履歴互換入口
+- `train_flyppy.sh` — 旧serial学習経路（legacy）
 - `view_flyppy_v3.sh` — observer-only live viewer
 - `evaluate_flyppy_v3_fixed.sh` — 重みを固定した条件評価（課題イベント由来のDAN刺激は有効）
 - `run_flyppy_scheduler_ab.sh` — async / wave A/B

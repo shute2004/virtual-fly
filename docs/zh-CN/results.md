@@ -14,7 +14,7 @@ f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 
 在 canonical 时点，两者只在 14 个历史报告/来源记录中的本地 OS 用户名脱敏上存在差异；可执行源码、canonical 条件和科学产物生成逻辑均未改变。映射关系记录在 [`../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../canonical/canonical-v1/privacy-redaction-provenance.json)。
 
-简要结果见 [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)，完整来源记录见 [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json)。
+简要结果见 [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)，机器可读的基准来源记录见 [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json)。其中的 `derived_generation.commands` 是摘要；精确执行参数以 [`../../canonical/canonical-v1/reproduce.sh`](../../canonical/canonical-v1/reproduce.sh) 为准。
 
 ### 实验条件
 
@@ -51,6 +51,8 @@ f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 
 2026 年 9 月 20 日，我们又从公开等价提交 `f9c86c9` 出发，重新下载 MaleCNS 官方数据并执行静态生成流程。表示科学内容的快照哈希以及所有二进制静态产物都与原始基准一致。对于原始 SHA-256 不同的 JSON 文件，只将历史重写造成变化的 Git 标识和由此连锁变化的产物哈希还原为原始记录值后，所有文件都与原始基准逐字节一致。公开版复现脚本现在按这一规则验证静态产物；本次检查没有启动训练。
 
+### 完整端到端复现 — 原始实验 commit `7fa464a` — 2026 年 9 月 19 日
+
 已经验证：
 
 - 从官方来源重新获取 MaleCNS 数据
@@ -64,6 +66,16 @@ f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 - 初始和最终检查点都能在新的神经桥接进程中重新载入
 - 初始和最终固定评估都与基准记录一致
 - 结束时，固定的科学计算工作树仍然没有未提交修改
+
+### 公开等价commit的静态复现 — `f9c86c9` — 2026 年 9 月 20 日
+
+未启动训练，并验证了：
+
+- 从官方来源重新获取 MaleCNS 数据
+- 重新生成快照和静态派生产物
+- 表示科学内容的快照哈希与基准记录完全一致
+- 二进制静态产物与基准记录逐字节一致
+- 对包含来源信息的 JSON，仅还原公开前隐私处理改变的 Git 标识以及由此连锁改变的产物哈希后，即与基准记录逐字节一致
 
 复现过程中生成的大型数据包只作为临时产物存在。验证完成后，仅在仓库之外保留体积较小的来源记录和报告。当前复现脚本也会默认把大型输出写到仓库之外。
 

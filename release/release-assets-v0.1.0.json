@@ -107,6 +107,14 @@
       "global_weight_version": 966,
       "passed_gates": 2,
       "canonical": false
+    },
+    {
+      "release_name": "THIRD_PARTY_NOTICES.md",
+      "source_artifact_path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "ba1155ae4a376381868d183fbbdc75c9402258dc75f317dd69dadc680596d84e",
+      "size_bytes": 4407,
+      "role": "third-party-license-and-attribution-notice",
+      "canonical": false
     }
   ],
   "not_release_assets_by_default": [

@@ -14,7 +14,7 @@ f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 
 The rewrite changed only the local OS username inside 14 historical report/provenance files at the canonical commit; executable source, canonical conditions, and scientific artifact-generation logic are unchanged. The mapping is recorded in [`../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../canonical/canonical-v1/privacy-redaction-provenance.json).
 
-The compact result is in [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md); complete provenance is in [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json).
+The compact result is in [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md); machine-readable reference provenance is in [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json). Its `derived_generation.commands` entries are summaries; [`../../canonical/canonical-v1/reproduce.sh`](../../canonical/canonical-v1/reproduce.sh) is the authoritative exact invocation source.
 
 ### Conditions
 
@@ -51,6 +51,8 @@ On 2026-09-19, `canonical/canonical-v1/reproduce.sh` was run from beginning to e
 
 On 2026-09-20, the static reconstruction path was rerun from the public-equivalent `f9c86c9` code using fresh official MaleCNS source data. The semantic snapshot hash and all binary static artifacts matched the original reference. Every JSON artifact that differed in raw SHA-256 became byte-identical to the original reference after normalizing only the rewritten Git identity and the chained hashes caused by that identity change. This is the validation rule now implemented by the public reproducer; no training was started for this check.
 
+### Full end-to-end verification — original experiment commit `7fa464a` — 2026-09-19
+
 Verified:
 
 - fresh MaleCNS source download;
@@ -64,6 +66,16 @@ Verified:
 - initial/final checkpoints reloaded successfully in new bridge processes;
 - frozen initial/final evaluations both matched the reference outcome;
 - final pinned scientific worktree remained clean.
+
+### Public-equivalent static verification — `f9c86c9` — 2026-09-20
+
+Verified without starting training:
+
+- fresh official MaleCNS source download;
+- fresh snapshot and derived-artifact construction;
+- semantic snapshot hash matched the reference exactly;
+- binary static artifacts matched the reference byte-for-byte;
+- provenance-bearing JSON matched the reference after normalizing only the privacy-rewrite Git identity and the chained hashes caused by that identity change.
 
 The large verification bundle was temporary. Lightweight manifests and reports were retained outside the Git repository after validation. The reproducibility script now writes large verification runs outside the repository by default.
 

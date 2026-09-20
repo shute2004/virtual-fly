@@ -14,7 +14,7 @@ f9c86c904d67ff974f3c43d37aab3619bc93fc1b
 
 canonical時点で変わったのは、14個のhistorical report / provenanceに含まれるローカルOSユーザー名だけです。実行コード、canonical条件、scientific artifact生成ロジックは変わっていません。対応関係は [`../../canonical/canonical-v1/privacy-redaction-provenance.json`](../../canonical/canonical-v1/privacy-redaction-provenance.json) に記録しています。
 
-結果の短い要約は [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)、完全な来歴記録は [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json) にあります。
+結果の短い要約は [`../../canonical/canonical-v1/reference-report.md`](../../canonical/canonical-v1/reference-report.md)、機械可読な基準来歴記録は [`../../canonical/canonical-v1/reference-manifest.json`](../../canonical/canonical-v1/reference-manifest.json) にあります。`derived_generation.commands`は要約であり、正確な実行引数は[`../../canonical/canonical-v1/reproduce.sh`](../../canonical/canonical-v1/reproduce.sh)を基準とします。
 
 ### 実験条件
 
@@ -51,6 +51,8 @@ canonical時点で変わったのは、14個のhistorical report / provenanceに
 
 2026年9月20日には、公開用の内容同等commit `f9c86c9`から、MaleCNSの公式配布データを新規取得して静的生成部分を再実行しました。科学的内容を表すスナップショットのハッシュ値と、バイナリ形式の静的生成物は元の基準記録と一致しました。JSON形式で生のSHA-256が異なったものも、履歴書き換えで変化したGitの識別子と、それに連鎖して変わった生成物ハッシュだけを元の記録値へ戻すと、すべて元の基準記録とバイト単位で一致しました。公開用の再現スクリプトは現在この規則で検証します。この確認では学習処理を開始していません。
 
+### 完全な一連の再現確認 — 元の実験commit `7fa464a` — 2026年9月19日
+
 確認した内容:
 
 - MaleCNSの公式配布データを新規取得
@@ -64,6 +66,16 @@ canonical時点で変わったのは、14個のhistorical report / provenanceに
 - 初期・最終チェックポイントを新しい神経ブリッジプロセスで再読み込み
 - 初期・最終の固定評価が基準記録と一致
 - 最後まで、固定した科学計算用作業ツリーに未コミット変更がないことを確認
+
+### 公開用commitでの静的再現確認 — `f9c86c9` — 2026年9月20日
+
+学習処理を開始せず、次を確認しました。
+
+- MaleCNSの公式配布データを新規取得
+- スナップショットと静的派生成果物を新規生成
+- 科学的内容を表すスナップショットのハッシュ値が基準記録と完全一致
+- バイナリ形式の静的生成物が基準記録とバイト単位で一致
+- JSON形式の来歴情報は、公開前の匿名化で変化したGit識別子と、それに連鎖して変化した生成物ハッシュだけを元の記録値へ戻すと、基準記録とバイト単位で一致
 
 検証時に生成された大容量の一式は一時生成物として扱い、検証後は小さな来歴記録とレポートだけをリポジトリ外に保持しました。現在の再現スクリプトも、大容量の出力を既定でリポジトリ外へ保存します。
 

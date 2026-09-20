@@ -44,7 +44,7 @@ The recorded canonical experiment and the 2026-09-19 end-to-end verification wer
 See:
 
 - [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — compact canonical result
-- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — complete provenance
+- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — machine-readable reference provenance; exact reproduction commands are in `reproduce.sh`
 - [`docs/en/results.md`](docs/en/results.md) — canonical vs. historical result boundary
 - [`docs/en/reproducibility-fixes-2026-09-19.md`](docs/en/reproducibility-fixes-2026-09-19.md) — provenance/semantics audit and fixes
 

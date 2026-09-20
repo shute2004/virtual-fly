@@ -46,7 +46,7 @@ canonical実験と2026年9月19日のend-to-end再現確認は、実際には変
 詳細:
 
 - [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — 基準実験の結果要約
-- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完全な来歴記録
+- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 機械可読な基準来歴記録。正確な再現コマンドは`reproduce.sh`に記載
 - [`docs/ja/results.md`](docs/ja/results.md) — 基準結果と過去結果の区別
 - [`docs/ja/reproducibility-fixes-2026-09-19.md`](docs/ja/reproducibility-fixes-2026-09-19.md) — 来歴と実行上の意味づけに関する監査・修正記録
 

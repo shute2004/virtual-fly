@@ -46,7 +46,7 @@ canonical 实验和 2026 年 9 月 19 日的端到端复现验证，实际都是
 详细资料：
 
 - [`canonical/canonical-v1/reference-report.md`](canonical/canonical-v1/reference-report.md) — 基准实验结果摘要
-- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 完整来源记录
+- [`canonical/canonical-v1/reference-manifest.json`](canonical/canonical-v1/reference-manifest.json) — 机器可读的基准来源记录；精确复现命令见`reproduce.sh`
 - [`docs/zh-CN/results.md`](docs/zh-CN/results.md) — 基准结果与历史开发结果的区分
 - [`docs/zh-CN/reproducibility-fixes-2026-09-19.md`](docs/zh-CN/reproducibility-fixes-2026-09-19.md) — 来源记录与运行定义的审计、修复说明
 

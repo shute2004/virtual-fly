@@ -131,7 +131,7 @@ PPL101単独では、実際の衝突軌跡の一部で、イベント直前の�
 
 ## 5. 学習開始前の確認
 
-`scripts/dev/train_flyppy.sh`は、起動前に次を再生成・検査する。
+現行のproduction launcherである`scripts/dev/train_flyppy_population.sh`は、学習開始前に現在のpreflightと入力検査を実行する。`scripts/dev/train_flyppy_v3_population.sh`はそのlauncherへの履歴互換入口で、`scripts/dev/train_flyppy.sh`は旧serial経路である。production経路では次を検査する。
 
 1. 報酬・嫌悪刺激用および診断用の神経群
 2. 個別翼運動ニューロン対応表
